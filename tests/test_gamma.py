@@ -99,6 +99,33 @@ class IterAllMarketsTest(unittest.TestCase):
         self.assertEqual([m["id"] for m in results], ["1", "2", "3"])
         self.assertEqual(len(calls), 2)
 
+    def test_pagination_stops_on_422(self):
+        import urllib.error
+
+        calls = []
+
+        def fake_fetch(limit, offset, closed):
+            calls.append(offset)
+            if offset == 0:
+                return [{"id": "1"}, {"id": "2"}]
+            raise urllib.error.HTTPError(
+                "http://x", 422, "Unprocessable Entity", {}, None
+            )
+
+        results = list(
+            gamma.iter_all_markets(page_size=2, sleep=0, fetch_fn=fake_fetch)
+        )
+        self.assertEqual([m["id"] for m in results], ["1", "2"])
+
+    def test_pagination_propagates_500(self):
+        import urllib.error
+
+        def fake_fetch(limit, offset, closed):
+            raise urllib.error.HTTPError("http://x", 500, "Server Error", {}, None)
+
+        with self.assertRaises(urllib.error.HTTPError):
+            list(gamma.iter_all_markets(page_size=2, sleep=0, fetch_fn=fake_fetch))
+
     def test_pagination_stops_on_empty(self):
         pages = [[{"id": "1"}, {"id": "2"}], []]
 

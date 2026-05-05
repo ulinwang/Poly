@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import logging
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Iterator, Optional, Sequence
@@ -45,7 +46,18 @@ def iter_all_markets(
 ) -> Iterator[dict]:
     offset = 0
     while True:
-        page = fetch_fn(limit=page_size, offset=offset, closed=closed)
+        try:
+            page = fetch_fn(limit=page_size, offset=offset, closed=closed)
+        except urllib.error.HTTPError as exc:
+            # Gamma returns 422 when offset exceeds its hard cap (~100k).
+            # Treat as end-of-results rather than crashing.
+            if exc.code in (400, 422):
+                log.warning(
+                    "Gamma API rejected offset=%s with HTTP %s; stopping pagination",
+                    offset, exc.code,
+                )
+                return
+            raise
         if not page:
             return
         for m in page:
