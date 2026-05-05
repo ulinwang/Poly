@@ -1,6 +1,24 @@
 # PolyMETL
 
-ETL for Polymarket
+ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
+**off-chain market metadata** (Gamma API), unified in ClickHouse.
+
+> 📚 **Thesis project** — see [`docs/REPRODUCE.md`](docs/REPRODUCE.md)
+> for a complete reproduction guide and
+> [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) for the dataset
+> snapshot used in the thesis. Analysis SQL lives under
+> [`scripts/sql/`](scripts/sql/) and is catalogued in
+> [`docs/ANALYSES.md`](docs/ANALYSES.md).
+
+## 模块概览
+
+| 模块 | 数据源 | 输出表 |
+|---|---|---|
+| `src/etl.py` (`python -m src`) | Polygon RPC (链上事件) | `order_filled`, `orders_matched`, `etl_progress` |
+| `src/gamma.py` (`python -m src.gamma`) | Polymarket Gamma API (链下元数据) | `markets` |
+
+链下 `markets.clob_token_ids` 与链上 `order_filled.maker_asset_id` /
+`taker_asset_id` 是 ERC1155 outcome token id,可直接 JOIN。
 
 ## 原理
 
@@ -78,3 +96,30 @@ uv run -m src --address 0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e --start 33605
 
 每处理完一个区块区间 [from, to]，即写入进度 (chain_id, exchange_address, to_block, updated_at)。
 下次启动时按以下优先级确定起点：CLI --start > 环境变量 START_BLOCK > 进度表 last_block+1 > latest-10000。
+
+## Gamma puller (off-chain metadata)
+
+`src/gamma.py` 从 `gamma-api.polymarket.com/markets` 抓市场元数据
+(slug、问题文本、outcomes、clobTokenIds、当前赔率、累计成交量、结算时
+间等)写入 ClickHouse `markets` 表。
+
+```bash
+# 当前活跃市场 (~45k)
+uv run python -m src.gamma --closed false
+
+# 历史已结算市场 (~100k,Gamma offset 上限 ~100k 后会优雅退出)
+uv run python -m src.gamma --closed true
+```
+
+`markets` 表字段:`market_id, slug, question, description, category,
+outcomes, clob_token_ids, outcome_prices, volume, end_date, active,
+closed, fetched_at`。引擎为 `ReplacingMergeTree(fetched_at)
+ORDER BY market_id`,查询时建议加 `FINAL` 去重。
+
+完整字段调研:`uv run python scripts/inspect_market_fields.py`。
+
+## Tests
+
+```bash
+uv run python -m unittest tests.test_gamma -v
+```
