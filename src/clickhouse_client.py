@@ -114,6 +114,44 @@ class ClickHouse:
             """
         )
 
+    def ensure_markets_schema(self) -> None:
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.markets (
+                market_id String,
+                slug String,
+                question String,
+                description String,
+                category String,
+                outcomes Array(String),
+                clob_token_ids Array(String),
+                outcome_prices Array(Float64),
+                volume Float64,
+                end_date Nullable(DateTime),
+                active UInt8,
+                closed UInt8,
+                fetched_at DateTime
+            )
+            ENGINE = ReplacingMergeTree(fetched_at)
+            ORDER BY market_id
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def insert_markets(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.markets (
+                market_id, slug, question, description, category,
+                outcomes, clob_token_ids, outcome_prices, volume,
+                end_date, active, closed, fetched_at
+            ) VALUES
+            """,
+            rows,
+        )
+
     def insert_order_filled(self, rows: Sequence[tuple]) -> None:
         if not rows:
             return
