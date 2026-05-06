@@ -54,24 +54,29 @@ log = logging.getLogger(__name__)
 
 
 def _user_prompt(features: dict) -> str:
+    """Build the wallet-features summary for the LLM. We intentionally
+    OMIT `maker_ratio` and `avg_holding_h` because the public
+    Polymarket data-api does not expose either reliably (see
+    wallet_calibration.compute_features audit notes). Including them
+    as the 0.0 placeholder would lead the persona LLM to fabricate
+    false 'facts' like 'you are 100% taker' or 'you hold for 0 hours'."""
     cap = features["capital_usd"]
     tx = features["tx_count"]
     div = features["asset_diversity"]
-    mkr = features["maker_ratio"]
     avg = features["avg_position_usd"]
-    hold = features["avg_holding_h"]
     acc = features["past_accuracy"]
     n = features["n_resolved_prior"]
     return (
         f"Trader prior on-chain history (window before the target market opened):\n"
         f"- Total capital deployed: ${cap:,.0f}\n"
         f"- Trades: {tx} across {div} different markets\n"
-        f"- Maker fills (limit-order side): {mkr:.0%} of all fills\n"
         f"- Average position size per trade: ${avg:,.2f}\n"
-        f"- Average holding time per closed position: {hold:.1f}h\n"
         f"- Past prediction accuracy: {acc:.0%} (across {n} resolved markets)\n"
         f"\n"
-        f"Write the 3-4 sentence behavioral profile per the rules above."
+        f"Write the 3-4 sentence behavioral profile per the rules above. "
+        f"Do not invent facts beyond these four metrics; in particular, do "
+        f"not claim anything about maker/taker behavior or holding time, "
+        f"which are not in the input."
     )
 
 

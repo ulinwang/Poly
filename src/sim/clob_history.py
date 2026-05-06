@@ -23,19 +23,57 @@ from typing import Iterator, Optional
 
 
 DATA_API_BASE = "https://data-api.polymarket.com"
+GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 USER_AGENT = "polymetl-sim/0.1"
 
 log = logging.getLogger(__name__)
 
 
+def fetch_condition_id(slug: str, base: str = GAMMA_API_BASE,
+                       timeout: float = 30.0) -> str:
+    """Look up the on-chain ConditionalTokens conditionId for a market
+    slug. Required to pass to /trades?market=, since that param expects
+    a conditionId (Hash64), NOT a tokenId.
+
+    Tries `closed=true` first (most calibration target markets are
+    resolved); falls back to `closed=false`."""
+    encoded_slug = urllib.parse.quote(slug)
+    for closed_flag in ("true", "false"):
+        url = f"{base}/markets?slug={encoded_slug}&closed={closed_flag}"
+        req = urllib.request.Request(
+            url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            log.warning("gamma /markets returned HTTP %s for closed=%s",
+                        exc.code, closed_flag)
+            continue
+        if isinstance(payload, dict) and "data" in payload:
+            payload = payload["data"]
+        if isinstance(payload, list) and payload:
+            cid = str(payload[0].get("conditionId") or "")
+            if cid:
+                return cid
+    return ""
+
+
 def fetch_trades_page(
-    token_id: str,
+    condition_id: str,
+    token_id: str | None = None,
     limit: int = 500,
     offset: int = 0,
     base: str = DATA_API_BASE,
     timeout: float = 30.0,
 ) -> list[dict]:
-    params = {"market": token_id, "limit": limit, "offset": offset}
+    """Fetch one page of trades for a market. `condition_id` is the
+    on-chain Hash64 conditionId — that is what the API filters by.
+    `token_id` (optional) is used to post-filter the returned rows so
+    we only keep trades on one outcome (YES or NO) of the binary
+    market."""
+    params = {"market": condition_id, "limit": limit, "offset": offset,
+              "takerOnly": "false"}
     url = f"{base}/trades?{urllib.parse.urlencode(params)}"
     req = urllib.request.Request(
         url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
@@ -44,11 +82,15 @@ def fetch_trades_page(
         payload = json.loads(resp.read().decode("utf-8"))
     if isinstance(payload, dict) and "data" in payload:
         payload = payload["data"]
-    return list(payload) if payload else []
+    rows = list(payload) if payload else []
+    if token_id:
+        rows = [r for r in rows if str(r.get("asset") or "") == str(token_id)]
+    return rows
 
 
 def iter_all_trades(
-    token_id: str,
+    condition_id: str,
+    token_id: str | None = None,
     page_size: int = 500,
     sleep: float = 0.2,
     fetch_fn=fetch_trades_page,
@@ -56,7 +98,10 @@ def iter_all_trades(
     offset = 0
     while True:
         try:
-            page = fetch_fn(token_id=token_id, limit=page_size, offset=offset)
+            page = fetch_fn(
+                condition_id=condition_id, token_id=token_id,
+                limit=page_size, offset=offset,
+            )
         except urllib.error.HTTPError as exc:
             if exc.code in (400, 422):
                 log.warning("data-api rejected offset=%s with HTTP %s; stopping",
@@ -103,15 +148,25 @@ def fetch_and_store_trades(
     ch,
     market_id: str,
     token_id: str,
+    condition_id: str,
     page_size: int = 500,
     insert_batch: int = 1000,
 ) -> int:
-    """Pull all trades for `token_id` and write to market_trade_history.
-    Returns the number of trades inserted."""
+    """Pull all trades for `token_id` (post-filtered from
+    `condition_id`) and write to market_trade_history. Returns the
+    number of trades inserted.
+
+    Important: the data-api `/trades?market=` parameter expects an
+    on-chain conditionId (Hash64), NOT a tokenId. Passing the wrong
+    value silently returns globally-unfiltered trades. We always pass
+    conditionId AND post-filter on `asset == token_id`.
+    """
     fetched_at = dt.datetime.utcnow()
     buffer: list[tuple] = []
     total = 0
-    for trade in iter_all_trades(token_id, page_size=page_size):
+    for trade in iter_all_trades(
+        condition_id=condition_id, token_id=token_id, page_size=page_size,
+    ):
         buffer.append(trade_to_row(trade, market_id, token_id, fetched_at))
         if len(buffer) >= insert_batch:
             ch.insert_trade_history(buffer)

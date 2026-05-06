@@ -116,9 +116,7 @@ def build_user_prompt(market: MarketSnapshot, agent: AgentSnapshot) -> str:
 CLOB_SYSTEM_PROMPT_TEMPLATE = """You are a Polymarket prediction-market trader. Trading style:
 
 {profile}
-
-Risk aversion: {risk_aversion} (0 = loves risk, 1 = very averse).
-
+{risk_aversion_line}
 Market question: "{question}"
 Resolution rules: {description}
 Resolution date: {end_date}
@@ -151,9 +149,19 @@ def _build_clob_system_prompt(persona: Persona, question: str, description: str,
     desc = (description or "").strip()
     if len(desc) > 1200:
         desc = desc[:1200] + " ...[truncated]"
+    # For v4 calibrated personas, the behavioral profile_text already
+    # encodes everything we know about the trader; the abstract
+    # risk_aversion scalar adds noise rather than signal. Suppress it.
+    if persona.persona_type == "Calibrated":
+        risk_line = ""
+    else:
+        risk_line = (
+            f"\nRisk aversion: {persona.risk_aversion} "
+            f"(0 = loves risk, 1 = very averse).\n"
+        )
     return CLOB_SYSTEM_PROMPT_TEMPLATE.format(
         profile=persona.profile_text,
-        risk_aversion=persona.risk_aversion,
+        risk_aversion_line=risk_line,
         question=question,
         description=desc,
         end_date=end_date,
@@ -238,6 +246,7 @@ def decide(
             base_url=base_url, api_key=api_key, model=model,
             system_prompt=system_prompt, user_prompt=user_prompt,
             temperature=temperature, timeout=timeout,
+            response_format={"type": "json_object"},
         )
         raw = result["raw"]
         parsed = parse_decision(result["text"])

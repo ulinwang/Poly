@@ -24,21 +24,15 @@ class SignalSigmaTest(unittest.TestCase):
         self.assertEqual(init.derive_signal_sigma(-0.5), 0.4)
 
 
-class RiskAversionTest(unittest.TestCase):
-    def test_no_maker_no_holding(self):
-        self.assertAlmostEqual(init.derive_risk_aversion(0.0, 0.0), 0.0)
+class RiskAversionRemovalTest(unittest.TestCase):
+    """The v4 audit removed `derive_risk_aversion` because its source
+    fields (maker_ratio, avg_holding_h) are not extractable from the
+    public Polymarket data-api. Calibrated agents now carry a neutral
+    placeholder risk_aversion=0.5 and the prompt suppresses the
+    risk_aversion line entirely. This test pins the deletion."""
 
-    def test_full_maker_long_hold(self):
-        # maker_ratio=1, holding=24h → 0.5 + 0.5*0.5 = 0.75
-        out = init.derive_risk_aversion(1.0, 24.0)
-        self.assertGreater(out, 0.5)
-        self.assertLess(out, 1.0)
-
-    def test_clamped_in_zero_one(self):
-        for mr, h in [(0.0, 0.0), (1.0, 1000.0), (0.5, 12.0)]:
-            v = init.derive_risk_aversion(mr, h)
-            self.assertGreaterEqual(v, 0.0)
-            self.assertLessEqual(v, 1.0)
+    def test_derive_risk_aversion_is_gone(self):
+        self.assertFalse(hasattr(init, "derive_risk_aversion"))
 
 
 class DrawPrivateSignalTest(unittest.TestCase):

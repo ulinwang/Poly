@@ -88,9 +88,17 @@ def main() -> None:
         help="multiplier on wallet capital (e.g. 0.1 to keep notionals small)",
     )
     parser.add_argument(
-        "--cutoff-days-before-end", type=int, default=60,
-        help="for calibration, days before market end_date to use as data cutoff",
+        "--fallback-cutoff-days-before-end", type=int, default=None,
+        help="ONLY used as a fallback if market_trade_history is empty after "
+             "trade-history fetch. Default behavior: use first trade timestamp.",
     )
+    # v4 bootstrap-liquidity tuning
+    parser.add_argument("--seed-spread", type=float, default=0.04,
+                        help="bid-ask spread of seeded orderbook ladder")
+    parser.add_argument("--seed-depth-levels", type=int, default=3,
+                        help="number of price levels per side in seeded book")
+    parser.add_argument("--seed-depth-per-level", type=float, default=100.0,
+                        help="shares of liquidity per level (size; notional ≈ size × price)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -124,6 +132,7 @@ def main() -> None:
     end_date_str = market["end_date"].isoformat() if market["end_date"] else "unknown"
 
     # ----- Population assembly: legacy personas vs v4 wallet calibration -----
+    consensus_mu: Optional[float] = None
     if args.population == "calibrated":
         from . import wallet_calibration, persona_generator, initialization
         ch.ensure_wallet_features_schema()
@@ -134,7 +143,7 @@ def main() -> None:
                      "(this hits Polymarket data-api; can take a few minutes)")
             wallet_calibration.calibrate(
                 slug=market["slug"], n_wallets=args.n_wallets,
-                cutoff_days_before_end=args.cutoff_days_before_end,
+                fallback_cutoff_days_before_end=args.fallback_cutoff_days_before_end,
             )
         else:
             log.info("reusing %s cached wallet_features rows", len(existing))
@@ -142,11 +151,36 @@ def main() -> None:
         persona_generator.generate_for_market(
             target_market_id=str(market["market_id"]), force=False, ch=ch,
         )
-        # Phase 3: build population
-        yes_token_id = market["clob_token_ids"][0] if market["clob_token_ids"] else ""
+
+        # Pick the YES token by outcome label (not array index) — guards
+        # against markets whose outcomes are listed in NO-first order.
+        outcomes_lower = [str(o).strip().lower() for o in market["outcomes"]]
+        if "yes" in outcomes_lower:
+            yes_idx = outcomes_lower.index("yes")
+        else:
+            log.warning(
+                "market outcomes %r contain no 'Yes' label; defaulting to index 0",
+                market["outcomes"],
+            )
+            yes_idx = 0
+        if not market["clob_token_ids"]:
+            raise SystemExit("market has empty clob_token_ids; cannot calibrate")
+        yes_token_id = market["clob_token_ids"][yes_idx]
+
+        # Compute pre-event consensus once; reuse for both population
+        # build (signal_mu draw) and bootstrap orderbook anchor.
+        consensus_mu = initialization.pre_event_consensus_p(
+            ch, str(market["market_id"]), yes_token_id,
+        )
+        log.info(
+            "pre-event consensus YES = %.3f (will anchor bootstrap book here)",
+            consensus_mu,
+        )
+
         population = initialization.build_population(
             target_market_id=str(market["market_id"]),
             yes_token_id=yes_token_id,
+            consensus_mu=consensus_mu,
             capital_scale=args.capital_scale, ch=ch,
         )
         if not population:
@@ -172,11 +206,34 @@ def main() -> None:
             taker_fee_bps=args.taker_fee_bps,
         )
 
-    # Optional bootstrap liquidity (v4): seed both books with passive maker
+    # Optional bootstrap liquidity (v4): seed both books with passive maker.
+    # Anchor the YES book at consensus_mu (pre-event VWAP) and the NO book
+    # at 1 - consensus_mu so the synthetic environmental MM does not impose
+    # a 50/50 prior on a long-shot market.
     if args.seed_liquidity:
         from .env import seed_orderbook_liquidity
-        seed_orderbook_liquidity(sim)
-        log.info("seeded environmental orderbook liquidity (agent_id=-1)")
+        if consensus_mu is None:
+            yes_anchor = 0.5
+            log.warning(
+                "--seed-liquidity without calibrated population: anchor=0.5 "
+                "(may be wrong for long-shot markets)"
+            )
+        else:
+            yes_anchor = max(0.05, min(0.95, consensus_mu))
+        seed_orderbook_liquidity(
+            sim,
+            yes_anchor=yes_anchor,
+            no_anchor=1.0 - yes_anchor,
+            spread=args.seed_spread,
+            depth_levels=args.seed_depth_levels,
+            depth_per_level=args.seed_depth_per_level,
+        )
+        log.info(
+            "seeded environmental orderbook liquidity "
+            "(agent_id=-1, yes_anchor=%.3f, spread=%.3f, %d×%d)",
+            yes_anchor, args.seed_spread,
+            args.seed_depth_levels, int(args.seed_depth_per_level),
+        )
 
     log.info("sim_id=%s n_agents=%d n_ticks=%d taker_fee_bps=%.1f",
              sim.sim_id, len(sim.agents), sim.n_ticks, sim.taker_fee_bps)
@@ -259,14 +316,21 @@ def main() -> None:
     log.info("persisted simulation to ClickHouse: sim_id=%s", sim.sim_id)
 
     if not args.skip_clob and market["clob_token_ids"]:
-        for token_id in market["clob_token_ids"]:
-            log.info("fetching real CLOB trades for token %s...", token_id[:16] + "...")
-            try:
-                clob_history.fetch_and_store_trades(
-                    ch, market_id=market["market_id"], token_id=token_id,
-                )
-            except Exception as exc:  # noqa: BLE001 — surface but don't crash
-                log.warning("CLOB fetch failed for %s: %s", token_id[:16], exc)
+        try:
+            condition_id = clob_history.fetch_condition_id(market["slug"])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("could not resolve conditionId; skipping CLOB fetch: %s", exc)
+            condition_id = ""
+        if condition_id:
+            for token_id in market["clob_token_ids"]:
+                log.info("fetching real CLOB trades for token %s...", token_id[:16] + "...")
+                try:
+                    clob_history.fetch_and_store_trades(
+                        ch, market_id=market["market_id"], token_id=token_id,
+                        condition_id=condition_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("CLOB fetch failed for %s: %s", token_id[:16], exc)
 
 
 if __name__ == "__main__":

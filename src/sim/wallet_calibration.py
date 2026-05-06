@@ -137,7 +137,23 @@ def _to_float(x: object, default: float = 0.0) -> float:
 
 def compute_features(trades: list[dict], closed_positions: list[dict]) -> dict:
     """Aggregate one wallet's pre-event activity into the feature
-    schema persisted to `wallet_features`."""
+    schema persisted to `wallet_features`.
+
+    Honest-feature-set policy. The Polymarket data-api does NOT expose
+    the maker/taker label for individual trades (the `takerOnly`
+    parameter merely switches whether the user appears as taker; the
+    counterparty role is never returned). Likewise, /closed-positions
+    does not include open/close timestamps. We therefore set:
+
+      maker_ratio  = 0.0   (NOT INFERABLE — placeholder column)
+      avg_holding_h = 0.0  (NOT INFERABLE — placeholder column)
+
+    They remain in the schema for forward-compat (a future on-chain ETL
+    can populate them with truth), but the v4 simulator's
+    `initialization.py` does not consume them. See
+    docs/EXPERIMENT_LOG.md §"Honest features" for the methodology
+    rationale.
+    """
     tx_count = len(trades)
     if tx_count == 0:
         return {
@@ -147,38 +163,16 @@ def compute_features(trades: list[dict], closed_positions: list[dict]) -> dict:
             "n_resolved_prior": 0,
         }
 
-    # Capital deployed: max absolute cumulative net position over the
-    # pre-market window. Approximated from the trade stream:
-    # +size on BUY, -size on SELL; sum of absolute notionals serves as
-    # a robust upper bound when timing is missing.
+    # Capital deployed: sum of past notionals as a robust upper bound
+    # on the wallet's cumulative exposure (paper Eq. 5 uses max abs
+    # cumulative position; without per-trade timestamps for the running
+    # sum we use the bound).
     notionals = [_to_float(t.get("price")) * _to_float(t.get("size")) for t in trades]
     capital_usd = max(sum(notionals), 0.0)
     avg_position_usd = statistics.fmean(notionals) if notionals else 0.0
 
-    # Maker ratio: proxyWallet acts as the user; takerOnly=false means
-    # all trades that touched this wallet, but the API does not flip
-    # the side label by maker/taker. We use the heuristic that in the
-    # public schema "side" reflects what the user did and the network
-    # fills are a near-mix; lacking a maker flag we approximate via:
-    # if the price is at extreme 0/1 sweep ⇒ taker, else ⇒ maker.
-    # (Approximation; if a `mode` or `role` field appears in future
-    # API revisions, replace this branch.)
-    maker_count = sum(1 for t in trades if 0.01 < _to_float(t.get("price")) < 0.99)
-    maker_ratio = maker_count / tx_count if tx_count else 0.0
-
     # Asset diversity: distinct conditionId across all trades.
     asset_diversity = len({t.get("conditionId") for t in trades if t.get("conditionId")})
-
-    # Average holding time per closed position (hours).
-    holds: list[float] = []
-    for p in closed_positions:
-        # closed-positions response lacks open/close timestamps explicitly;
-        # leave at 0.0 if absent. (Field varies by API version.)
-        open_ts = _to_float(p.get("openTimestamp") or p.get("startTimestamp"))
-        end_ts = _to_float(p.get("endTimestamp") or p.get("timestamp"))
-        if open_ts > 0 and end_ts > open_ts:
-            holds.append((end_ts - open_ts) / 3600.0)
-    avg_holding_h = statistics.fmean(holds) if holds else 0.0
 
     # Past accuracy: capital-weighted fraction of closed positions that
     # ended profitable. Uses realizedPnl > 0 as the success indicator.
@@ -198,10 +192,11 @@ def compute_features(trades: list[dict], closed_positions: list[dict]) -> dict:
     return {
         "capital_usd": capital_usd,
         "tx_count": tx_count,
-        "maker_ratio": maker_ratio,
+        # Placeholders — see docstring; not consumed by initialization.py
+        "maker_ratio": 0.0,
+        "avg_holding_h": 0.0,
         "avg_position_usd": avg_position_usd,
         "asset_diversity": asset_diversity,
-        "avg_holding_h": avg_holding_h,
         "past_accuracy": past_accuracy,
         "n_resolved_prior": n_resolved_prior,
     }
@@ -227,19 +222,15 @@ def stratified_sample(wallets: list[str], n: int, seed: int = 0) -> list[str]:
 # ----- Top-level orchestration ------------------------------------------------
 
 
-def market_open_timestamp(ch: ClickHouse, slug: str) -> tuple[str, int, dict]:
+def market_meta(ch: ClickHouse, slug: str) -> tuple[str, dict]:
     row = ch.fetch_market_by_slug(slug)
     if not row:
         raise SystemExit(f"market {slug!r} not found in markets table")
     market_id, slug_, question, description, outcomes, clob_token_ids, \
         outcome_prices, volume, end_date, closed = row
-    # We want the market START timestamp; markets table has end_date
-    # but not start_date in the current schema. Fallback: use end_date - 60d
-    # as the cutoff (most binary markets have multi-week lifetimes).
     if end_date is None:
-        raise SystemExit(f"market {slug!r} has no end_date; cannot compute calibration cutoff")
-    # Approximation: 60 days before end_date. Tunable via --cutoff-days.
-    return market_id, int(end_date.timestamp()), {
+        raise SystemExit(f"market {slug!r} has no end_date")
+    return market_id, {
         "slug": slug_, "question": question, "description": description,
         "outcomes": list(outcomes), "clob_token_ids": list(clob_token_ids),
         "outcome_prices": list(outcome_prices),
@@ -247,8 +238,50 @@ def market_open_timestamp(ch: ClickHouse, slug: str) -> tuple[str, int, dict]:
     }
 
 
+def market_open_cutoff(
+    ch: ClickHouse, market_id: str, end_date: dt.datetime,
+    fallback_days_before_end: Optional[int] = None,
+) -> int:
+    """Return the unix timestamp of the target market's first on-chain
+    trade — i.e. when the market opened. This is the *correct* cutoff
+    for wallet calibration: any wallet activity strictly < this ts is
+    pre-event and free of look-ahead leakage.
+
+    If `market_trade_history` has no rows for this market, raises
+    SystemExit unless `fallback_days_before_end` is provided (in which
+    case cutoff = end_date − that_many_days; for markets where you
+    explicitly accept that some pre-event 'history' may include the
+    very early days of the target market itself).
+    """
+    rows = ch.client.execute(
+        f"""
+        SELECT min(trade_time) FROM {ch.database}.market_trade_history
+        WHERE market_id = %(mid)s
+        """,
+        {"mid": str(market_id)},
+    )
+    first_trade = rows[0][0] if rows else None
+    if first_trade is None:
+        if fallback_days_before_end is None:
+            raise SystemExit(
+                f"market {market_id} has no rows in market_trade_history; "
+                f"call clob_history.fetch_and_store_trades(market_id, token_id) "
+                f"before calibrating, OR pass --cutoff-days-before-end as a "
+                f"fallback (will use end_date - N days, less rigorous)."
+            )
+        cutoff_ts = int(end_date.timestamp()) - fallback_days_before_end * 86400
+        log.warning(
+            "no market_trade_history rows; falling back to end_date - %dd cutoff "
+            "(may include some target-market data if its lifetime > %dd)",
+            fallback_days_before_end, fallback_days_before_end,
+        )
+        return cutoff_ts
+    return int(first_trade.timestamp())
+
+
 def calibrate(
-    slug: str, n_wallets: int = 20, cutoff_days_before_end: int = 60,
+    slug: str, n_wallets: int = 20,
+    fallback_cutoff_days_before_end: Optional[int] = None,
     ensure_trade_history: bool = True, dry_run: bool = False,
     seed: int = 0,
 ) -> int:
@@ -261,20 +294,42 @@ def calibrate(
     ch.ensure_sim_schema()
     ch.ensure_wallet_features_schema()
 
-    market_id, end_ts, market = market_open_timestamp(ch, slug)
-    cutoff_ts = end_ts - cutoff_days_before_end * 86400
-    cutoff_iso = dt.datetime.utcfromtimestamp(cutoff_ts).isoformat()
-    log.info("calibration cutoff: trades strictly before %s (ts=%s)", cutoff_iso, cutoff_ts)
+    market_id, market = market_meta(ch, slug)
 
-    # Optional: pre-fetch the target market's trade history so we can
-    # enumerate participating wallets. Reuses src/sim/clob_history.
+    # Pre-fetch the target market's trade history. This is REQUIRED so
+    # we can (a) enumerate participating wallets and (b) compute the
+    # market-open cutoff from the first real trade.
+    #
+    # The data-api /trades?market= filter expects an on-chain
+    # conditionId; our markets table doesn't store that field, so we
+    # query Gamma at calibration time.
     if ensure_trade_history and market["clob_token_ids"]:
+        condition_id = clob_history.fetch_condition_id(slug)
+        if not condition_id:
+            raise SystemExit(
+                f"could not resolve conditionId for slug {slug!r} via Gamma API; "
+                f"the data-api /trades?market= filter will not work without it"
+            )
+        log.info("conditionId for %s = %s...", slug, condition_id[:18])
         for token_id in market["clob_token_ids"]:
             log.info("fetching CLOB trade history for token %s...", token_id[:14] + "...")
             try:
-                clob_history.fetch_and_store_trades(ch, market_id, token_id)
+                clob_history.fetch_and_store_trades(
+                    ch, market_id, token_id, condition_id=condition_id,
+                )
             except Exception as exc:  # noqa: BLE001
                 log.warning("CLOB fetch failed for %s: %s", token_id[:14], exc)
+
+    cutoff_ts = market_open_cutoff(
+        ch, market_id, market["end_date"],
+        fallback_days_before_end=fallback_cutoff_days_before_end,
+    )
+    cutoff_iso = dt.datetime.utcfromtimestamp(cutoff_ts).isoformat()
+    log.info(
+        "calibration cutoff: trades strictly before %s (ts=%s) — "
+        "= market open per first observed trade",
+        cutoff_iso, cutoff_ts,
+    )
 
     wallets = ch.fetch_wallets_in_market(market_id)
     log.info("found %s distinct wallets in market %s", len(wallets), market_id)
@@ -325,8 +380,11 @@ def main() -> None:
     parser.add_argument("--slug", required=True)
     parser.add_argument("--n-wallets", type=int, default=20)
     parser.add_argument(
-        "--cutoff-days-before-end", type=int, default=60,
-        help="how many days before market end_date to use as the data cutoff",
+        "--fallback-cutoff-days-before-end", type=int, default=None,
+        help="ONLY used as a fallback when market_trade_history is empty "
+             "(prefer running clob_history.fetch_and_store_trades first). "
+             "Default behavior (recommended): use the timestamp of the "
+             "first observed trade in the target market as the cutoff.",
     )
     parser.add_argument("--no-trade-history", action="store_true",
                         help="skip pre-fetching market_trade_history (assume already populated)")
@@ -340,7 +398,7 @@ def main() -> None:
     )
     calibrate(
         slug=args.slug, n_wallets=args.n_wallets,
-        cutoff_days_before_end=args.cutoff_days_before_end,
+        fallback_cutoff_days_before_end=args.fallback_cutoff_days_before_end,
         ensure_trade_history=not args.no_trade_history,
         dry_run=args.dry_run, seed=args.seed,
     )

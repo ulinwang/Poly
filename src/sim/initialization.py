@@ -44,31 +44,40 @@ class AgentInit:
     src_asset_diversity: int
 
 
-def derive_signal_sigma(past_accuracy: float) -> float:
-    """Higher empirical accuracy → tighter prior. Bounds enforced."""
-    sigma = 0.4 * (1.0 - past_accuracy)
-    return max(0.05, min(0.4, sigma))
+def derive_signal_sigma(
+    past_accuracy: float, scale: float | None = None,
+    floor: float | None = None, cap: float | None = None,
+) -> float:
+    """Higher empirical accuracy → tighter prior. Bounds enforced.
 
-
-def derive_risk_aversion(maker_ratio: float, avg_holding_h: float) -> float:
-    """A heuristic, not a label. Higher maker_ratio (passive) and longer
-    holding time both correlate with risk aversion.
-
-    risk_aversion = clip(0.5 * maker_ratio + 0.5 * tanh(avg_holding_h/24), 0, 1)
+    Defaults from `Settings.SIGMA_*`; pass overrides for testing.
     """
-    # statistics.NormalDist().cdf approximates tanh ramp tightly enough
-    hold_norm = 1.0 - 1.0 / (1.0 + max(avg_holding_h, 0.0) / 24.0)
-    raw = 0.5 * max(0.0, min(1.0, maker_ratio)) + 0.5 * hold_norm
-    return max(0.0, min(1.0, raw))
+    s = get_settings()
+    scale = s.SIGMA_SCALE if scale is None else scale
+    floor = s.SIGMA_FLOOR if floor is None else floor
+    cap = s.SIGMA_CAP if cap is None else cap
+    sigma = scale * (1.0 - past_accuracy)
+    return max(floor, min(cap, sigma))
 
 
 def pre_event_consensus_p(
     ch: ClickHouse, market_id: str, yes_token_id: str,
-    horizon_hours: float = 24.0,
+    horizon_hours: float | None = None,
+    allow_missing: bool = False,
 ) -> float:
     """Volume-weighted average YES price over the first `horizon_hours`
     of trade history for the YES token. Strictly ex-ante for any agent
-    decision — the trades happened, the resolution did not."""
+    decision — the trades happened, the resolution did not.
+
+    Raises SystemExit if `market_trade_history` is empty for the token
+    (run `clob_history.fetch_and_store_trades` first), unless
+    `allow_missing=True` is set, in which case logs a warning and
+    returns a neutral 0.5 prior. Defaulting to silent 0.5 was a v4
+    audit finding — see docs/EXPERIMENT_LOG.md §audit.
+    """
+    s = get_settings()
+    horizon_hours = s.PRE_EVENT_VWAP_HOURS if horizon_hours is None else horizon_hours
+
     rows = ch.client.execute(
         f"""
         SELECT min(trade_time) AS t0
@@ -78,6 +87,14 @@ def pre_event_consensus_p(
         {"mid": str(market_id), "tid": str(yes_token_id)},
     )
     if not rows or rows[0][0] is None:
+        msg = (
+            f"market_trade_history empty for market={market_id} "
+            f"token={yes_token_id[:12]}... — run "
+            f"clob_history.fetch_and_store_trades(ch, market_id, token_id) first"
+        )
+        if not allow_missing:
+            raise SystemExit(msg)
+        log.warning("%s; falling back to neutral 0.5 prior", msg)
         return 0.5
     t0: dt.datetime = rows[0][0]
     cutoff = t0 + dt.timedelta(hours=horizon_hours)
@@ -91,9 +108,16 @@ def pre_event_consensus_p(
         {"mid": str(market_id), "tid": str(yes_token_id), "cut": cutoff},
     )
     if not rows:
+        msg = (
+            f"market_trade_history has data for the token but none "
+            f"within the first {horizon_hours}h after market open"
+        )
+        if not allow_missing:
+            raise SystemExit(msg)
+        log.warning("%s; falling back to neutral 0.5 prior", msg)
         return 0.5
-    weighted = sum(p * s for p, s in rows)
-    total_size = sum(s for _, s in rows)
+    weighted = sum(p * sz for p, sz in rows)
+    total_size = sum(sz for _, sz in rows)
     if total_size <= 0:
         return statistics.fmean(p for p, _ in rows) if rows else 0.5
     return max(0.01, min(0.99, weighted / total_size))
@@ -114,14 +138,27 @@ def draw_private_signal(
 def build_population(
     target_market_id: str,
     yes_token_id: str,
+    consensus_mu: float | None = None,
     capital_scale: float = 1.0,
-    capital_floor_usd: float = 50.0,
-    capital_cap_usd: float = 50_000.0,
+    capital_floor_usd: float | None = None,
+    capital_cap_usd: float | None = None,
     seed: int = 0,
     cache_path: Path = CACHE_PATH,
     ch: Optional[ClickHouse] = None,
 ) -> list[AgentInit]:
-    """Materialize the AgentInit population for the calibrated sim."""
+    """Materialize the AgentInit population for the calibrated sim.
+
+    `consensus_mu`: if pre-computed by the caller, reuse it; else
+    derive via `pre_event_consensus_p`. The runner passes it in so the
+    same value can also seed the bootstrap orderbook anchor.
+
+    Note: agent.risk_aversion is set to a neutral 0.5 placeholder. The
+    v4 prompt for calibrated agents does not consume risk_aversion;
+    behavioral preferences flow exclusively through profile_text and
+    the private signal. (See audit log: prior heuristic
+    `derive_risk_aversion(maker_ratio, holding_h)` was removed because
+    those source fields are not extractable from the public data-api.)
+    """
     settings = get_settings()
     if ch is None:
         ch = ClickHouse(
@@ -130,13 +167,17 @@ def build_population(
             database=settings.CLICKHOUSE_DATABASE,
         )
 
+    cap_floor = settings.CAPITAL_FLOOR_USD if capital_floor_usd is None else capital_floor_usd
+    cap_cap = settings.CAPITAL_CAP_USD if capital_cap_usd is None else capital_cap_usd
+
     feature_rows = ch.fetch_wallet_features(target_market_id)
     if not feature_rows:
         log.warning("no wallet_features rows for market %s", target_market_id)
         return []
     cache = load_cache(cache_path).get(str(target_market_id), {})
 
-    consensus_mu = pre_event_consensus_p(ch, target_market_id, yes_token_id)
+    if consensus_mu is None:
+        consensus_mu = pre_event_consensus_p(ch, target_market_id, yes_token_id)
     log.info("pre-event consensus YES p ≈ %.3f", consensus_mu)
 
     rng = random.Random(seed)
@@ -151,14 +192,10 @@ def build_population(
             continue
 
         capital = max(
-            capital_floor_usd,
-            min(capital_cap_usd, float(capital_usd) * capital_scale),
+            cap_floor, min(cap_cap, float(capital_usd) * capital_scale),
         )
         sigma = derive_signal_sigma(float(past_accuracy))
         signal = draw_private_signal(consensus_mu, sigma, rng)
-        risk_aversion = derive_risk_aversion(
-            float(maker_ratio), float(avg_holding_h),
-        )
 
         population.append(AgentInit(
             wallet_addr=wallet,
@@ -167,18 +204,21 @@ def build_population(
             profile_text=cached["profile_text"],
             private_signal_mu=signal,
             private_signal_sigma=sigma,
-            risk_aversion=risk_aversion,
+            # Neutral placeholder — not used in calibrated prompt path.
+            risk_aversion=0.5,
             src_tx_count=int(tx_count),
-            src_maker_ratio=float(maker_ratio),
+            src_maker_ratio=float(maker_ratio),     # honest 0.0 from API
             src_avg_position_usd=float(avg_pos),
             src_asset_diversity=int(asset_diversity),
         ))
     log.info(
-        "built population of %s agents (capital range $%.0f..$%.0f, mu range %.2f..%.2f)",
+        "built population of %s agents (capital range $%.0f..$%.0f, "
+        "mu range %.2f..%.2f, consensus_mu=%.3f)",
         len(population),
         min((a.capital_initial for a in population), default=0.0),
         max((a.capital_initial for a in population), default=0.0),
         min((a.private_signal_mu for a in population), default=0.0),
         max((a.private_signal_mu for a in population), default=0.0),
+        consensus_mu,
     )
     return population

@@ -17,8 +17,8 @@ class FeatureExtractionTest(unittest.TestCase):
         trades = [
             {"price": 0.50, "size": 100, "conditionId": "0xA"},
             {"price": 0.40, "size": 50, "conditionId": "0xA"},
-            {"price": 0.10, "size": 200, "conditionId": "0xB"},   # maker (0.01<p<0.99)
-            {"price": 0.99, "size": 10, "conditionId": "0xC"},    # boundary, taker
+            {"price": 0.10, "size": 200, "conditionId": "0xB"},
+            {"price": 0.99, "size": 10, "conditionId": "0xC"},
         ]
         positions = [
             {"realizedPnl": 5.0, "avgPrice": 0.5, "totalBought": 100},  # win, cap=50
@@ -30,20 +30,26 @@ class FeatureExtractionTest(unittest.TestCase):
         self.assertAlmostEqual(out["capital_usd"], 99.9, places=2)
         # avg_position_usd = mean of those = 24.975
         self.assertAlmostEqual(out["avg_position_usd"], 24.975, places=2)
-        # 3 of 4 trades are within (0.01, 0.99) — exact boundary 0.99 excluded
-        self.assertAlmostEqual(out["maker_ratio"], 0.75, places=2)
         # 3 distinct conditionIds
         self.assertEqual(out["asset_diversity"], 3)
         # past_accuracy: win capital 50 / total capital 70 = 0.714
         self.assertAlmostEqual(out["past_accuracy"], 50.0 / 70.0, places=3)
         self.assertEqual(out["n_resolved_prior"], 2)
 
-    def test_maker_ratio_bounds(self):
-        # all extreme prices → all takers → ratio 0
+    def test_maker_ratio_is_explicit_placeholder(self):
+        # v4 audit fix: maker/taker is not extractable from data-api,
+        # so we set a 0.0 placeholder rather than inventing a heuristic.
         out = wc.compute_features(
-            [{"price": 0.999, "size": 1, "conditionId": "x"}], [],
+            [{"price": 0.5, "size": 100, "conditionId": "x"}], [],
         )
         self.assertEqual(out["maker_ratio"], 0.0)
+
+    def test_avg_holding_h_is_explicit_placeholder(self):
+        # /closed-positions does not return open/close timestamps in
+        # the public API; we record 0.0 rather than guessing.
+        positions = [{"realizedPnl": 1.0, "avgPrice": 0.5, "totalBought": 10}]
+        out = wc.compute_features([{"price": 0.5, "size": 1, "conditionId": "x"}], positions)
+        self.assertEqual(out["avg_holding_h"], 0.0)
 
     def test_past_accuracy_no_capital(self):
         # closed positions but no capital → defaults to 0

@@ -120,19 +120,29 @@ def call_deepseek(
     user_prompt: str,
     temperature: float = 0.0,
     timeout: float = 60.0,
+    response_format: dict | None = None,
 ) -> dict:
     """Send one chat-completion request. Returns dict with keys:
-    text, prompt_tokens, completion_tokens, raw."""
+    text, prompt_tokens, completion_tokens, raw.
+
+    `response_format`:
+      None (default) → free-form text. Use for natural-language tasks
+        like persona profile generation.
+      {"type": "json_object"} → DeepSeek will refuse to return text not
+        parseable as JSON, AND requires the prompt to literally contain
+        the word 'JSON'. Use for structured agent decisions.
+    """
     url = base_url.rstrip("/") + "/chat/completions"
-    payload = {
+    payload: dict = {
         "model": model,
         "temperature": temperature,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "response_format": {"type": "json_object"},
     }
+    if response_format is not None:
+        payload["response_format"] = response_format
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -219,6 +229,7 @@ def predict_one(
             user_prompt=user_prompt,
             temperature=temperature,
             timeout=timeout,
+            response_format={"type": "json_object"},
         )
         raw = result["raw"]
         prompt_tokens = result["prompt_tokens"]

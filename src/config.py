@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     DEEPSEEK_TIMEOUT: float = 60.0
     DEEPSEEK_TEMPERATURE: float = 0.0
 
+    # v4 calibrated-init parameters (see docs/EXPERIMENT_LOG.md). The
+    # signal sigma is the noise around the pre-event consensus mu the
+    # agent receives at sim start. Higher empirical past accuracy →
+    # tighter sigma. SCALE controls how aggressively past_accuracy
+    # tightens the prior; FLOOR / CAP clip the result.
+    SIGMA_SCALE: float = 0.4
+    SIGMA_FLOOR: float = 0.05
+    SIGMA_CAP: float = 0.4
+    # Capital scaling for calibrated agents. FLOOR keeps tiny wallets
+    # from being effectively zero; CAP prevents one whale from
+    # dominating an N=20 simulation.
+    CAPITAL_FLOOR_USD: float = 50.0
+    CAPITAL_CAP_USD: float = 50_000.0
+    # Pre-event consensus computation horizon (hours after market open).
+    PRE_EVENT_VWAP_HOURS: float = 24.0
+
     model_config = SettingsConfigDict(env_file=(".env",), env_prefix="POLYMETL_", extra="ignore")
 
 

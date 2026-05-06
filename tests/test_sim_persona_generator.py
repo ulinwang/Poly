@@ -21,15 +21,23 @@ SAMPLE_FEATURES = {
 
 
 class UserPromptTest(unittest.TestCase):
-    def test_includes_all_facts(self):
+    def test_includes_reliable_facts(self):
         p = pg._user_prompt(SAMPLE_FEATURES)
-        self.assertIn("$1,500", p)
-        self.assertIn("42", p)
-        self.assertIn("60%", p)            # maker_ratio
+        self.assertIn("$1,500", p)         # capital
+        self.assertIn("42", p)             # tx_count
         self.assertIn("$35.70", p)         # avg position
-        self.assertIn("12.5h", p)          # holding
         self.assertIn("55%", p)            # past_accuracy
         self.assertIn("9", p)              # n_resolved
+
+    def test_omits_unreliable_fields(self):
+        # maker_ratio and avg_holding_h are placeholders (0.0); the API
+        # cannot extract them. We must NOT mention them in the prompt
+        # or the LLM will fabricate "100% taker" / "0h holding" facts.
+        p = pg._user_prompt(SAMPLE_FEATURES)
+        self.assertNotIn("Maker", p)
+        self.assertNotIn("maker", p.split("Do not")[0])  # no factual claim
+        self.assertNotIn("holding time", p.split("Do not")[0])
+        self.assertNotIn("60%", p)
 
 
 class StripRoleLabelsTest(unittest.TestCase):
