@@ -16,6 +16,7 @@ ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
 |---|---|---|
 | `src/etl.py` (`python -m src`) | Polygon RPC (链上事件) | `order_filled`, `orders_matched`, `etl_progress` |
 | `src/gamma.py` (`python -m src.gamma`) | Polymarket Gamma API (链下元数据) | `markets` |
+| `src/agent.py` (`python -m src.agent`) | LLM (DeepSeek by default) | `agent_predictions` |
 
 链下 `markets.clob_token_ids` 与链上 `order_filled.maker_asset_id` /
 `taker_asset_id` 是 ERC1155 outcome token id,可直接 JOIN。
@@ -118,8 +119,26 @@ ORDER BY market_id`,查询时建议加 `FINAL` 去重。
 
 完整字段调研:`uv run python scripts/inspect_market_fields.py`。
 
+## Agent simulator (LLM forecaster)
+
+`src/agent.py` 调用一个 LLM(默认 DeepSeek v4-flash)对每个市场独立
+预测 YES 概率,并把结果写入 `agent_predictions` 表,用于评估 LLM 预测
+能力对比群体智慧(市场价格)与最终结果。
+
+Agent **不会**看到市场的当前赔率,以保证预测独立性;但市场价格和
+(若已结算)最终结果会被快照到预测行里,以便后续做校准与回归分析。
+
+```bash
+# 先在 .env 设置 POLYMETL_DEEPSEEK_API_KEY=sk-...
+uv run python -m src.agent --limit 50            # 默认只跑已结算市场
+uv run python -m src.agent --limit 10 --dry-run  # 只看会选哪些市场,不调 API
+uv run python -m src.agent --include-active      # 也跑当前活跃市场
+```
+
+详见 [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) 实验设计章节。
+
 ## Tests
 
 ```bash
-uv run python -m unittest tests.test_gamma -v
+uv run python -m unittest discover tests -v   # 32 cases
 ```

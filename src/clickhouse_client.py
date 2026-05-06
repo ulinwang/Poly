@@ -114,6 +114,96 @@ class ClickHouse:
             """
         )
 
+    def ensure_predictions_schema(self) -> None:
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_predictions (
+                prediction_id String,
+                market_id String,
+                model String,
+                prompt_version String,
+                yes_probability Float64,
+                confidence String,
+                reasoning String,
+                raw_response String,
+                prompt_tokens UInt32,
+                completion_tokens UInt32,
+                market_yes_price_at_prediction Float64,
+                market_resolved_yes Nullable(UInt8),
+                market_volume_at_prediction Float64,
+                api_latency_ms UInt32,
+                api_error String,
+                predicted_at DateTime
+            )
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(predicted_at)
+            ORDER BY (model, prompt_version, predicted_at, market_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def insert_predictions(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_predictions (
+                prediction_id, market_id, model, prompt_version,
+                yes_probability, confidence, reasoning, raw_response,
+                prompt_tokens, completion_tokens,
+                market_yes_price_at_prediction, market_resolved_yes,
+                market_volume_at_prediction,
+                api_latency_ms, api_error, predicted_at
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def fetch_markets_for_prediction(
+        self,
+        limit: int,
+        only_closed: bool = True,
+        min_volume: float = 0.0,
+        skip_predicted_by_model: Optional[str] = None,
+        skip_predicted_by_prompt: Optional[str] = None,
+    ) -> Sequence[tuple]:
+        """Return up to `limit` rows of (market_id, slug, question,
+        description, outcomes, outcome_prices, volume, end_date, closed).
+
+        If `skip_predicted_by_model` is set, markets that already have a
+        prediction for that (model, prompt_version) pair are excluded.
+        """
+        params: dict[str, object] = {
+            "lim": int(limit),
+            "min_vol": float(min_volume),
+        }
+        skip_clause = ""
+        if skip_predicted_by_model:
+            params["skip_model"] = skip_predicted_by_model
+            params["skip_prompt"] = skip_predicted_by_prompt or ""
+            skip_clause = f"""
+                AND market_id NOT IN (
+                    SELECT market_id FROM {self.database}.agent_predictions
+                    WHERE model = %(skip_model)s
+                      AND prompt_version = %(skip_prompt)s
+                      AND api_error = ''
+                )
+            """
+        closed_clause = "AND `closed` = 1" if only_closed else ""
+        return self.client.execute(
+            f"""
+            SELECT market_id, slug, question, description,
+                   outcomes, outcome_prices, volume, end_date, `closed`
+            FROM {self.database}.markets FINAL
+            WHERE volume >= %(min_vol)s
+              {closed_clause}
+              {skip_clause}
+            ORDER BY volume DESC
+            LIMIT %(lim)s
+            """,
+            params,
+        )
+
     def ensure_markets_schema(self) -> None:
         self.client.execute(
             f"""

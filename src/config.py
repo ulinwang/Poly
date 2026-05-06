@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # Network chain id (137 for Polygon mainnet)
     CHAIN_ID: int = 137
 
+    # DeepSeek agent simulation (src/agent.py)
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    DEEPSEEK_API_KEY: str | None = None
+    DEEPSEEK_TIMEOUT: float = 60.0
+    DEEPSEEK_TEMPERATURE: float = 0.0
+
     model_config = SettingsConfigDict(env_file=(".env",), env_prefix="POLYMETL_", extra="ignore")
 
 
