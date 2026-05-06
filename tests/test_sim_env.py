@@ -99,6 +99,158 @@ class CloubEnvSmokeTest(unittest.TestCase):
         self.fail("no fills across multiple rng seeds")
 
 
+class FeeFormulaTest(unittest.TestCase):
+    """Polymarket fee spec: fee = C * feeRate * p * (1 - p).
+    Symmetric around 0.5, ~0 at extremes."""
+
+    def _run_taker_buy(self, *, fee_bps: float, price: float, size: float):
+        """Set up agent 0 as resting SELL @ price, agent 1 takes it. Returns
+        (filled_size, notional, fee_paid)."""
+        decisions = [
+            # tick 0: agent 0 SELL @ price, agent 1 HOLD
+            Decision("LIMIT", "YES", "SELL", price, size * price, "ask", "", 0, ""),
+            Decision("HOLD",  "YES", "BUY",  0.0,   0,            "wait", "", 0, ""),
+            # tick 1: agent 0 HOLD, agent 1 BUY (crosses)
+            Decision("HOLD",  "YES", "SELL", 0.0,   0,            "rest", "", 0, ""),
+            Decision("LIMIT", "YES", "BUY",  price, size * price, "cross", "", 0, ""),
+        ]
+        import random
+        for seed in (0, 1, 42, 100, 7):
+            sim2 = _make_sim(n=2, n_ticks=2, fee_bps=fee_bps)
+            sim2.agents[0].yes_shares = size + 10.0
+            initial_taker_cash = sim2.agents[1].cash
+            env.run_simulation(
+                sim2, api_key="x", base_url="x", model="x",
+                decide_fn=_stub_decide(list(decisions)),
+                log_progress=False, rng=random.Random(seed),
+            )
+            if sim2.fills_log:
+                filled_size = sum(row[9] for row in sim2.fills_log)
+                notional = sum(row[10] for row in sim2.fills_log)
+                taker_spent = initial_taker_cash - sim2.agents[1].cash
+                fee_paid = taker_spent - notional
+                return filled_size, notional, fee_paid
+        self.fail("no fills produced across rng seeds")
+
+    def test_fee_zero_at_extreme_prices(self):
+        # 2% fee at p=0.01 -> fee per share = 0.02 * 0.01 * 0.99 ~ 0.000198
+        size, _, fee = self._run_taker_buy(fee_bps=200, price=0.01, size=100.0)
+        expected = size * 0.02 * 0.01 * 0.99
+        self.assertAlmostEqual(fee, expected, places=6)
+        self.assertLess(fee, 0.05)
+
+    def test_fee_max_at_50_50(self):
+        # 2% fee at p=0.50 -> fee per share = 0.02 * 0.5 * 0.5 = 0.005
+        size, _, fee = self._run_taker_buy(fee_bps=200, price=0.50, size=100.0)
+        expected = size * 0.02 * 0.25
+        self.assertAlmostEqual(fee, expected, places=6)
+
+    def test_fee_symmetric(self):
+        s1, _, fee_30 = self._run_taker_buy(fee_bps=200, price=0.30, size=50.0)
+        s2, _, fee_70 = self._run_taker_buy(fee_bps=200, price=0.70, size=50.0)
+        self.assertAlmostEqual(s1, s2)
+        self.assertAlmostEqual(fee_30, fee_70, places=6)
+
+
+class SplitMergeTest(unittest.TestCase):
+    """SPLIT: $X cash -> X YES + X NO. MERGE: X YES + X NO -> $X cash."""
+
+    def _agent_with_cash(self, cash: float, yes: float = 0.0, no: float = 0.0):
+        sim = _make_sim(n=1, n_ticks=1)
+        sim.agents[0].cash = cash
+        sim.agents[0].yes_shares = yes
+        sim.agents[0].no_shares = no
+        return sim
+
+    def test_split_creates_both_outcomes(self):
+        sim = self._agent_with_cash(1000.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="SPLIT", outcome="YES", side="BUY",
+            price=0.0, size_usd=200.0,
+            reasoning="fund", raw_response="", api_latency_ms=0, api_error="",
+        )
+        fills, shares, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "")
+        self.assertEqual(fills, [])
+        self.assertAlmostEqual(shares, 200.0)
+        self.assertAlmostEqual(agent.cash, 800.0)
+        self.assertAlmostEqual(agent.yes_shares, 200.0)
+        self.assertAlmostEqual(agent.no_shares, 200.0)
+
+    def test_merge_destroys_both(self):
+        sim = self._agent_with_cash(400.0, yes=50.0, no=50.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="MERGE", outcome="YES", side="SELL",
+            price=0.0, size_usd=30.0,
+            reasoning="redeem", raw_response="", api_latency_ms=0, api_error="",
+        )
+        fills, pairs, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "")
+        self.assertEqual(fills, [])
+        self.assertAlmostEqual(pairs, 30.0)
+        self.assertAlmostEqual(agent.cash, 430.0)
+        self.assertAlmostEqual(agent.yes_shares, 20.0)
+        self.assertAlmostEqual(agent.no_shares, 20.0)
+
+    def test_split_capped_by_cash(self):
+        sim = self._agent_with_cash(50.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="SPLIT", outcome="YES", side="BUY",
+            price=0.0, size_usd=200.0,
+            reasoning="want more than I have", raw_response="",
+            api_latency_ms=0, api_error="",
+        )
+        _, shares, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "")
+        self.assertAlmostEqual(shares, 50.0)
+        self.assertAlmostEqual(agent.cash, 0.0)
+        self.assertAlmostEqual(agent.yes_shares, 50.0)
+        self.assertAlmostEqual(agent.no_shares, 50.0)
+
+    def test_merge_capped_by_min_held(self):
+        sim = self._agent_with_cash(0.0, yes=10.0, no=50.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="MERGE", outcome="YES", side="SELL",
+            price=0.0, size_usd=40.0,
+            reasoning="redeem all I can", raw_response="",
+            api_latency_ms=0, api_error="",
+        )
+        _, pairs, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "")
+        self.assertAlmostEqual(pairs, 10.0)
+        self.assertAlmostEqual(agent.cash, 10.0)
+        self.assertAlmostEqual(agent.yes_shares, 0.0)
+        self.assertAlmostEqual(agent.no_shares, 40.0)
+
+    def test_split_zero_cash_returns_error(self):
+        sim = self._agent_with_cash(0.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="SPLIT", outcome="YES", side="BUY",
+            price=0.0, size_usd=100.0,
+            reasoning="broke", raw_response="", api_latency_ms=0, api_error="",
+        )
+        _, shares, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "insufficient_cash")
+        self.assertEqual(shares, 0.0)
+
+    def test_merge_no_inventory_returns_error(self):
+        sim = self._agent_with_cash(100.0, yes=0.0, no=10.0)
+        agent = sim.agents[0]
+        decision = Decision(
+            order_type="MERGE", outcome="YES", side="SELL",
+            price=0.0, size_usd=5.0,
+            reasoning="no yes", raw_response="", api_latency_ms=0, api_error="",
+        )
+        _, pairs, err = env._execute_decision(sim, agent, decision, tick=0)
+        self.assertEqual(err, "insufficient_pairs")
+        self.assertEqual(pairs, 0.0)
+
+
 class SettlementTest(unittest.TestCase):
     def test_settle_no_resolution_returns_empty(self):
         sim = _make_sim(n=2, resolved_yes=None)
