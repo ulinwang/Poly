@@ -228,10 +228,11 @@ def main() -> None:
             depth_levels=args.seed_depth_levels,
             depth_per_level=args.seed_depth_per_level,
         )
+        from .env import ENV_MAKER_AGENT_ID
         log.info(
             "seeded environmental orderbook liquidity "
-            "(agent_id=-1, yes_anchor=%.3f, spread=%.3f, %d×%d)",
-            yes_anchor, args.seed_spread,
+            "(agent_id=%d, yes_anchor=%.3f, spread=%.3f, %d×%d)",
+            ENV_MAKER_AGENT_ID, yes_anchor, args.seed_spread,
             args.seed_depth_levels, int(args.seed_depth_per_level),
         )
 

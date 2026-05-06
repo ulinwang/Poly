@@ -139,5 +139,42 @@ class KmeansBaselineTest(unittest.TestCase):
         self.assertEqual(out, {1: 0})
 
 
+class V5SelfLoopFilterTest(unittest.TestCase):
+    """M1: `build_network` drops (i, i) edges even if the underlying
+    ClickHouse rows accidentally contain a self-loop (legacy pre-v5
+    data from before self-match prevention)."""
+
+    def test_build_network_drops_self_loops(self):
+        # Mock the ClickHouse client.execute → return rows including
+        # a self-loop (5, 5).
+        class _Stub:
+            def execute(self, *args, **kwargs):
+                return [
+                    (1, 5, 50.0),
+                    (5, 5, 100.0),     # self-loop — must be dropped
+                    (3, 1, 25.0),
+                ]
+        class _CH:
+            def __init__(self): self.client = _Stub(); self.database = "x"
+        edges = serd.build_network("dummy_sim", _CH())
+        self.assertIn((1, 5), edges)
+        self.assertIn((3, 1), edges)
+        self.assertNotIn((5, 5), edges)
+        self.assertEqual(edges[(1, 5)], 50.0)
+
+    def test_build_network_still_excludes_env_maker(self):
+        class _Stub:
+            def execute(self, *args, **kwargs):
+                return [
+                    (1, 5, 50.0),
+                    (serd.ENV_MAKER_AGENT_ID, 5, 999.0),
+                    (5, serd.ENV_MAKER_AGENT_ID, 888.0),
+                ]
+        class _CH:
+            def __init__(self): self.client = _Stub(); self.database = "x"
+        edges = serd.build_network("dummy_sim", _CH())
+        self.assertEqual(list(edges.keys()), [(1, 5)])
+
+
 if __name__ == "__main__":
     unittest.main()

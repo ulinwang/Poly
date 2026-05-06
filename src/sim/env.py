@@ -51,6 +51,29 @@ class AgentRuntime:
     private_signal_sigma: Optional[float] = None
     # v4: source wallet address for traceability when calibrated.
     src_wallet_addr: str = ""
+    # v5: cash and inventory committed to *resting* LIMIT orders (not
+    # yet filled, not yet cancelled). Available cash for new orders is
+    # `cash - cash_reserved`; available shares is
+    # `<outcome>_shares - <outcome>_reserved`.
+    cash_reserved: float = 0.0
+    yes_reserved: float = 0.0
+    no_reserved: float = 0.0
+
+
+def available_cash(a: "AgentRuntime") -> float:
+    return a.cash - a.cash_reserved
+
+
+def available_shares(a: "AgentRuntime", outcome: str) -> float:
+    return (a.yes_shares - a.yes_reserved) if outcome == "YES" \
+           else (a.no_shares - a.no_reserved)
+
+
+def _adjust_reserved_shares(a: "AgentRuntime", outcome: str, delta: float) -> None:
+    if outcome == "YES":
+        a.yes_reserved += delta
+    else:
+        a.no_reserved += delta
 
 
 @dataclass
@@ -210,13 +233,24 @@ def _execute_decision(
     BUY-side acquisitions, negative for SELL-side disposals (taker)."""
     book = _book_for(sim, decision.outcome)
 
-    if decision.order_type == "HOLD" or decision.size_usd <= 0:
+    if decision.order_type == "HOLD":
+        return [], 0.0, ""
+    # CANCEL has size_usd=0 by design; do NOT short-circuit on size.
+    if decision.order_type != "CANCEL" and decision.size_usd <= 0:
         return [], 0.0, ""
 
     if decision.order_type == "CANCEL":
         # Cancel ALL of this agent's resting orders on this outcome
-        n = book.cancel_all_for_agent(agent.agent_id)
-        return [], 0.0, f"cancelled={n}"
+        # and release the cash / inventory that was reserved for them.
+        cancels = book.cancel_all_for_agent(agent.agent_id)
+        for ci in cancels:
+            if ci.side == "BUY":
+                agent.cash_reserved = max(0.0, agent.cash_reserved
+                                          - ci.price * ci.remaining_size)
+            else:  # SELL
+                _adjust_reserved_shares(agent, decision.outcome,
+                                        -ci.remaining_size)
+        return [], 0.0, f"cancelled={len(cancels)}"
 
     # SPLIT/MERGE: on-chain CTF primitives that don't touch the orderbook.
     # SPLIT: pay $X cash -> get X YES + X NO shares (capped by cash).
@@ -243,36 +277,70 @@ def _execute_decision(
 
     # --- Compute size in shares ---
     if decision.order_type == "LIMIT":
-        # For LIMIT BUY:    cash budget / limit price
-        # For LIMIT SELL:   capped by held shares
+        # LIMIT placement honors v5 reservations: only the AVAILABLE
+        # (un-reserved) cash / inventory can back a new resting order.
+        # For LIMIT BUY:    capped by available_cash / limit price.
+        # For LIMIT SELL:   capped by available_shares of that outcome.
         if side == "BUY":
             if decision.price <= 0:
                 return [], 0.0, "invalid_price"
-            shares = min(decision.size_usd / decision.price, agent.cash / decision.price)
+            cap_usd = min(decision.size_usd, available_cash(agent))
+            shares = cap_usd / decision.price
         else:  # SELL
+            cap_shares_inventory = available_shares(agent, decision.outcome)
             shares = min(decision.size_usd / max(decision.price, 1e-6),
-                         _shares_held(agent, decision.outcome))
+                         cap_shares_inventory)
         if shares <= 0:
             return [], 0.0, "insufficient_resources"
-        fills, _ = book.add_limit(
+        fills, order = book.add_limit(
             agent_id=agent.agent_id, side=side, price=decision.price,
             size=shares, ts=tick,
         )
+        # The portion that did NOT fill rests on the book. Reserve
+        # cash / inventory for it so it can't be re-spent by a later
+        # action this tick or in future ticks.
+        if order.remaining > 1e-9:
+            if side == "BUY":
+                agent.cash_reserved += order.remaining * decision.price
+            else:
+                _adjust_reserved_shares(agent, decision.outcome,
+                                        +order.remaining)
     else:  # MARKET
         if side == "BUY":
             best_ask = book.best_ask()
             if best_ask is None or best_ask <= 0:
                 return [], 0.0, "no_liquidity"
-            # estimate shares: cash budget / best ask (will refine via fill prices)
-            cap_shares = min(decision.size_usd / best_ask, agent.cash / best_ask)
+            # estimate shares: budget / best ask (will refine via
+            # fill prices). Use available_cash, not raw cash.
+            cap_shares = min(decision.size_usd / best_ask,
+                             available_cash(agent) / best_ask)
             fills, _ = book.add_market(agent.agent_id, "BUY", cap_shares, ts=tick)
         else:  # SELL
             best_bid = book.best_bid()
             if best_bid is None or best_bid <= 0:
                 return [], 0.0, "no_liquidity"
-            held = _shares_held(agent, decision.outcome)
-            cap_shares = min(decision.size_usd / best_bid, held)
+            cap_shares = min(decision.size_usd / best_bid,
+                             available_shares(agent, decision.outcome))
             fills, _ = book.add_market(agent.agent_id, "SELL", cap_shares, ts=tick)
+
+    # Drain any same-agent maker cancellations the orderbook flagged
+    # while matching this order (NASDAQ-style cancel-resting). The
+    # cancelled maker had cash / inventory reserved at placement; we
+    # must release it here.
+    if book.self_match_cancellations:
+        for ci in book.self_match_cancellations:
+            owner = next((a for a in sim.agents
+                          if a.agent_id == ci.agent_id), None)
+            if owner is None:
+                continue
+            if ci.side == "BUY":
+                owner.cash_reserved = max(
+                    0.0, owner.cash_reserved - ci.price * ci.remaining_size,
+                )
+            else:
+                _adjust_reserved_shares(owner, decision.outcome,
+                                        -ci.remaining_size)
+        book.self_match_cancellations.clear()
 
     if not fills:
         return [], 0.0, ""
@@ -289,12 +357,19 @@ def _execute_decision(
         # Maker's side determines the direction:
         if maker is not None:
             if f.maker_side == "BUY":
-                # Maker bought: gains shares, loses cash
+                # Maker bought: gains shares, loses cash. Release the
+                # cash that had been reserved for this resting order.
                 maker.cash -= notional
+                maker.cash_reserved = max(0.0, maker.cash_reserved - notional)
                 _adjust_shares(maker, decision.outcome, +f.size)
             else:  # maker_side == 'SELL'
+                # Maker sold: gains cash, loses shares. Release the
+                # shares that had been reserved.
                 maker.cash += notional
                 _adjust_shares(maker, decision.outcome, -f.size)
+                _adjust_reserved_shares(maker, decision.outcome, -f.size)
+                maker.yes_reserved = max(0.0, maker.yes_reserved)
+                maker.no_reserved = max(0.0, maker.no_reserved)
         if taker is not None:
             taker_side = "BUY" if f.maker_side == "SELL" else "SELL"
             # Polymarket fee spec: fee = C * feeRate * p * (1 - p), where C is

@@ -81,6 +81,12 @@ def build_network(
         m, t = int(m), int(t)
         if exclude_env_maker and (m == ENV_MAKER_AGENT_ID or t == ENV_MAKER_AGENT_ID):
             continue
+        # M1 (defense in depth): self-loops should be impossible after
+        # the v5 self-match-prevention fix in OrderBook, but legacy
+        # data from pre-v5 runs may still contain (i, i) edges that
+        # would corrupt SERD net-flow ratios.
+        if m == t:
+            continue
         edges[(m, t)] = float(w)
     return edges
 

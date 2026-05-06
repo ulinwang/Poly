@@ -340,5 +340,86 @@ class SeedLiquidityTest(unittest.TestCase):
         self.assertGreater(sim.book_yes.best_ask(), 0.30)
 
 
+class V5ReservationTest(unittest.TestCase):
+    """C4 / C5: LIMIT placement reserves cash (BUY) or inventory
+    (SELL) so a single agent cannot over-commit. CANCEL releases the
+    reservation; fills also release as the reservation is realized."""
+
+    def _basic_sim_with(self, **agent_kwargs):
+        sim = _make_sim(n=1, n_ticks=1)
+        a = sim.agents[0]
+        for k, v in agent_kwargs.items():
+            setattr(a, k, v)
+        return sim, a
+
+    def test_limit_buy_reserves_cash(self):
+        sim, a = self._basic_sim_with(cash=1000.0)
+        decision = Decision(
+            order_type="LIMIT", outcome="YES", side="BUY",
+            price=0.30, size_usd=300.0,
+            reasoning="bid", raw_response="", api_latency_ms=0, api_error="",
+        )
+        env._execute_decision(sim, a, decision, tick=0)
+        self.assertAlmostEqual(a.cash, 1000.0)            # cash itself unchanged
+        self.assertAlmostEqual(a.cash_reserved, 300.0)    # reserved
+        self.assertAlmostEqual(env.available_cash(a), 700.0)
+
+    def test_double_limit_buy_capped_by_available(self):
+        sim, a = self._basic_sim_with(cash=500.0)
+        d1 = Decision("LIMIT", "YES", "BUY", 0.50, 300.0, "1", "", 0, "")
+        d2 = Decision("LIMIT", "YES", "BUY", 0.40, 400.0, "2", "", 0, "")
+        env._execute_decision(sim, a, d1, tick=0)
+        env._execute_decision(sim, a, d2, tick=0)
+        # First reserved $300; available was $200 for the second; the
+        # second order rests for $200 worth of shares at 0.40.
+        self.assertAlmostEqual(a.cash_reserved, 500.0, places=4)
+        self.assertAlmostEqual(env.available_cash(a), 0.0, places=4)
+
+    def test_limit_sell_reserves_inventory(self):
+        sim, a = self._basic_sim_with(cash=0.0, yes_shares=100.0)
+        d1 = Decision("LIMIT", "YES", "SELL", 0.30, 30.0, "1", "", 0, "")
+        d2 = Decision("LIMIT", "YES", "SELL", 0.31, 30.0, "2", "", 0, "")
+        env._execute_decision(sim, a, d1, tick=0)
+        env._execute_decision(sim, a, d2, tick=0)
+        # First reserves 100 (size_usd 30 / 0.30 = 100 shares),
+        # exactly filling the inventory; second has nothing to reserve.
+        self.assertAlmostEqual(a.yes_reserved, 100.0, places=4)
+        self.assertAlmostEqual(env.available_shares(a, "YES"), 0.0, places=4)
+
+    def test_cancel_unreserves_cash(self):
+        sim, a = self._basic_sim_with(cash=1000.0)
+        place = Decision("LIMIT", "YES", "BUY", 0.30, 300.0, "1", "", 0, "")
+        cancel = Decision("CANCEL", "YES", "BUY", 0.0, 0.0, "go", "", 0, "")
+        env._execute_decision(sim, a, place, tick=0)
+        self.assertAlmostEqual(a.cash_reserved, 300.0)
+        env._execute_decision(sim, a, cancel, tick=1)
+        self.assertAlmostEqual(a.cash_reserved, 0.0)
+        self.assertAlmostEqual(env.available_cash(a), 1000.0)
+
+    def test_cancel_unreserves_inventory(self):
+        sim, a = self._basic_sim_with(cash=0.0, yes_shares=100.0)
+        place = Decision("LIMIT", "YES", "SELL", 0.30, 30.0, "1", "", 0, "")
+        cancel = Decision("CANCEL", "YES", "SELL", 0.0, 0.0, "go", "", 0, "")
+        env._execute_decision(sim, a, place, tick=0)
+        self.assertAlmostEqual(a.yes_reserved, 100.0)
+        env._execute_decision(sim, a, cancel, tick=1)
+        self.assertAlmostEqual(a.yes_reserved, 0.0)
+
+    def test_self_match_releases_reservation(self):
+        # Single agent BUY then SELL crossing → resting BUY cancelled
+        # by self-match prevention; its cash reservation must be freed.
+        sim, a = self._basic_sim_with(cash=1000.0, yes_shares=100.0)
+        buy  = Decision("LIMIT", "YES", "BUY",  0.40, 40.0, "1", "", 0, "")
+        sell = Decision("LIMIT", "YES", "SELL", 0.30, 30.0, "2", "", 0, "")
+        env._execute_decision(sim, a, buy, tick=0)
+        self.assertAlmostEqual(a.cash_reserved, 40.0)
+        env._execute_decision(sim, a, sell, tick=1)
+        # Buy got cancelled by self-match; new sell rests at 0.30.
+        # Cash reservation should be 0 (BUY freed); inventory
+        # reservation should be 100 (SELL is for 30/0.30 = 100 shares).
+        self.assertAlmostEqual(a.cash_reserved, 0.0)
+        self.assertAlmostEqual(a.yes_reserved, 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()
