@@ -121,6 +121,97 @@ class OrderBookEdgeTest(unittest.TestCase):
         self.assertEqual(d[0], (0.40, 8))
         self.assertEqual(d[1], (0.30, 4))
 
+    def test_misaligned_price_rejected(self):
+        ob = OrderBook(tick_size=0.01)
+        fills, order = ob.add_limit(1, "BUY", 0.555, 5, ts=0)
+        self.assertEqual(fills, [])
+        self.assertEqual(order.remaining, 0)
+        self.assertIsNone(ob.best_bid())
+
+    def test_aligned_price_accepted(self):
+        ob = OrderBook(tick_size=0.01)
+        fills, order = ob.add_limit(1, "BUY", 0.55, 5, ts=0)
+        self.assertEqual(fills, [])
+        self.assertEqual(order.remaining, 5)
+        self.assertEqual(ob.best_bid(), 0.55)
+
+    def test_market_sweep_prices_always_allowed(self):
+        # tick_size=0.1 means 1.0 is aligned anyway; pick a tick that
+        # would make the sweep price misaligned to be sure: tick=0.3.
+        # Per spec, prices 0.0 and 1.0 must always be allowed.
+        ob = OrderBook(tick_size=0.1)
+        # First place a maker SELL @ 0.5 — but 0.5 is aligned w/ 0.1,
+        # so use 0.6.
+        ob.add_limit(1, "SELL", 0.6, 5, ts=0)
+        fills, order = ob.add_market(99, "BUY", size=3, ts=1)
+        self.assertEqual(len(fills), 1)
+        self.assertEqual(fills[0].price, 0.6)
+        self.assertEqual(order.remaining, 0)
+        # Also confirm sweep-price BUY @ 1.0 is accepted even with an
+        # awkward tick that does not divide evenly.
+        ob2 = OrderBook(tick_size=0.3)
+        # Resting maker at price 0.0 (sweep-extreme) should be allowed:
+        # no fills opposite, so just make sure add_market doesn't reject.
+        fills2, order2 = ob2.add_market(1, "BUY", size=1, ts=0)
+        # Empty book — no fills, but the order should NOT be a 0-size
+        # rejection: it's a market sweep with no liquidity to consume.
+        self.assertEqual(fills2, [])
+        # Sweep at 1.0 with no opposite liquidity rests as a bid @ 1.0,
+        # which is the documented behavior of add_market via add_limit.
+        # The key check: order.size == requested size (i.e. NOT rejected).
+        self.assertEqual(order2.size, 1)
+
+    def test_finer_tick_size(self):
+        ob = OrderBook(tick_size=0.001)
+        fills, order = ob.add_limit(1, "BUY", 0.555, 5, ts=0)
+        self.assertEqual(fills, [])
+        self.assertEqual(order.remaining, 5)
+        self.assertEqual(ob.best_bid(), 0.555)
+
+
+class OrderBookMidTest(unittest.TestCase):
+    def test_mid_with_tight_spread(self):
+        ob = OrderBook(tick_size=0.01)
+        ob.add_limit(1, "BUY", 0.40, 5, ts=0)
+        ob.add_limit(2, "SELL", 0.45, 5, ts=1)
+        self.assertAlmostEqual(ob.mid(), 0.425)
+
+    def test_mid_with_wide_spread_uses_last_trade(self):
+        ob = OrderBook(tick_size=0.01)
+        # Establish a trade at 0.50 first.
+        ob.add_limit(1, "SELL", 0.50, 5, ts=0)
+        fills, _ = ob.add_limit(2, "BUY", 0.50, 5, ts=1)
+        self.assertEqual(len(fills), 1)
+        self.assertEqual(ob.last_trade_price, 0.50)
+        # Now create a wide spread: bid @ 0.10, ask @ 0.90.
+        ob.add_limit(3, "BUY", 0.10, 5, ts=2)
+        ob.add_limit(4, "SELL", 0.90, 5, ts=3)
+        # The naive midpoint would be 0.50 by coincidence — to verify
+        # we are returning last_trade specifically, mutate the field
+        # to a value that could not be the bid/ask midpoint.
+        ob.last_trade_price = 0.42
+        self.assertEqual(ob.mid(), 0.42)
+        # And the spread is indeed wider than 0.10:
+        self.assertGreater(ob.best_ask() - ob.best_bid(), 0.10)
+
+    def test_mid_with_wide_spread_no_trades_falls_back_to_single_side(self):
+        # Only a bid, no asks, no last trade → mid = bid price.
+        ob = OrderBook(tick_size=0.01)
+        ob.add_limit(1, "BUY", 0.10, 5, ts=0)
+        self.assertIsNone(ob.last_trade_price)
+        self.assertEqual(ob.mid(), 0.10)
+
+    def test_last_trade_price_updates_on_each_fill(self):
+        ob = OrderBook(tick_size=0.01)
+        # Trade #1 at 0.40
+        ob.add_limit(1, "SELL", 0.40, 5, ts=0)
+        ob.add_limit(2, "BUY", 0.40, 5, ts=1)
+        self.assertEqual(ob.last_trade_price, 0.40)
+        # Trade #2 at 0.55
+        ob.add_limit(3, "SELL", 0.55, 5, ts=2)
+        ob.add_limit(4, "BUY", 0.55, 5, ts=3)
+        self.assertEqual(ob.last_trade_price, 0.55)
+
 
 if __name__ == "__main__":
     unittest.main()

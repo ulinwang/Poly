@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from src.sim import personas
+from src.sim.agent import round_to_tick
 
 
 class PersonaTest(unittest.TestCase):
@@ -41,6 +42,25 @@ class PromptTest(unittest.TestCase):
             personas.LOTTERY_PLAYER, "q?", "x" * 5000, "2026-01-01",
         )
         self.assertIn("[truncated]", out)
+
+    def test_market_maker_profile_mentions_split(self):
+        self.assertIn("split", personas.MARKET_MAKER.profile_text.lower())
+
+
+class RoundToTickTest(unittest.TestCase):
+    def test_round_to_tick_default(self):
+        self.assertAlmostEqual(round_to_tick(0.555), 0.56, places=2)
+
+    def test_round_to_tick_finer(self):
+        # 0.5555 / 0.001 = 555.5; round() uses banker's rounding => 556
+        result = round_to_tick(0.5555, tick_size=0.001)
+        self.assertIn(round(result, 4), (0.555, 0.556))
+
+    def test_round_to_tick_zero_passthrough(self):
+        self.assertEqual(round_to_tick(0.5, tick_size=0), 0.5)
+
+    def test_round_to_tick_no_change_for_aligned(self):
+        self.assertAlmostEqual(round_to_tick(0.50), 0.50, places=10)
 
 
 if __name__ == "__main__":

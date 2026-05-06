@@ -70,10 +70,6 @@ class Simulation:
         return self.book_no.mid()
 
 
-MM_SEED_INVENTORY = 50.0  # initial YES & NO shares for MarketMaker personas
-MM_SEED_COST_USD = 50.0   # cost of pre-minting that inventory ($1 → 1 YES + 1 NO)
-
-
 def make_sim(
     *,
     market_id: str, market_slug: str,
@@ -86,19 +82,11 @@ def make_sim(
     sid = sim_id or uuid.uuid4().hex[:16]
     agents = []
     for i, p in enumerate(personas):
-        # Pre-seed MarketMakers with inventory of both outcome tokens
-        # (simulates a Polymarket MINT: $1 -> 1 YES + 1 NO share). Without
-        # this, MMs cannot quote two-sided liquidity in tick 0 since SELL
-        # requires holding the corresponding share.
-        if p.persona_type == "MarketMaker":
-            agents.append(AgentRuntime(
-                agent_id=i, persona=p,
-                cash=p.capital_initial - MM_SEED_COST_USD,
-                yes_shares=MM_SEED_INVENTORY,
-                no_shares=MM_SEED_INVENTORY,
-            ))
-        else:
-            agents.append(AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial))
+        # All agents start with full capital cash and zero inventory.
+        # MarketMakers self-bootstrap inventory via SPLIT actions on tick 0
+        # (handled by the MM persona prompt), mirroring Polymarket's CTF
+        # SPLIT primitive ($1 -> 1 YES + 1 NO share).
+        agents.append(AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial))
     return Simulation(
         sim_id=sid, market_id=market_id, market_slug=market_slug,
         question=question, description=description, end_date_str=end_date_str,
@@ -143,6 +131,27 @@ def _execute_decision(
         # Cancel ALL of this agent's resting orders on this outcome
         n = book.cancel_all_for_agent(agent.agent_id)
         return [], 0.0, f"cancelled={n}"
+
+    # SPLIT/MERGE: on-chain CTF primitives that don't touch the orderbook.
+    # SPLIT: pay $X cash -> get X YES + X NO shares (capped by cash).
+    # MERGE: destroy X YES + X NO -> get $X cash (capped by min held).
+    if decision.order_type == "SPLIT":
+        amount = min(decision.size_usd, agent.cash)
+        if amount <= 0:
+            return [], 0.0, "insufficient_cash"
+        agent.cash -= amount
+        agent.yes_shares += amount
+        agent.no_shares += amount
+        return [], amount, ""
+
+    if decision.order_type == "MERGE":
+        pairs = min(decision.size_usd, agent.yes_shares, agent.no_shares)
+        if pairs <= 0:
+            return [], 0.0, "insufficient_pairs"
+        agent.cash += pairs
+        agent.yes_shares -= pairs
+        agent.no_shares -= pairs
+        return [], pairs, ""
 
     side = decision.side  # 'BUY' or 'SELL'
 
@@ -202,7 +211,10 @@ def _execute_decision(
                 _adjust_shares(maker, decision.outcome, -f.size)
         if taker is not None:
             taker_side = "BUY" if f.maker_side == "SELL" else "SELL"
-            fee = notional * (sim.taker_fee_bps / 10000.0)
+            # Polymarket fee spec: fee = C * feeRate * p * (1 - p), where C is
+            # shares and p is fill price. Symmetric around 0.5 and ~0 at
+            # extremes (0.01 / 0.99). Maker pays no fee.
+            fee = f.size * (sim.taker_fee_bps / 10000.0) * f.price * (1.0 - f.price)
             if taker_side == "BUY":
                 taker.cash -= notional + fee
                 _adjust_shares(taker, decision.outcome, +f.size)

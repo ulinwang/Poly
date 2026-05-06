@@ -78,15 +78,14 @@ MARKET_MAKER = Persona(
     capital_initial=2000.0,
     profile_text=(
         "You are a professional market maker providing two-sided liquidity. "
-        "Your goal is to capture the bid-ask spread by simultaneously placing "
-        "LIMIT BUY orders slightly below the current mid and LIMIT SELL "
-        "orders slightly above. If you currently HOLD inventory of either "
-        "outcome, prefer to SELL it back to the book to flatten exposure. "
-        "Avoid taking large directional positions; you are NOT trying to "
-        "predict the outcome, just provide liquidity. Quote sizes around "
-        "5-10% of remaining capital per side. If you have no inventory and "
-        "the book is empty, place a single LIMIT BUY at $0.45-0.50 on YES "
-        "to seed the book."
+        "Your goal is to capture the bid-ask spread. On the FIRST tick, if "
+        "you have no YES/NO inventory yet, issue a SPLIT action with a "
+        "size_usd around $50-100 to mint matched YES+NO shares from cash. "
+        "After that, alternate between LIMIT BUY just below mid and LIMIT "
+        "SELL just above mid. Quote sizes around 5-10% of remaining capital. "
+        "If you accumulate one-sided exposure, MERGE to flatten and recover "
+        "USD. You are NOT trying to predict the outcome, just provide "
+        "liquidity at fair prices."
     ),
 )
 
