@@ -271,5 +271,74 @@ class SettlementTest(unittest.TestCase):
         self.assertAlmostEqual(pnl[1], -25.0)
 
 
+class V4PopulationTest(unittest.TestCase):
+    def test_make_sim_accepts_population(self):
+        from src.sim.initialization import AgentInit
+        pop = [
+            AgentInit(
+                wallet_addr="0xabc", persona_type="Calibrated",
+                capital_initial=500.0, profile_text="You trade carefully.",
+                private_signal_mu=0.4, private_signal_sigma=0.15,
+                risk_aversion=0.6, src_tx_count=20, src_maker_ratio=0.5,
+                src_avg_position_usd=25.0, src_asset_diversity=4,
+            ),
+            AgentInit(
+                wallet_addr="0xdef", persona_type="Calibrated",
+                capital_initial=200.0, profile_text="You take long shots.",
+                private_signal_mu=0.7, private_signal_sigma=0.25,
+                risk_aversion=0.2, src_tx_count=10, src_maker_ratio=0.1,
+                src_avg_position_usd=15.0, src_asset_diversity=2,
+            ),
+        ]
+        sim = env.make_sim(
+            market_id="m1", market_slug="t", question="?", description="",
+            end_date_str="2026-12-31", market_resolved_yes=0,
+            population=pop, n_ticks=2, taker_fee_bps=0.0,
+        )
+        self.assertEqual(len(sim.agents), 2)
+        self.assertEqual(sim.agents[0].cash, 500.0)
+        self.assertEqual(sim.agents[0].private_signal_mu, 0.4)
+        self.assertEqual(sim.agents[0].src_wallet_addr, "0xabc")
+        self.assertEqual(sim.agents[1].private_signal_sigma, 0.25)
+
+    def test_make_sim_rejects_both_or_neither(self):
+        from src.sim.personas import DEFAULT_PERSONAS, assign_personas
+        with self.assertRaises(ValueError):
+            env.make_sim(
+                market_id="m1", market_slug="t", question="?", description="",
+                end_date_str="x", market_resolved_yes=0, n_ticks=1,
+                taker_fee_bps=0.0,
+                personas=assign_personas(2, DEFAULT_PERSONAS),
+                population=[],
+            )
+        with self.assertRaises(ValueError):
+            env.make_sim(
+                market_id="m1", market_slug="t", question="?", description="",
+                end_date_str="x", market_resolved_yes=0, n_ticks=1,
+                taker_fee_bps=0.0,
+            )
+
+
+class SeedLiquidityTest(unittest.TestCase):
+    def test_seed_creates_two_sided_books(self):
+        sim = _make_sim(n=2, n_ticks=1)
+        env.seed_orderbook_liquidity(sim)
+        self.assertGreater(len(sim.book_yes.bids), 0)
+        self.assertGreater(len(sim.book_yes.asks), 0)
+        self.assertGreater(len(sim.book_no.bids), 0)
+        self.assertGreater(len(sim.book_no.asks), 0)
+        for o in sim.book_yes.bids + sim.book_yes.asks:
+            self.assertEqual(o.agent_id, env.ENV_MAKER_AGENT_ID)
+        # symmetric seed → mid near 0.5
+        self.assertAlmostEqual(sim.yes_mid, 0.5, places=2)
+
+    def test_seed_respects_anchors(self):
+        sim = _make_sim(n=1, n_ticks=1)
+        env.seed_orderbook_liquidity(sim, yes_anchor=0.30, no_anchor=0.70)
+        # Best YES bid below anchor 0.30; best ask above
+        self.assertLess(sim.book_yes.best_bid(), 0.30)
+        self.assertGreater(sim.book_yes.best_ask(), 0.30)
+
+
 if __name__ == "__main__":
     unittest.main()

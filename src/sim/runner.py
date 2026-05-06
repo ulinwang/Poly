@@ -68,6 +68,29 @@ def main() -> None:
                         help="drop and recreate sim tables (destroys prior sim data)")
     parser.add_argument("--notes", default="",
                         help="free-text annotation stored in agent_simulations.notes")
+    # v4 calibration flags
+    parser.add_argument(
+        "--population", choices=["personas", "calibrated"], default="personas",
+        help="'personas' (legacy v2/v3 hand-coded archetypes) or "
+             "'calibrated' (Phase 1-3: real wallet features → AgentInit)",
+    )
+    parser.add_argument(
+        "--seed-liquidity", action="store_true",
+        help="inject exogenous bootstrap orderbook before tick 0 "
+             "(recommended for calibrated populations to avoid empty books)",
+    )
+    parser.add_argument(
+        "--n-wallets", type=int, default=20,
+        help="number of wallets to sample when --population=calibrated",
+    )
+    parser.add_argument(
+        "--capital-scale", type=float, default=1.0,
+        help="multiplier on wallet capital (e.g. 0.1 to keep notionals small)",
+    )
+    parser.add_argument(
+        "--cutoff-days-before-end", type=int, default=60,
+        help="for calibration, days before market end_date to use as data cutoff",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -98,16 +121,62 @@ def main() -> None:
     log.info("loaded market: id=%s volume=$%.0f resolved_yes=%s",
              market["market_id"], market["volume"], market["resolved_yes"])
 
-    personas = assign_personas(args.n_agents, DEFAULT_PERSONAS)
     end_date_str = market["end_date"].isoformat() if market["end_date"] else "unknown"
-    sim = make_sim(
-        market_id=market["market_id"], market_slug=market["slug"],
-        question=market["question"], description=market["description"],
-        end_date_str=end_date_str,
-        market_resolved_yes=market["resolved_yes"],
-        personas=personas, n_ticks=args.n_ticks,
-        taker_fee_bps=args.taker_fee_bps,
-    )
+
+    # ----- Population assembly: legacy personas vs v4 wallet calibration -----
+    if args.population == "calibrated":
+        from . import wallet_calibration, persona_generator, initialization
+        ch.ensure_wallet_features_schema()
+        # Phase 1: calibrate wallets if not already populated for this market
+        existing = ch.fetch_wallet_features(market["market_id"])
+        if not existing:
+            log.info("no wallet_features yet — running calibration "
+                     "(this hits Polymarket data-api; can take a few minutes)")
+            wallet_calibration.calibrate(
+                slug=market["slug"], n_wallets=args.n_wallets,
+                cutoff_days_before_end=args.cutoff_days_before_end,
+            )
+        else:
+            log.info("reusing %s cached wallet_features rows", len(existing))
+        # Phase 2: persona profiles
+        persona_generator.generate_for_market(
+            target_market_id=str(market["market_id"]), force=False, ch=ch,
+        )
+        # Phase 3: build population
+        yes_token_id = market["clob_token_ids"][0] if market["clob_token_ids"] else ""
+        population = initialization.build_population(
+            target_market_id=str(market["market_id"]),
+            yes_token_id=yes_token_id,
+            capital_scale=args.capital_scale, ch=ch,
+        )
+        if not population:
+            raise SystemExit("calibrated population is empty; "
+                             "check wallet_features and wallet_personas.json cache")
+        log.info("calibrated population: %s agents", len(population))
+        sim = make_sim(
+            market_id=market["market_id"], market_slug=market["slug"],
+            question=market["question"], description=market["description"],
+            end_date_str=end_date_str,
+            market_resolved_yes=market["resolved_yes"],
+            population=population, n_ticks=args.n_ticks,
+            taker_fee_bps=args.taker_fee_bps,
+        )
+    else:
+        personas = assign_personas(args.n_agents, DEFAULT_PERSONAS)
+        sim = make_sim(
+            market_id=market["market_id"], market_slug=market["slug"],
+            question=market["question"], description=market["description"],
+            end_date_str=end_date_str,
+            market_resolved_yes=market["resolved_yes"],
+            personas=personas, n_ticks=args.n_ticks,
+            taker_fee_bps=args.taker_fee_bps,
+        )
+
+    # Optional bootstrap liquidity (v4): seed both books with passive maker
+    if args.seed_liquidity:
+        from .env import seed_orderbook_liquidity
+        seed_orderbook_liquidity(sim)
+        log.info("seeded environmental orderbook liquidity (agent_id=-1)")
 
     log.info("sim_id=%s n_agents=%d n_ticks=%d taker_fee_bps=%.1f",
              sim.sim_id, len(sim.agents), sim.n_ticks, sim.taker_fee_bps)

@@ -328,6 +328,112 @@ class ClickHouse:
             rows,
         )
 
+    def ensure_wallet_features_schema(self) -> None:
+        """v4: empirical wallet calibration table.
+
+        Each row is one wallet's pre-event behavioral fingerprint. The
+        target_market_id pins the cutoff: only wallet activity strictly
+        before that market opened is summarized here, so it is safe to
+        feed into agent initialization without leaking the resolution.
+        """
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.wallet_features (
+                wallet_addr      String,
+                target_market_id String,
+                capital_usd      Float64,
+                tx_count         UInt32,
+                maker_ratio      Float64,
+                avg_position_usd Float64,
+                asset_diversity  UInt32,
+                avg_holding_h    Float64,
+                past_accuracy    Float64,
+                n_resolved_prior UInt32,
+                fetched_at       DateTime
+            )
+            ENGINE = ReplacingMergeTree(fetched_at)
+            ORDER BY (target_market_id, wallet_addr)
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def insert_wallet_features(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.wallet_features (
+                wallet_addr, target_market_id, capital_usd, tx_count,
+                maker_ratio, avg_position_usd, asset_diversity,
+                avg_holding_h, past_accuracy, n_resolved_prior, fetched_at
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def fetch_wallet_features(self, target_market_id: str) -> list[tuple]:
+        return self.client.execute(
+            f"""
+            SELECT wallet_addr, capital_usd, tx_count, maker_ratio,
+                   avg_position_usd, asset_diversity, avg_holding_h,
+                   past_accuracy, n_resolved_prior
+            FROM {self.database}.wallet_features FINAL
+            WHERE target_market_id = %(mid)s
+            """,
+            {"mid": str(target_market_id)},
+        )
+
+    def fetch_wallets_in_market(self, market_id: str) -> list[str]:
+        """Distinct wallets that appeared on either side of any trade
+        in market_trade_history for this market_id."""
+        rows = self.client.execute(
+            f"""
+            SELECT DISTINCT addr FROM (
+                SELECT maker_address AS addr
+                FROM {self.database}.market_trade_history
+                WHERE market_id = %(mid)s AND maker_address != ''
+                UNION ALL
+                SELECT taker_address AS addr
+                FROM {self.database}.market_trade_history
+                WHERE market_id = %(mid)s AND taker_address != ''
+            )
+            WHERE addr != ''
+            """,
+            {"mid": str(market_id)},
+        )
+        return [r[0] for r in rows]
+
+    def ensure_serd_schema(self) -> None:
+        """v4: per-(sim, method, role) ROI table for SERD validation."""
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.serd_results (
+                sim_id     String,
+                method     String,
+                role       String,
+                n_agents   UInt32,
+                mean_roi   Float64,
+                vol_share  Float64,
+                fetched_at DateTime
+            )
+            ENGINE = ReplacingMergeTree(fetched_at)
+            ORDER BY (sim_id, method, role)
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def insert_serd_results(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.serd_results (
+                sim_id, method, role, n_agents, mean_roi, vol_share, fetched_at
+            ) VALUES
+            """,
+            rows,
+        )
+
     def fetch_market_by_slug(self, slug: str) -> Optional[tuple]:
         rows = self.client.execute(
             f"""
