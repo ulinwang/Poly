@@ -31,6 +31,10 @@ from .personas import Persona
 log = logging.getLogger(__name__)
 
 
+# v4: reserved id for environmental bootstrap maker. Excluded from SERD.
+ENV_MAKER_AGENT_ID = -1
+
+
 @dataclass
 class AgentRuntime:
     agent_id: int
@@ -38,6 +42,12 @@ class AgentRuntime:
     cash: float
     yes_shares: float = 0.0
     no_shares: float = 0.0
+    # v4: optional private-signal layer. None means "agent has no
+    # informational prior beyond what the prompt tells it".
+    private_signal_mu: Optional[float] = None
+    private_signal_sigma: Optional[float] = None
+    # v4: source wallet address for traceability when calibrated.
+    src_wallet_addr: str = ""
 
 
 @dataclass
@@ -75,24 +85,97 @@ def make_sim(
     market_id: str, market_slug: str,
     question: str, description: str, end_date_str: str,
     market_resolved_yes: Optional[int],
-    personas: list[Persona],
+    personas: Optional[list[Persona]] = None,
+    population: Optional[list] = None,
     n_ticks: int = 24, taker_fee_bps: float = 0.0,
     sim_id: Optional[str] = None,
 ) -> Simulation:
+    """Build a fresh Simulation. Pass either:
+
+    - `personas` (legacy v2/v3 path): list of Persona dataclasses; capital
+      and behavior come solely from the persona constants.
+    - `population` (v4 path): list of AgentInit (from
+      `src.sim.initialization.build_population`), where each entry
+      anchors the agent to a real on-chain wallet's pre-event features
+      and carries an empirically derived private signal. The function
+      synthesizes a Persona on-the-fly so the rest of the engine
+      (decide loop, prompt builder) is unchanged.
+
+    Exactly one of the two must be provided.
+    """
+    if (personas is None) == (population is None):
+        raise ValueError("provide exactly one of personas or population")
+
     sid = sim_id or uuid.uuid4().hex[:16]
-    agents = []
-    for i, p in enumerate(personas):
-        # All agents start with full capital cash and zero inventory.
-        # MarketMakers self-bootstrap inventory via SPLIT actions on tick 0
-        # (handled by the MM persona prompt), mirroring Polymarket's CTF
-        # SPLIT primitive ($1 -> 1 YES + 1 NO share).
-        agents.append(AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial))
+    agents: list[AgentRuntime] = []
+
+    if personas is not None:
+        for i, p in enumerate(personas):
+            agents.append(AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial))
+    else:
+        # population is a list[AgentInit]; lazy-import to avoid cycles
+        for i, ai in enumerate(population):  # type: ignore[arg-type]
+            persona = Persona(
+                persona_type=ai.persona_type,
+                risk_aversion=ai.risk_aversion,
+                capital_initial=ai.capital_initial,
+                profile_text=ai.profile_text,
+            )
+            agents.append(AgentRuntime(
+                agent_id=i, persona=persona, cash=ai.capital_initial,
+                private_signal_mu=ai.private_signal_mu,
+                private_signal_sigma=ai.private_signal_sigma,
+                src_wallet_addr=ai.wallet_addr,
+            ))
+
     return Simulation(
         sim_id=sid, market_id=market_id, market_slug=market_slug,
         question=question, description=description, end_date_str=end_date_str,
         market_resolved_yes=market_resolved_yes,
         n_ticks=n_ticks, taker_fee_bps=taker_fee_bps, agents=agents,
     )
+
+
+def seed_orderbook_liquidity(
+    sim: Simulation,
+    yes_anchor: float = 0.5, no_anchor: float = 0.5,
+    spread: float = 0.04, depth_levels: int = 3, depth_per_level: float = 100.0,
+) -> None:
+    """Inject exogenous resting liquidity from a synthetic environmental
+    market maker (agent_id = ENV_MAKER_AGENT_ID = -1). Places a bid
+    ladder below `*_anchor` and an ask ladder above, on BOTH books.
+
+    Uses the existing OrderBook.add_limit API; produces no fills (both
+    sides are passive resting orders). The seed orders are owned by
+    agent_id=-1 so the SERD pipeline can exclude them.
+
+    `depth_per_level` is in shares (since add_limit takes shares); a
+    typical bid at 0.45 of size 100 = $45 of liquidity.
+    """
+    half = spread / 2.0
+    for level in range(depth_levels):
+        offset = half + level * 0.01
+        # Round to tick (default 0.01) — must match orderbook.tick_size
+        bid_y = round((yes_anchor - offset) * 100) / 100
+        ask_y = round((yes_anchor + offset) * 100) / 100
+        bid_n = round((no_anchor - offset) * 100) / 100
+        ask_n = round((no_anchor + offset) * 100) / 100
+        if 0 < bid_y < 1:
+            sim.book_yes.add_limit(
+                ENV_MAKER_AGENT_ID, "BUY", bid_y, depth_per_level, ts=-1,
+            )
+        if 0 < ask_y < 1:
+            sim.book_yes.add_limit(
+                ENV_MAKER_AGENT_ID, "SELL", ask_y, depth_per_level, ts=-1,
+            )
+        if 0 < bid_n < 1:
+            sim.book_no.add_limit(
+                ENV_MAKER_AGENT_ID, "BUY", bid_n, depth_per_level, ts=-1,
+            )
+        if 0 < ask_n < 1:
+            sim.book_no.add_limit(
+                ENV_MAKER_AGENT_ID, "SELL", ask_n, depth_per_level, ts=-1,
+            )
 
 
 def _book_for(sim: Simulation, outcome: str) -> OrderBook:
@@ -270,6 +353,8 @@ def run_simulation(
                     _agent_resting_count(sim.book_yes, agent.agent_id)
                     + _agent_resting_count(sim.book_no, agent.agent_id)
                 ),
+                private_signal_mu=agent.private_signal_mu,
+                private_signal_sigma=agent.private_signal_sigma,
             )
             decision = decide_fn(
                 persona=agent.persona,

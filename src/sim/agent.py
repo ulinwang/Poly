@@ -52,6 +52,9 @@ class AgentSnapshot:
     yes_shares: float
     no_shares: float
     n_resting_orders: int
+    # v4: optional empirical private signal. None = legacy v2/v3 path.
+    private_signal_mu: float | None = None
+    private_signal_sigma: float | None = None
 
 
 @dataclass
@@ -84,8 +87,17 @@ def build_user_prompt(market: MarketSnapshot, agent: AgentSnapshot) -> str:
         return f"{v:.3f}" if v is not None else "—"
     hist = market.yes_mid_history[-3:]
     hist_str = ", ".join(f"{p:.3f}" for p in hist) if hist else "(none)"
+    signal_block = ""
+    if agent.private_signal_mu is not None:
+        sigma = agent.private_signal_sigma if agent.private_signal_sigma is not None else 0.2
+        signal_block = (
+            f"Your private prior estimate of P(YES) at sim start was "
+            f"{agent.private_signal_mu:.2f} (1σ ≈ {sigma:.2f}). "
+            f"Update it as the market evolves; it is your starting belief, not ground truth.\n\n"
+        )
     return (
-        f"Order books right now:\n"
+        signal_block
+        + f"Order books right now:\n"
         f"  YES book — bid {_f(market.yes_best_bid)}, ask {_f(market.yes_best_ask)}, mid {market.yes_mid:.3f}\n"
         f"  NO book  — bid {_f(market.no_best_bid)}, ask {_f(market.no_best_ask)}, mid {market.no_mid:.3f}\n"
         f"  YES mid history (last 3 ticks): {hist_str}\n"
