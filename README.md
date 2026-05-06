@@ -16,6 +16,8 @@ ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
 |---|---|---|
 | `src/etl.py` (`python -m src`) | Polygon RPC (链上事件) | `order_filled`, `orders_matched`, `etl_progress` |
 | `src/gamma.py` (`python -m src.gamma`) | Polymarket Gamma API (链下元数据) | `markets` |
+| `src/agent_legacy.py` (`python -m src.agent_legacy`) | LLM (DeepSeek by default) | `agent_predictions` (single-shot probability baseline) |
+| `src/sim/` (`python -m src.sim`) | LLM + CLOB matching engine | `agent_simulations`, `agent_actions`, `agent_fills`, `agent_positions`, `agent_personas`, `market_trade_history` |
 
 链下 `markets.clob_token_ids` 与链上 `order_filled.maker_asset_id` /
 `taker_asset_id` 是 ERC1155 outcome token id,可直接 JOIN。
@@ -118,8 +120,48 @@ ORDER BY market_id`,查询时建议加 `FINAL` 去重。
 
 完整字段调研:`uv run python scripts/inspect_market_fields.py`。
 
+## v1 baseline: single-shot probability predictor
+
+`src/agent_legacy.py` 让一个 LLM 对每个市场独立预测 YES 概率,写入
+`agent_predictions`。这是论文里的"基线":单一调用、无交互、无群体。
+
+```bash
+uv run python -m src.agent_legacy --limit 50            # 默认只跑已结算市场
+uv run python -m src.agent_legacy --limit 10 --dry-run
+uv run python -m src.agent_legacy --include-active
+```
+
+## v2: multi-agent CLOB simulation (主线)
+
+`src/sim/` 模拟 Polymarket 真实交易所:每个 agent 带着 persona(风险
+偏好、目标、行为偏差),在多个 tick 上下 LIMIT/MARKET 单,撮合引擎
+按 price-time priority 处理订单,最后按结算结果计算 PnL。
+
+```bash
+# 第一次跑要 --reset-schema 建表
+uv run python -m src.sim \
+    --slug will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster \
+    --n-agents 10 --n-ticks 24 --reset-schema
+
+# 不调 API,只看 prompt 和会创建多少调用
+uv run python -m src.sim --slug ... --dry-run
+
+# 不抓真实 CLOB 历史(节省时间)
+uv run python -m src.sim --slug ... --skip-clob
+```
+
+模块组织:
+- `src/sim/orderbook.py` — 限价订单簿(maker/taker、price-time priority)
+- `src/sim/personas.py` — 3 类 persona(SkepticalEngineer / LotteryPlayer / HerdFollower)
+- `src/sim/agent.py` — 单 tick LLM 决策(JSON: order_type / outcome / side / price / size_usd)
+- `src/sim/env.py` — 仿真环境(双 OrderBook + 状态推进 + 结算)
+- `src/sim/clob_history.py` — 拉真实 Polymarket 成交历史用于对比
+- `src/sim/comparison.py` — 仿真 vs 真实的对比指标
+
+设计完整说明见 [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) 的 2026-05-06 章节。
+
 ## Tests
 
 ```bash
-uv run python -m unittest tests.test_gamma -v
+uv run python -m unittest discover tests -v   # 32 cases
 ```
