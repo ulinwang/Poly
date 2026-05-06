@@ -32,7 +32,10 @@ log = logging.getLogger(__name__)
 
 
 # v4: reserved id for environmental bootstrap maker. Excluded from SERD.
-ENV_MAKER_AGENT_ID = -1
+# Must be a non-negative UInt32 since agent_id columns are UInt32; we use
+# a sentinel near the top of the range so it never collides with real
+# round-robin agent ids (0..N-1).
+ENV_MAKER_AGENT_ID = 999_999
 
 
 @dataclass
@@ -142,7 +145,7 @@ def seed_orderbook_liquidity(
     spread: float = 0.04, depth_levels: int = 3, depth_per_level: float = 100.0,
 ) -> None:
     """Inject exogenous resting liquidity from a synthetic environmental
-    market maker (agent_id = ENV_MAKER_AGENT_ID = -1). Places a bid
+    market maker (agent_id = ENV_MAKER_AGENT_ID). Places a bid
     ladder below `*_anchor` and an ask ladder above, on BOTH books.
 
     Uses the existing OrderBook.add_limit API; produces no fills (both

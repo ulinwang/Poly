@@ -50,7 +50,7 @@ from ..config import get_settings
 
 
 _EPS = 1e-9
-ENV_MAKER_AGENT_ID = -1   # mirrors src/sim/env.py
+ENV_MAKER_AGENT_ID = 999_999   # mirrors src/sim/env.py
 
 ROLES = ("ApexPredator", "UpperMeso", "LowerMeso", "Prey")
 
@@ -65,7 +65,8 @@ def build_network(
 ) -> dict[tuple[int, int], float]:
     """Return a sparse directed weighted graph as a dict
     {(maker_agent_id, taker_agent_id): aggregate_notional}, summed
-    across the simulation. Excludes env_maker (agent_id < 0) by default."""
+    across the simulation. Excludes env_maker (agent_id ==
+    ENV_MAKER_AGENT_ID) by default."""
     rows = ch.client.execute(
         f"""
         SELECT maker_agent_id, taker_agent_id, sum(notional)
@@ -78,7 +79,7 @@ def build_network(
     edges: dict[tuple[int, int], float] = {}
     for m, t, w in rows:
         m, t = int(m), int(t)
-        if exclude_env_maker and (m < 0 or t < 0):
+        if exclude_env_maker and (m == ENV_MAKER_AGENT_ID or t == ENV_MAKER_AGENT_ID):
             continue
         edges[(m, t)] = float(w)
     return edges
@@ -195,7 +196,7 @@ def compute_roi_per_agent(
     out: dict[int, dict[str, float]] = {}
     for agent_id, final_cash, final_yes, final_no, capital_initial in rows:
         agent_id = int(agent_id)
-        if agent_id < 0:
+        if agent_id == ENV_MAKER_AGENT_ID:
             continue
         cap = float(capital_initial or 0.0)
         if cap <= 0:
@@ -269,7 +270,7 @@ def _agent_features(
                1 AS asset_diversity   -- single market per sim
         FROM {ch.database}.agent_actions
         WHERE sim_id = %(sid)s AND order_type != 'HOLD'
-              AND agent_id >= 0
+              AND agent_id != 999999
         GROUP BY agent_id
         """,
         {"sid": sim_id},
