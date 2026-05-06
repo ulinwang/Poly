@@ -67,9 +67,16 @@ class Decision:
     api_error: str
 
 
-VALID_ORDER_TYPES = {"LIMIT", "MARKET", "CANCEL", "HOLD"}
+VALID_ORDER_TYPES = {"LIMIT", "MARKET", "CANCEL", "HOLD", "SPLIT", "MERGE"}
 VALID_OUTCOMES = {"YES", "NO"}
 VALID_SIDES = {"BUY", "SELL"}
+
+
+def round_to_tick(price: float, tick_size: float = 0.01) -> float:
+    """Snap a price to the nearest tick. Polymarket default tick is 0.01."""
+    if tick_size <= 0:
+        return price
+    return round(price / tick_size) * tick_size
 
 
 def build_user_prompt(market: MarketSnapshot, agent: AgentSnapshot) -> str:
@@ -120,7 +127,10 @@ Rules:
 - MARKET sweeps the best opposite side immediately.
 - CANCEL cancels ALL your resting orders on (outcome, side).
 - HOLD: no-op; size_usd = 0.
+- SPLIT mints a 1:1 pair: spend `size_usd` USD to receive `size_usd` YES shares AND `size_usd` NO shares simultaneously. Useful for market makers seeding two-sided inventory. `outcome`/`side`/`price` are ignored.
+- MERGE redeems a pair: destroy `size_usd` matched YES+NO shares (capped by your inventory) to recover `size_usd` USD. `outcome`/`side`/`price` are ignored.
 - size_usd must be ≤ your cash for BUY; for SELL, you must hold shares of that outcome.
+- Polymarket enforces tick size 0.01 on prices; submit prices in 0.01 increments.
 - Stay in character. Do not reveal the market's eventual resolution; you do not know it.
 """
 
@@ -138,7 +148,7 @@ def _build_clob_system_prompt(persona: Persona, question: str, description: str,
     )
 
 
-def parse_decision(text: str) -> dict:
+def parse_decision(text: str, tick_size: float = 0.01) -> dict:
     text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text
@@ -153,17 +163,24 @@ def parse_decision(text: str) -> dict:
     order_type = str(obj.get("order_type", "")).upper()
     if order_type not in VALID_ORDER_TYPES:
         raise ValueError(f"invalid order_type: {order_type!r}")
-    outcome = str(obj.get("outcome", "YES")).upper()
-    if outcome not in VALID_OUTCOMES:
+    if order_type in {"SPLIT", "MERGE"}:
+        # outcome/side/price are not meaningful for SPLIT/MERGE
         outcome = "YES"
-    side = str(obj.get("side", "BUY")).upper()
-    if side not in VALID_SIDES:
         side = "BUY"
-    try:
-        price = float(obj.get("price", 0.5))
-    except (TypeError, ValueError):
-        price = 0.5
-    price = max(0.0, min(1.0, price))
+        price = 0.0
+    else:
+        outcome = str(obj.get("outcome", "YES")).upper()
+        if outcome not in VALID_OUTCOMES:
+            outcome = "YES"
+        side = str(obj.get("side", "BUY")).upper()
+        if side not in VALID_SIDES:
+            side = "BUY"
+        try:
+            price = float(obj.get("price", 0.5))
+        except (TypeError, ValueError):
+            price = 0.5
+        price = max(0.0, min(1.0, price))
+        price = round_to_tick(price, tick_size=tick_size)
     try:
         size_usd = float(obj.get("size_usd", 0))
     except (TypeError, ValueError):
