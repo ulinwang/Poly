@@ -4,11 +4,13 @@ ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
 **off-chain market metadata** (Gamma API), unified in ClickHouse.
 
 > 📚 **Thesis project** — see [`docs/REPRODUCE.md`](docs/REPRODUCE.md)
-> for a complete reproduction guide and
+> for a complete reproduction guide,
 > [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) for the dataset
-> snapshot used in the thesis. Analysis SQL lives under
-> [`scripts/sql/`](scripts/sql/) and is catalogued in
-> [`docs/ANALYSES.md`](docs/ANALYSES.md).
+> snapshot used in the thesis, and
+> **[`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md) for what data
+> is actually loaded today and what's still pending**.
+> Analysis SQL lives under [`scripts/sql/`](scripts/sql/) and is
+> catalogued in [`docs/ANALYSES.md`](docs/ANALYSES.md).
 
 ## 模块概览
 
