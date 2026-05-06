@@ -21,11 +21,13 @@ or per-tick book snapshots).
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 
 _EPS = 1e-9
+_WIDE_SPREAD = 0.10
 
 
 @dataclass
@@ -58,12 +60,20 @@ class Fill:
 class OrderBook:
     """One side of a binary-outcome market (YES or NO token)."""
 
-    def __init__(self, name: str = "YES") -> None:
+    def __init__(self, name: str = "YES", tick_size: float = 0.01) -> None:
         self.name = name
+        self.tick_size = tick_size
         self._next_order_id = 1
         self.bids: list[Order] = []   # sorted desc by price, asc by ts
         self.asks: list[Order] = []   # sorted asc by price, asc by ts
         self.cancelled: set[int] = set()
+        self.last_trade_price: Optional[float] = None
+
+    # ---- helpers ----
+    def _is_aligned(self, price: float) -> bool:
+        """Return True iff price is a multiple of tick_size (within tol)."""
+        snapped = round(price / self.tick_size) * self.tick_size
+        return math.isclose(snapped, price, abs_tol=1e-9)
 
     # ---- inspection ----
     def best_bid(self) -> Optional[float]:
@@ -74,11 +84,15 @@ class OrderBook:
 
     def mid(self, fallback: float = 0.5) -> float:
         b, a = self.best_bid(), self.best_ask()
-        if b is not None and a is not None:
+        if b is not None and a is not None and (a - b) <= _WIDE_SPREAD + _EPS:
             return (b + a) / 2.0
-        if b is not None:
+        if self.last_trade_price is not None:
+            return self.last_trade_price
+        # No last trade — fall back to single-side best if exactly one
+        # side has liquidity, else the explicit fallback.
+        if b is not None and a is None:
             return b
-        if a is not None:
+        if a is not None and b is None:
             return a
         return fallback
 
@@ -101,7 +115,10 @@ class OrderBook:
         """Add a limit order. Crosses into the book and matches; any
         remainder is resting. Returns (fills_made, the_order)."""
         assert side in {"BUY", "SELL"}
-        if size <= _EPS or price < 0 or price > 1:
+        misaligned = (
+            price > 0 and price < 1 and not self._is_aligned(price)
+        )
+        if size <= _EPS or price < 0 or price > 1 or misaligned:
             order = Order(
                 order_id=self._next_order_id, agent_id=agent_id, side=side,
                 price=price, size=0.0, ts=ts,
@@ -138,6 +155,9 @@ class OrderBook:
             top.remaining -= qty
             if top.remaining <= _EPS:
                 opp.pop(0)
+
+        if fills:
+            self.last_trade_price = fills[-1].price
 
         if order.remaining > _EPS:
             same = self.bids if side == "BUY" else self.asks
