@@ -16,7 +16,8 @@ ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
 |---|---|---|
 | `src/etl.py` (`python -m src`) | Polygon RPC (链上事件) | `order_filled`, `orders_matched`, `etl_progress` |
 | `src/gamma.py` (`python -m src.gamma`) | Polymarket Gamma API (链下元数据) | `markets` |
-| `src/agent.py` (`python -m src.agent`) | LLM (DeepSeek by default) | `agent_predictions` |
+| `src/agent_legacy.py` (`python -m src.agent_legacy`) | LLM (DeepSeek by default) | `agent_predictions` (single-shot probability baseline) |
+| `src/sim/` (`python -m src.sim`) | LLM + CLOB matching engine | `agent_simulations`, `agent_actions`, `agent_fills`, `agent_positions`, `agent_personas`, `market_trade_history` |
 
 链下 `markets.clob_token_ids` 与链上 `order_filled.maker_asset_id` /
 `taker_asset_id` 是 ERC1155 outcome token id,可直接 JOIN。
@@ -119,23 +120,45 @@ ORDER BY market_id`,查询时建议加 `FINAL` 去重。
 
 完整字段调研:`uv run python scripts/inspect_market_fields.py`。
 
-## Agent simulator (LLM forecaster)
+## v1 baseline: single-shot probability predictor
 
-`src/agent.py` 调用一个 LLM(默认 DeepSeek v4-flash)对每个市场独立
-预测 YES 概率,并把结果写入 `agent_predictions` 表,用于评估 LLM 预测
-能力对比群体智慧(市场价格)与最终结果。
-
-Agent **不会**看到市场的当前赔率,以保证预测独立性;但市场价格和
-(若已结算)最终结果会被快照到预测行里,以便后续做校准与回归分析。
+`src/agent_legacy.py` 让一个 LLM 对每个市场独立预测 YES 概率,写入
+`agent_predictions`。这是论文里的"基线":单一调用、无交互、无群体。
 
 ```bash
-# 先在 .env 设置 POLYMETL_DEEPSEEK_API_KEY=sk-...
-uv run python -m src.agent --limit 50            # 默认只跑已结算市场
-uv run python -m src.agent --limit 10 --dry-run  # 只看会选哪些市场,不调 API
-uv run python -m src.agent --include-active      # 也跑当前活跃市场
+uv run python -m src.agent_legacy --limit 50            # 默认只跑已结算市场
+uv run python -m src.agent_legacy --limit 10 --dry-run
+uv run python -m src.agent_legacy --include-active
 ```
 
-详见 [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) 实验设计章节。
+## v2: multi-agent CLOB simulation (主线)
+
+`src/sim/` 模拟 Polymarket 真实交易所:每个 agent 带着 persona(风险
+偏好、目标、行为偏差),在多个 tick 上下 LIMIT/MARKET 单,撮合引擎
+按 price-time priority 处理订单,最后按结算结果计算 PnL。
+
+```bash
+# 第一次跑要 --reset-schema 建表
+uv run python -m src.sim \
+    --slug will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster \
+    --n-agents 10 --n-ticks 24 --reset-schema
+
+# 不调 API,只看 prompt 和会创建多少调用
+uv run python -m src.sim --slug ... --dry-run
+
+# 不抓真实 CLOB 历史(节省时间)
+uv run python -m src.sim --slug ... --skip-clob
+```
+
+模块组织:
+- `src/sim/orderbook.py` — 限价订单簿(maker/taker、price-time priority)
+- `src/sim/personas.py` — 3 类 persona(SkepticalEngineer / LotteryPlayer / HerdFollower)
+- `src/sim/agent.py` — 单 tick LLM 决策(JSON: order_type / outcome / side / price / size_usd)
+- `src/sim/env.py` — 仿真环境(双 OrderBook + 状态推进 + 结算)
+- `src/sim/clob_history.py` — 拉真实 Polymarket 成交历史用于对比
+- `src/sim/comparison.py` — 仿真 vs 真实的对比指标
+
+设计完整说明见 [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) 的 2026-05-06 章节。
 
 ## Tests
 

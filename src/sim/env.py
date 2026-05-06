@@ -70,6 +70,10 @@ class Simulation:
         return self.book_no.mid()
 
 
+MM_SEED_INVENTORY = 50.0  # initial YES & NO shares for MarketMaker personas
+MM_SEED_COST_USD = 50.0   # cost of pre-minting that inventory ($1 → 1 YES + 1 NO)
+
+
 def make_sim(
     *,
     market_id: str, market_slug: str,
@@ -80,10 +84,21 @@ def make_sim(
     sim_id: Optional[str] = None,
 ) -> Simulation:
     sid = sim_id or uuid.uuid4().hex[:16]
-    agents = [
-        AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial)
-        for i, p in enumerate(personas)
-    ]
+    agents = []
+    for i, p in enumerate(personas):
+        # Pre-seed MarketMakers with inventory of both outcome tokens
+        # (simulates a Polymarket MINT: $1 -> 1 YES + 1 NO share). Without
+        # this, MMs cannot quote two-sided liquidity in tick 0 since SELL
+        # requires holding the corresponding share.
+        if p.persona_type == "MarketMaker":
+            agents.append(AgentRuntime(
+                agent_id=i, persona=p,
+                cash=p.capital_initial - MM_SEED_COST_USD,
+                yes_shares=MM_SEED_INVENTORY,
+                no_shares=MM_SEED_INVENTORY,
+            ))
+        else:
+            agents.append(AgentRuntime(agent_id=i, persona=p, cash=p.capital_initial))
     return Simulation(
         sim_id=sid, market_id=market_id, market_slug=market_slug,
         question=question, description=description, end_date_str=end_date_str,

@@ -72,10 +72,30 @@ HERD_FOLLOWER = Persona(
 )
 
 
+MARKET_MAKER = Persona(
+    persona_type="MarketMaker",
+    risk_aversion=0.5,
+    capital_initial=2000.0,
+    profile_text=(
+        "You are a professional market maker providing two-sided liquidity. "
+        "Your goal is to capture the bid-ask spread by simultaneously placing "
+        "LIMIT BUY orders slightly below the current mid and LIMIT SELL "
+        "orders slightly above. If you currently HOLD inventory of either "
+        "outcome, prefer to SELL it back to the book to flatten exposure. "
+        "Avoid taking large directional positions; you are NOT trying to "
+        "predict the outcome, just provide liquidity. Quote sizes around "
+        "5-10% of remaining capital per side. If you have no inventory and "
+        "the book is empty, place a single LIMIT BUY at $0.45-0.50 on YES "
+        "to seed the book."
+    ),
+)
+
+
 DEFAULT_PERSONAS: list[Persona] = [
     SKEPTICAL_ENGINEER,
     LOTTERY_PLAYER,
     HERD_FOLLOWER,
+    MARKET_MAKER,
 ]
 
 
