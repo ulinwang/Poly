@@ -114,6 +114,234 @@ class ClickHouse:
             """
         )
 
+    def reset_sim_schema(self) -> None:
+        """Drop all sim-related tables. Useful when migrating between
+        schema versions during development. Data is lost — only call when
+        you have nothing important persisted."""
+        for tbl in (
+            "agent_simulations", "agent_personas", "agent_actions",
+            "agent_fills", "agent_positions",
+        ):
+            self.client.execute(f"DROP TABLE IF EXISTS {self.database}.{tbl}")
+
+    def ensure_sim_schema(self) -> None:
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_simulations (
+                sim_id String,
+                market_id String,
+                market_slug String,
+                engine String,
+                engine_param Float64,
+                persona_set String,
+                n_agents UInt32,
+                n_ticks UInt32,
+                started_at DateTime,
+                ended_at Nullable(DateTime),
+                final_sim_yes_price Float64,
+                market_resolved_yes Nullable(UInt8),
+                notes String
+            )
+            ENGINE = MergeTree
+            ORDER BY (started_at, sim_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_personas (
+                sim_id String,
+                agent_id UInt32,
+                persona_type String,
+                risk_aversion Float64,
+                capital_initial Float64,
+                profile_text String
+            )
+            ENGINE = MergeTree
+            ORDER BY (sim_id, agent_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_actions (
+                sim_id String,
+                tick UInt32,
+                agent_id UInt32,
+                order_type String,
+                outcome String,
+                side String,
+                price Float64,
+                size_usd Float64,
+                yes_mid_before Float64,
+                yes_mid_after Float64,
+                shares_traded Float64,
+                n_fills UInt32,
+                reasoning String,
+                raw_response String,
+                api_latency_ms UInt32,
+                api_error String,
+                acted_at DateTime
+            )
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(acted_at)
+            ORDER BY (sim_id, tick, agent_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_fills (
+                sim_id String,
+                tick UInt32,
+                maker_order_id UInt64,
+                taker_order_id UInt64,
+                maker_agent_id UInt32,
+                taker_agent_id UInt32,
+                outcome String,
+                maker_side String,
+                price Float64,
+                size Float64,
+                notional Float64,
+                filled_at DateTime
+            )
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(filled_at)
+            ORDER BY (sim_id, tick, maker_order_id, taker_order_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.agent_positions (
+                sim_id String,
+                tick UInt32,
+                agent_id UInt32,
+                yes_shares Float64,
+                no_shares Float64,
+                cash Float64,
+                realized_pnl Float64,
+                unrealized_pnl Float64
+            )
+            ENGINE = MergeTree
+            ORDER BY (sim_id, tick, agent_id)
+            SETTINGS index_granularity = 8192
+            """
+        )
+        self.client.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.database}.market_trade_history (
+                market_id String,
+                token_id String,
+                trade_time DateTime,
+                side String,
+                price Float64,
+                size Float64,
+                maker_address String,
+                taker_address String,
+                fetched_at DateTime
+            )
+            ENGINE = MergeTree
+            PARTITION BY toYYYYMM(trade_time)
+            ORDER BY (market_id, token_id, trade_time)
+            SETTINGS index_granularity = 8192
+            """
+        )
+
+    def insert_simulation(self, row: tuple) -> None:
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_simulations (
+                sim_id, market_id, market_slug, engine, engine_param,
+                persona_set, n_agents, n_ticks, started_at, ended_at,
+                final_sim_yes_price, market_resolved_yes, notes
+            ) VALUES
+            """,
+            [row],
+        )
+
+    def insert_personas(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_personas (
+                sim_id, agent_id, persona_type, risk_aversion,
+                capital_initial, profile_text
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def insert_actions(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_actions (
+                sim_id, tick, agent_id, order_type, outcome, side,
+                price, size_usd, yes_mid_before, yes_mid_after,
+                shares_traded, n_fills, reasoning, raw_response,
+                api_latency_ms, api_error, acted_at
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def insert_fills(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_fills (
+                sim_id, tick, maker_order_id, taker_order_id,
+                maker_agent_id, taker_agent_id, outcome, maker_side,
+                price, size, notional, filled_at
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def insert_positions(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.agent_positions (
+                sim_id, tick, agent_id, yes_shares, no_shares, cash,
+                realized_pnl, unrealized_pnl
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def insert_trade_history(self, rows: Sequence[tuple]) -> None:
+        if not rows:
+            return
+        self.client.execute(
+            f"""
+            INSERT INTO {self.database}.market_trade_history (
+                market_id, token_id, trade_time, side, price, size,
+                maker_address, taker_address, fetched_at
+            ) VALUES
+            """,
+            rows,
+        )
+
+    def fetch_market_by_slug(self, slug: str) -> Optional[tuple]:
+        rows = self.client.execute(
+            f"""
+            SELECT market_id, slug, question, description,
+                   outcomes, clob_token_ids, outcome_prices,
+                   volume, end_date, `closed`
+            FROM {self.database}.markets FINAL
+            WHERE slug = %(slug)s
+            LIMIT 1
+            """,
+            {"slug": slug},
+        )
+        return rows[0] if rows else None
+
     def ensure_predictions_schema(self) -> None:
         self.client.execute(
             f"""

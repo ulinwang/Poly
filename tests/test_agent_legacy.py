@@ -5,7 +5,7 @@ import json
 import unittest
 from typing import Any
 
-from src import agent
+from src import agent_legacy as agent
 
 
 SAMPLE_MARKET_ROW = (
