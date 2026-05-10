@@ -21,5 +21,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 0 of 8 — Ingest CLOB API into ClickHouse")
-    from src.ingest.clob_api import main
+    from data.sources.clob_api import main
     main()

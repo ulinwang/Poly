@@ -35,7 +35,7 @@ from reportlab.platypus import (
     PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
-from src.gamma_full import FIELDS, EXTRA_COLS
+from data.sources.gamma_api.puller import FIELDS, EXTRA_COLS
 
 
 CJK = "STSong-Light"

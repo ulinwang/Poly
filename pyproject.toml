@@ -15,8 +15,17 @@ dependencies = [
 	"matplotlib>=3.8",
 	"seaborn>=0.13",
 	"pandas>=2.0",
+	# v8: parquet + YAML configs + Jinja2 templates
+	"pyarrow>=14.0",
+	"pyyaml>=6.0",
+	"jinja2>=3.1",
 ]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["data*", "agent*", "environment*", "experiments*", "src*"]
+exclude = ["tests*", "scripts*", "docs*", "output*", "figures*", "tables*"]

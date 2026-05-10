@@ -31,8 +31,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional, Sequence
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 CLOB_BASE = "https://clob.polymarket.com"

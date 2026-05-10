@@ -12,5 +12,17 @@ wheels/
 # Local secrets / OS
 .env
 .DS_Store
-data/
+# v8: data/ is a source-code package; only runtime artifacts ignored
+/data/priors_*.json
+/data/wallet_personas.json
+/data/personas_*.json
+/data/runs/
+
+# v8 per-experiment artifacts
+/output/
+
+# v7-era artifact directories (kept for backwards compat)
+/figures/
+/tables/
+
 .claude/

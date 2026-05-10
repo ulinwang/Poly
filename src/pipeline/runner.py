@@ -14,8 +14,8 @@ import json
 import logging
 from typing import Optional
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 from ..analysis import comparison
 from ..core.env import make_sim, run_simulation, settle
 from ..agent.persona import Persona

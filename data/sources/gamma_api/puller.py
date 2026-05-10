@@ -33,8 +33,8 @@ import urllib.parse
 import urllib.request
 from typing import Iterator
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 log = logging.getLogger(__name__)

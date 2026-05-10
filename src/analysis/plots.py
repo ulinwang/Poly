@@ -28,8 +28,8 @@ matplotlib.use("Agg")    # headless — no DISPLAY required
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 log = logging.getLogger(__name__)

@@ -36,8 +36,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional, Sequence
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 DATA_API_BASE = "https://data-api.polymarket.com"

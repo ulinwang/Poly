@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from clickhouse_driver import Client
-from src.gamma_full import FIELDS, EXTRA_COLS
+from data.sources.gamma_api.puller import FIELDS, EXTRA_COLS
 
 
 ARRAY_COLS = {"outcomes", "clob_token_ids", "outcome_prices", "uma_resolution_statuses"}

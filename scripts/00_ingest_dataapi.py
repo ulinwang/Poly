@@ -20,5 +20,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 0 of 8 — Ingest data-api into ClickHouse")
-    from src.ingest.data_api import main
+    from data.sources.data_api import main
     main()

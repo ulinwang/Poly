@@ -45,8 +45,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 _EPS = 1e-9

@@ -20,7 +20,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.ingest.gamma_full import fetch_markets_page  # noqa: E402
+from data.sources.gamma_api import fetch_markets_page  # noqa: E402
 
 
 def _ticker(m: dict) -> str:

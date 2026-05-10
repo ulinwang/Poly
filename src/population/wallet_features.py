@@ -28,8 +28,8 @@ import logging
 import statistics
 from typing import Optional
 
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 from .derive_priors import fetch_market_meta, market_open_ts
 
 log = logging.getLogger(__name__)

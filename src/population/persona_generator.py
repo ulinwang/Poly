@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Optional
 
 from ..agent.llm_client import call_deepseek
-from ..pipeline.clickhouse import ClickHouse
-from ..pipeline.config import get_settings
+from data.store.clickhouse import ClickHouse
+from data.store.config import get_settings
 
 
 CACHE_PATH = Path("data/wallet_personas.json")

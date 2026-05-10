@@ -18,5 +18,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 0 of 8 — Ingest Gamma into ClickHouse")
-    from src.ingest.gamma_full import main
+    from data.sources.gamma_api import main
     main()
