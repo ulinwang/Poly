@@ -1,19 +1,32 @@
-"""DeepSeek chat-completions client.
+"""DeepSeek chat-completions client (OpenAI-compatible).
 
-Single function `call_deepseek` consumed by both the per-tick agent
-decision flow (`agent.decision.runtime`) and the persona text generator
-(`agent.personas.calibrated`). Stateless and synchronous.
+Two entry points:
 
-Why this is its own module:
-- Decouples the LLM call from any specific prompt or persona logic.
-- Lets us swap the backend (different model / different OpenAI-
-  compatible endpoint) by changing one file.
-- Keeps the rest of the simulator free of `urllib` / HTTP concerns.
+  call_deepseek(...)             — text-mode completion. Used by the
+                                    persona generator (agent.personas.calibrated)
+                                    where we want a free-form paragraph.
+
+  call_deepseek_with_tools(...)  — function-tool mode. Used by the
+                                    per-tick trader decision flow
+                                    (agent.decision.runtime). The LLM
+                                    chooses which of `tools` to call;
+                                    response is a tool_calls[0] object,
+                                    or text if it declines (= HOLD).
+
+Stateless, synchronous. The OpenAI Python SDK is the underlying
+transport — DeepSeek exposes an OpenAI-compatible endpoint.
 """
 from __future__ import annotations
 
 import json
-import urllib.request
+from typing import Any, Optional
+
+from openai import OpenAI
+
+
+def _client(api_key: str, base_url: str, timeout: float) -> OpenAI:
+    """Build a per-call client. SDK pools its own HTTP connections."""
+    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
 
 def call_deepseek(
@@ -24,20 +37,17 @@ def call_deepseek(
     user_prompt: str,
     temperature: float = 0.0,
     timeout: float = 60.0,
-    response_format: dict | None = None,
+    response_format: Optional[dict] = None,
 ) -> dict:
-    """Send one chat-completion request. Returns dict with keys:
-    text, prompt_tokens, completion_tokens, raw.
+    """Send one chat-completion request, text mode.
 
-    `response_format`:
-      None (default) → free-form text. Use for natural-language tasks
-        like persona profile generation.
-      {"type": "json_object"} → DeepSeek will refuse to return text not
-        parseable as JSON, AND requires the prompt to literally contain
-        the word 'JSON'. Use for structured agent decisions.
+    Returns: {"text", "prompt_tokens", "completion_tokens", "raw"}.
+
+    `response_format={"type": "json_object"}` available for callers
+    that need DeepSeek's strict-JSON mode (legacy persona path).
     """
-    url = base_url.rstrip("/") + "/chat/completions"
-    payload: dict = {
+    client = _client(api_key, base_url, timeout)
+    kwargs: dict[str, Any] = {
         "model": model,
         "temperature": temperature,
         "messages": [
@@ -46,25 +56,75 @@ def call_deepseek(
         ],
     }
     if response_format is not None:
-        payload["response_format"] = response_format
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8")
-    obj = json.loads(raw)
-    choice = obj["choices"][0]
+        kwargs["response_format"] = response_format
+    resp = client.chat.completions.create(**kwargs)
+    msg = resp.choices[0].message
+    usage = resp.usage
     return {
-        "text": choice["message"]["content"],
-        "prompt_tokens": int(obj.get("usage", {}).get("prompt_tokens", 0)),
-        "completion_tokens": int(obj.get("usage", {}).get("completion_tokens", 0)),
-        "raw": raw,
+        "text": msg.content or "",
+        "prompt_tokens": int(usage.prompt_tokens) if usage else 0,
+        "completion_tokens": int(usage.completion_tokens) if usage else 0,
+        "raw": resp.model_dump_json(),
+    }
+
+
+def call_deepseek_with_tools(
+    base_url: str,
+    api_key: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    tools: list[dict],
+    temperature: float = 0.0,
+    timeout: float = 60.0,
+    tool_choice: str = "auto",
+) -> dict:
+    """Send one chat-completion request with OpenAI function tools.
+
+    Returns:
+      {
+        "tool_call": {                       # or None if LLM declined
+            "id": "...",
+            "name": "place_limit_order",
+            "arguments": {"outcome": "YES", ...},
+        },
+        "text": str,                         # LLM prose (often empty when tool was called)
+        "prompt_tokens": int,
+        "completion_tokens": int,
+        "raw": str,                          # full response JSON
+      }
+    """
+    client = _client(api_key, base_url, timeout)
+    resp = client.chat.completions.create(
+        model=model,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        tools=tools,
+        tool_choice=tool_choice,
+    )
+    msg = resp.choices[0].message
+    usage = resp.usage
+
+    tool_call_payload = None
+    if msg.tool_calls:
+        tc = msg.tool_calls[0]
+        try:
+            args = json.loads(tc.function.arguments or "{}")
+        except json.JSONDecodeError:
+            args = {}
+        tool_call_payload = {
+            "id": tc.id,
+            "name": tc.function.name,
+            "arguments": args,
+        }
+
+    return {
+        "tool_call": tool_call_payload,
+        "text": msg.content or "",
+        "prompt_tokens": int(usage.prompt_tokens) if usage else 0,
+        "completion_tokens": int(usage.completion_tokens) if usage else 0,
+        "raw": resp.model_dump_json(),
     }

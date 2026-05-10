@@ -17,10 +17,26 @@ T = TypeVar("T")
 log = logging.getLogger(__name__)
 
 
-_TRANSIENT_EXC = (
+# OpenAI SDK exceptions (transient subset). We import lazily so the
+# module still works without `openai` installed (pure-stdlib tests).
+_OPENAI_TRANSIENT: tuple[type[BaseException], ...] = ()
+try:
+    from openai import (
+        APIConnectionError, APITimeoutError, RateLimitError,
+        InternalServerError,
+    )
+    _OPENAI_TRANSIENT = (
+        APIConnectionError, APITimeoutError, RateLimitError,
+        InternalServerError,
+    )
+except ImportError:        # pragma: no cover
+    pass
+
+
+_TRANSIENT_EXC: tuple[type[BaseException], ...] = (
     urllib.error.HTTPError, urllib.error.URLError,
     OSError, ValueError, KeyError, json.JSONDecodeError,
-)
+) + _OPENAI_TRANSIENT
 
 
 def call_with_retry(
