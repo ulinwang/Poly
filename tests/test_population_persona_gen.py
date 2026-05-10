@@ -58,6 +58,36 @@ class StripRoleLabelsTest(unittest.TestCase):
         self.assertEqual(pg._strip_role_labels(clean), clean)
 
 
+class SanitizeBioTest(unittest.TestCase):
+    def test_strips_role_labels_from_user_bio(self):
+        bio = "I'm a professional market maker and crypto whale on Polymarket."
+        out = pg.sanitize_bio(bio)
+        self.assertNotIn("market maker", out.lower())
+        self.assertNotIn("whale", out.lower())
+        self.assertIn(pg._BIO_REDACTED, out)
+
+    def test_empty_bio_returns_empty(self):
+        self.assertEqual(pg.sanitize_bio(""), "")
+        self.assertEqual(pg.sanitize_bio(None), "")  # type: ignore[arg-type]
+
+    def test_clean_bio_passes_through(self):
+        bio = "Sports fan, occasionally bet on US politics."
+        self.assertEqual(pg.sanitize_bio(bio), bio)
+
+
+class UserPromptWithBioTest(unittest.TestCase):
+    def test_includes_bio_when_provided(self):
+        p = pg._user_prompt(SAMPLE_FEATURES, bio="loves NBA",
+                             display_name="Alice")
+        self.assertIn("loves NBA", p)
+        self.assertIn("Alice", p)
+
+    def test_omits_bio_block_when_empty(self):
+        p = pg._user_prompt(SAMPLE_FEATURES, bio="", display_name="")
+        self.assertNotIn("Self-described bio", p)
+        self.assertNotIn("Display name", p)
+
+
 class GenerateProfileTest(unittest.TestCase):
     def test_clean_response_returns_ok(self):
         def fake_call(**kwargs):

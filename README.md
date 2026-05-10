@@ -1,169 +1,111 @@
-# PolyMETL
+# PolyMETL — v7
 
-ETL for Polymarket — both **on-chain trade events** (Polygon RPC) and
-**off-chain market metadata** (Gamma API), unified in ClickHouse.
+LLM-driven multi-agent simulation of Polymarket trader behavior,
+calibrated from real on-chain wallet history. **Graduation thesis**
+project; the codebase is organized to be scientifically rigorous and
+reproducible:
 
-> 📚 **Thesis project** — see [`docs/REPRODUCE.md`](docs/REPRODUCE.md)
-> for a complete reproduction guide,
-> [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) for the dataset
-> snapshot used in the thesis, and
-> **[`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md) for what data
-> is actually loaded today and what's still pending**.
-> Analysis SQL lives under [`scripts/sql/`](scripts/sql/) and is
-> catalogued in [`docs/ANALYSES.md`](docs/ANALYSES.md).
+- Every "hyperparameter" is a deterministic function of ClickHouse
+  state — see [`docs/EMPIRICAL_PRIORS.md`](docs/EMPIRICAL_PRIORS.md).
+- LLM `temperature = 0.0` for both persona generation and trader
+  decisions — the only externally-stochastic component is the LLM
+  endpoint itself.
+- Pipeline is laid out as 8 numbered scripts in `scripts/` so the
+  experimental flow is obvious from the directory listing.
 
-## 模块概览
+## The 8-step pipeline
 
-| 模块 | 数据源 | 输出表 |
+| Step | Script | What it does |
 |---|---|---|
-| `src/etl.py` (`python -m src`) | Polygon RPC (链上事件) | `order_filled`, `orders_matched`, `etl_progress` |
-| `src/gamma.py` (`python -m src.gamma`) | Polymarket Gamma API (链下元数据) | `markets` |
-| `src/agent_legacy.py` (`python -m src.agent_legacy`) | LLM (DeepSeek by default) | `agent_predictions` (single-shot probability baseline) |
-| `src/sim/` (`python -m src.sim`) | LLM + CLOB matching engine | `agent_simulations`, `agent_actions`, `agent_fills`, `agent_positions`, `agent_personas`, `market_trade_history` |
+| **0** | `00_ingest_{clob,dataapi,gamma}.py` | Populate ClickHouse from Polymarket APIs (resumable; run once) |
+| **1** | `01_select_target_market.py` | SQL-pick a resolved binary market matching criteria |
+| **2** | `02_build_wallet_features.py` | Aggregate per-wallet pre-event features (SQL only, no live API) |
+| **3** | `03_derive_calibration_priors.py` | Emit `data/priors_<slug>.json` with every empirical hyperparameter |
+| **4** | `04_generate_personas.py` | LLM-generate sanitized persona text per wallet (with bio + display_name from `dataapi_holders`) |
+| **5** | `05_run_simulation.py` | Run multi-agent CLOB sim; persist actions / fills / positions |
+| **6** | `06_analyze_serd.py` | SERD post-hoc validation (Gomez-Cram et al. 2026) |
+| **7** | `07_render_figures.py` | 6 paper figures → `figures/{png,pdf}` |
+| **8** | `08_render_tables.py` | 4 paper tables → `tables/{md,tex}` |
 
-链下 `markets.clob_token_ids` 与链上 `order_filled.maker_asset_id` /
-`taker_asset_id` 是 ERC1155 outcome token id,可直接 JOIN。
+End-to-end commands are in
+[`scripts/README.md`](scripts/README.md) (one-target-market reference
+flow at the bottom).
 
-## 原理
+## Module map
 
-0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e 部署于 33605403
-
-通过polygon的RPC节点，查找所有匹配的 OrderFilled、OrdersMatched
-
-OrderFilled (index_topic_1 bytes32 orderHash, index_topic_2 address maker, index_topic_3 address taker, uint256 makerAssetId, uint256 takerAssetId, uint256 makerAmountFilled, uint256 takerAmountFilled, uint256 fee)
-hash: 0xd0a08e8c493f9c94f29311604c9de1b4e8c8d4c06bd0c789af57f2d65bfec0f6
-
-
-OrdersMatched (index_topic_1 bytes32 takerOrderHash, index_topic_2 address takerOrderMaker, uint256 makerAssetId, uint256 takerAssetId, uint256 makerAmountFilled, uint256 takerAmountFilled)
-
-hash: 0x63bf4d16b7fa898ef4c4b2b6d90fd201e9c56313b65638af6088d149d2ce956c
-
-## 使用说明
-
-- 解析 OrdersMatched、OrderFilled，并写入 ClickHouse。
-- 具备断点续跑能力：每个区间处理完成后更新 `etl_progress`，中断后会从上次 `last_block + 1` 继续。
-
-### 1) 准备环境
-
-推荐使用 uv（更快的 Python 包与运行管理器）。如未安装：`curl -LsSf https://astral.sh/uv/install.sh | sh`。
-
-1. 安装依赖（uv）
-
-```bash
-uv sync
+```
+src/
+├── ingest/       Step 0 — user-authored ETL (clob_api, data_api, gamma_full)
+├── core/         Sim engine: CLOB orderbook, env, lifecycle
+├── agent/        Persona dataclass, decision LLM client
+├── population/   Step 1-4: market selection, wallet features, priors,
+│                            persona generation, build_population
+├── pipeline/     Step 5: runner.py orchestrates one sim run; ClickHouse client
+├── analysis/     Step 6-7: SERD, sim-vs-real comparison, plots
+└── thesis/       Step 8: paper tables (md + LaTeX)
 ```
 
-2. 配置环境变量
+Each package has a one-page `README.md` covering its public API and
+methodological commitments.
 
-复制 `.env.example` 为 `.env`，并设置 Polygon RPC 与 ClickHouse 连接信息：
+## Data layer (ClickHouse)
 
-```bash
-cp .env.example .env
-```
+| Table | Rows | Source / role |
+|---|---|---|
+| `markets_full` | ~146k | Gamma full payload (~125 fields) |
+| `markets_resolved` | (view) | Resolved-only filter on `markets_full` |
+| `clob_markets` | ~1.05M | CLOB `/markets` (tick_size, taker_base_fee, neg_risk, ...) |
+| `clob_orderbook` | ~2.7M | Book snapshots (bootstrap-depth source) |
+| `clob_quotes` | ~103k | Best bid/ask/mid snapshots |
+| `clob_prices_history` | ~10M | Hourly CLOB bars (signal_mu primary source) |
+| `dataapi_trades` | ~42M | Per-trade resolution (signal_mu / wallet feature backbone) |
+| `dataapi_holders` | ~2.9M | Bio + display_name per wallet (persona input) |
+| `dataapi_oi` | ~113k | Open-interest snapshots |
+| `wallet_features` | small | Step 2 output |
+| `agent_simulations`, `agent_actions`, `agent_fills`, `agent_positions`, `agent_personas`, `serd_results` | small | Step 5 + 6 outputs |
 
-必要项：
-- POLYMETL_RPC_URL
+Schema details and row counts live in
+[`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md).
 
-可选项：
-- POLYMETL_EXCHANGE_ADDRESS 仅抓取某个合约（推荐）
-- POLYMETL_START_BLOCK / POLYMETL_END_BLOCK 限定范围
-- POLYMETL_LOG_BATCH_SIZE / POLYMETL_INSERT_BATCH_SIZE 调整批大小
-
-3. ClickHouse
-
-确保 ClickHouse 可用（默认 localhost:9000）。脚本会自动创建数据库与表：
-- order_filled
-- orders_matched
-- etl_progress （保存链、合约与 last_block）
-
-### 2) 运行
-
-运行 ETL（uv）：
+## Setup
 
 ```bash
-uv run -m src --address 0x4bfb41d5b3570defd03c39a9a4d8de6bd8b8982e --start 33605403 --end 33700000
+git clone <repo>
+cd polymetl
+uv sync                                   # installs everything in pyproject.toml
+cp .env.example .env && $EDITOR .env      # fill DEEPSEEK key + CH host
+clickhouse-client --query "CREATE DATABASE IF NOT EXISTS polymetl"
+uv run python -m unittest discover tests  # ~140 tests should pass
 ```
 
-不指定 start/end 时，将从进度表继续；若无进度，将从最新区块往前 10000 个开始。
+## Reproducing the thesis run
 
-建议：
-- 指定 `--address`（或设置 `POLYMETL_EXCHANGE_ADDRESS`）以仅抓取目标合约事件。
-- `--start` 设置为合约部署高度（例如 33605403），避免长时间扫描无事件的历史区块。
+See [`docs/REPRODUCE.md`](docs/REPRODUCE.md). The default reference
+market is `will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster`
+(SpaceX flight test; resolved NO).
 
-### 3) 数据表结构（ClickHouse）
+## Methodological constraints
 
-- order_filled(chain_id, block_number, block_time, tx_hash, log_index, contract_address, order_hash, maker, taker, maker_asset_id, taker_asset_id, maker_amount_filled, taker_amount_filled, fee)
-- orders_matched(chain_id, block_number, block_time, tx_hash, log_index, contract_address, taker_order_hash, taker_order_maker, maker_asset_id, taker_asset_id, maker_amount_filled, taker_amount_filled)
-- etl_progress(chain_id, exchange_address, last_block, updated_at)
+1. **No look-ahead leakage**: every feature query is filtered by
+   `trade_time < market_open_ts`, where `market_open_ts =
+   min(trade_time)` of the target market.
+2. **No role labels in initialization**: `persona_generator.py`
+   strips `FORBIDDEN_LABELS` from BOTH the LLM output AND the
+   wallet's self-described `bio` (via `sanitize_bio`). Roles must
+   emerge from the network in step 6 (SERD), not from initialization.
+3. **No magic constants**: every "hyperparameter" the simulator
+   consumes is in `data/priors_<slug>.json`, derived from SQL. The
+   only constants in `src/` are numerical safeguards (epsilon, price
+   floor/cap) and the explicit rigor commitment of LLM temperature 0.
 
-### 4) 断点续跑原理
+## Documentation
 
-每处理完一个区块区间 [from, to]，即写入进度 (chain_id, exchange_address, to_block, updated_at)。
-下次启动时按以下优先级确定起点：CLI --start > 环境变量 START_BLOCK > 进度表 last_block+1 > latest-10000。
-
-## Gamma puller (off-chain metadata)
-
-`src/gamma.py` 从 `gamma-api.polymarket.com/markets` 抓市场元数据
-(slug、问题文本、outcomes、clobTokenIds、当前赔率、累计成交量、结算时
-间等)写入 ClickHouse `markets` 表。
-
-```bash
-# 当前活跃市场 (~45k)
-uv run python -m src.gamma --closed false
-
-# 历史已结算市场 (~100k,Gamma offset 上限 ~100k 后会优雅退出)
-uv run python -m src.gamma --closed true
-```
-
-`markets` 表字段:`market_id, slug, question, description, category,
-outcomes, clob_token_ids, outcome_prices, volume, end_date, active,
-closed, fetched_at`。引擎为 `ReplacingMergeTree(fetched_at)
-ORDER BY market_id`,查询时建议加 `FINAL` 去重。
-
-完整字段调研:`uv run python scripts/inspect_market_fields.py`。
-
-## v1 baseline: single-shot probability predictor
-
-`src/agent_legacy.py` 让一个 LLM 对每个市场独立预测 YES 概率,写入
-`agent_predictions`。这是论文里的"基线":单一调用、无交互、无群体。
-
-```bash
-uv run python -m src.agent_legacy --limit 50            # 默认只跑已结算市场
-uv run python -m src.agent_legacy --limit 10 --dry-run
-uv run python -m src.agent_legacy --include-active
-```
-
-## v2: multi-agent CLOB simulation (主线)
-
-`src/sim/` 模拟 Polymarket 真实交易所:每个 agent 带着 persona(风险
-偏好、目标、行为偏差),在多个 tick 上下 LIMIT/MARKET 单,撮合引擎
-按 price-time priority 处理订单,最后按结算结果计算 PnL。
-
-```bash
-# 第一次跑要 --reset-schema 建表
-uv run python -m src.sim \
-    --slug will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster \
-    --n-agents 10 --n-ticks 24 --reset-schema
-
-# 不调 API,只看 prompt 和会创建多少调用
-uv run python -m src.sim --slug ... --dry-run
-
-# 不抓真实 CLOB 历史(节省时间)
-uv run python -m src.sim --slug ... --skip-clob
-```
-
-模块组织:
-- `src/sim/orderbook.py` — 限价订单簿(maker/taker、price-time priority)
-- `src/sim/personas.py` — 3 类 persona(SkepticalEngineer / LotteryPlayer / HerdFollower)
-- `src/sim/agent.py` — 单 tick LLM 决策(JSON: order_type / outcome / side / price / size_usd)
-- `src/sim/env.py` — 仿真环境(双 OrderBook + 状态推进 + 结算)
-- `src/sim/clob_history.py` — 拉真实 Polymarket 成交历史用于对比
-- `src/sim/comparison.py` — 仿真 vs 真实的对比指标
-
-设计完整说明见 [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) 的 2026-05-06 章节。
-
-## Tests
-
-```bash
-uv run python -m unittest discover tests -v   # 32 cases
-```
+| File | Purpose |
+|---|---|
+| [`docs/PAPER.md`](docs/PAPER.md) | Thesis paper outline (8 sections) |
+| [`docs/EMPIRICAL_PRIORS.md`](docs/EMPIRICAL_PRIORS.md) | Every prior + its source SQL + the few explicit constants |
+| [`docs/REPRODUCE.md`](docs/REPRODUCE.md) | Step-by-step reproduction recipe |
+| [`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md) | Tables, row counts, freshness |
+| [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) | Run history + audit findings |
+| [`docs/ANALYSES.md`](docs/ANALYSES.md) | Catalogue of analysis SQL |
+| [`docs/V5_VALIDATION.md`](docs/V5_VALIDATION.md) | v5 engine-correctness sprint |

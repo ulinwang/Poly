@@ -16,7 +16,6 @@ from typing import Optional
 
 from ..pipeline.clickhouse import ClickHouse
 from ..pipeline.config import get_settings
-from ..population import trade_history as clob_history
 from ..analysis import comparison
 from ..core.env import make_sim, run_simulation, settle
 from ..agent.persona import Persona
@@ -26,30 +25,43 @@ log = logging.getLogger(__name__)
 
 
 def _load_market(ch: ClickHouse, slug: str) -> dict:
-    row = ch.fetch_market_by_slug(slug)
-    if not row:
-        raise SystemExit(f"no market with slug={slug!r} in markets table")
-    market_id, slug_, question, description, outcomes, clob_token_ids, \
-        outcome_prices, volume, end_date, closed = row
-    resolved = None
-    if closed and outcome_prices:
-        try:
-            yes = float(outcome_prices[0])
-            no = float(outcome_prices[1]) if len(outcome_prices) > 1 else 1.0 - yes
-            if yes >= 0.99 and no <= 0.01:
-                resolved = 1
-            elif no >= 0.99 and yes <= 0.01:
-                resolved = 0
-        except (ValueError, TypeError, IndexError):
-            pass
+    """v7: market identity is the on-chain `condition_id` (hex), not
+    the legacy gamma integer id. Reads from clob_markets +
+    markets_resolved + markets_full."""
+    rows = ch.client.execute(
+        f"""
+        SELECT cm.condition_id, cm.market_slug, cm.question,
+               cm.tokens_json, mf.description, mf.volume_num,
+               mr.end_date, mr.outcomes, mr.winning_idx
+        FROM polymetl.clob_markets cm
+        LEFT JOIN polymetl.markets_resolved mr USING (condition_id)
+        LEFT JOIN polymetl.markets_full mf USING (condition_id)
+        WHERE cm.market_slug = %(slug)s
+        LIMIT 1
+        """,
+        {"slug": slug},
+    )
+    if not rows:
+        raise SystemExit(f"no market with slug={slug!r} in clob_markets")
+    cid, slug_, question, tokens_json, description, volume, \
+        end_date, outcomes, winning_idx = rows[0]
+    tokens = json.loads(tokens_json or "[]")
+    yes = next((t for t in tokens if str(t.get("outcome", "")).lower() == "yes"),
+               tokens[0] if tokens else {})
+    no = next((t for t in tokens if str(t.get("outcome", "")).lower() == "no"),
+              tokens[-1] if tokens else {})
+    clob_token_ids = [str(yes.get("token_id", "")), str(no.get("token_id", ""))]
+    resolved = int(winning_idx) if winning_idx is not None and winning_idx >= 0 else None
     return {
-        "market_id": market_id, "slug": slug_,
-        "question": question, "description": description or "",
-        "outcomes": list(outcomes),
-        "clob_token_ids": list(clob_token_ids),
+        "market_id": cid,    # v7: condition_id is the canonical id
+        "slug": slug_,
+        "question": question or "",
+        "description": description or "",
+        "outcomes": list(outcomes) if outcomes else ["Yes", "No"],
+        "clob_token_ids": clob_token_ids,
         "volume": float(volume or 0.0),
         "end_date": end_date,
-        "closed": bool(closed),
+        "closed": True,    # only resolved markets reach this code path in v7
         "resolved_yes": resolved,
     }
 
@@ -58,10 +70,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--slug", required=True,
                         help="Polymarket market slug to simulate")
-    parser.add_argument("--n-ticks", type=int, default=24)
-    parser.add_argument("--n-agents", type=int, default=10)
-    parser.add_argument("--taker-fee-bps", type=float, default=0.0,
-                        help="taker fee in basis points (100 = 1 percent)")
+    parser.add_argument("--n-ticks", type=int, default=0,
+                        help="0 = use the priors-derived n_ticks (recommended)")
+    parser.add_argument("--n-agents", type=int, default=10,
+                        help="ignored when --population calibrated (full pop used)")
+    parser.add_argument("--taker-fee-bps", type=float, default=-1.0,
+                        help="-1 = use clob_markets.taker_base_fee from priors "
+                             "(recommended); else override in basis points")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-clob", action="store_true",
                         help="don't fetch real trade history")
@@ -80,26 +95,10 @@ def main() -> None:
         help="inject exogenous bootstrap orderbook before tick 0 "
              "(recommended for calibrated populations to avoid empty books)",
     )
-    parser.add_argument(
-        "--n-wallets", type=int, default=20,
-        help="number of wallets to sample when --population=calibrated",
-    )
-    parser.add_argument(
-        "--capital-scale", type=float, default=1.0,
-        help="multiplier on wallet capital (e.g. 0.1 to keep notionals small)",
-    )
-    parser.add_argument(
-        "--fallback-cutoff-days-before-end", type=int, default=None,
-        help="ONLY used as a fallback if market_trade_history is empty after "
-             "trade-history fetch. Default behavior: use first trade timestamp.",
-    )
-    # v4 bootstrap-liquidity tuning
-    parser.add_argument("--seed-spread", type=float, default=0.04,
-                        help="bid-ask spread of seeded orderbook ladder")
-    parser.add_argument("--seed-depth-levels", type=int, default=3,
-                        help="number of price levels per side in seeded book")
-    parser.add_argument("--seed-depth-per-level", type=float, default=100.0,
-                        help="shares of liquidity per level (size; notional ≈ size × price)")
+    # v7: --n-wallets, --capital-scale, --fallback-cutoff-days-before-end
+    # and the --seed-spread / --seed-depth-* knobs were removed. Every
+    # value they previously controlled is now derived from
+    # data/priors_<slug>.json; see docs/EMPIRICAL_PRIORS.md.
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -132,75 +131,9 @@ def main() -> None:
 
     end_date_str = market["end_date"].isoformat() if market["end_date"] else "unknown"
 
-    # ----- Population assembly: legacy personas vs v4 wallet calibration -----
+    # ----- v7: priors-driven calibrated population only -----
     consensus_mu: Optional[float] = None
-    if args.population == "calibrated":
-        from . import wallet_calibration, persona_generator, initialization
-        ch.ensure_wallet_features_schema()
-        # Phase 1: calibrate wallets if not already populated for this market
-        existing = ch.fetch_wallet_features(market["market_id"])
-        if not existing:
-            log.info("no wallet_features yet — running calibration "
-                     "(this hits Polymarket data-api; can take a few minutes)")
-            wallet_calibration.calibrate(
-                slug=market["slug"], n_wallets=args.n_wallets,
-                fallback_cutoff_days_before_end=args.fallback_cutoff_days_before_end,
-            )
-        else:
-            log.info("reusing %s cached wallet_features rows", len(existing))
-        # Phase 2: persona profiles
-        persona_generator.generate_for_market(
-            target_market_id=str(market["market_id"]), force=False, ch=ch,
-        )
-
-        # Pick the YES token by outcome label (not array index) — guards
-        # against markets whose outcomes are listed in NO-first order.
-        outcomes_lower = [str(o).strip().lower() for o in market["outcomes"]]
-        if "yes" in outcomes_lower:
-            yes_idx = outcomes_lower.index("yes")
-        else:
-            log.warning(
-                "market outcomes %r contain no 'Yes' label; defaulting to index 0",
-                market["outcomes"],
-            )
-            yes_idx = 0
-        if not market["clob_token_ids"]:
-            raise SystemExit("market has empty clob_token_ids; cannot calibrate")
-        yes_token_id = market["clob_token_ids"][yes_idx]
-
-        # Compute pre-event consensus once; reuse for both population
-        # build (signal_mu draw) and bootstrap orderbook anchor.
-        consensus_mu = initialization.pre_event_consensus_p(
-            ch, str(market["market_id"]), yes_token_id,
-        )
-        log.info(
-            "pre-event consensus YES = %.3f (will anchor bootstrap book here)",
-            consensus_mu,
-        )
-
-        population = initialization.build_population(
-            target_market_id=str(market["market_id"]),
-            yes_token_id=yes_token_id,
-            consensus_mu=consensus_mu,
-            capital_scale=args.capital_scale, ch=ch,
-        )
-        if not population:
-            raise SystemExit("calibrated population is empty; "
-                             "check wallet_features and wallet_personas.json cache")
-        log.info("calibrated population: %s agents", len(population))
-        sim = make_sim(
-            market_id=market["market_id"], market_slug=market["slug"],
-            question=market["question"], description=market["description"],
-            end_date_str=end_date_str,
-            market_resolved_yes=market["resolved_yes"],
-            population=population, n_ticks=args.n_ticks,
-            taker_fee_bps=args.taker_fee_bps,
-        )
-    else:
-        # v7: hardcoded persona archetypes were dropped. Only the
-        # calibrated path is supported. Run scripts/02..04 first to
-        # build wallet_features + personas cache, then re-invoke with
-        # --population calibrated.
+    if args.population != "calibrated":
         raise SystemExit(
             "v7 requires --population calibrated. The hardcoded "
             "SkepticalEngineer/LotteryPlayer/etc. archetypes were "
@@ -210,41 +143,82 @@ def main() -> None:
             "scripts/04_generate_personas.py first."
         )
 
+    from ..population import wallet_features, persona_generator
+    from ..population.build_population import build_population_from_priors
+    ch.ensure_wallet_features_schema()
+    # Phase 1: ensure wallet_features rows exist (SQL-only, no network).
+    existing = ch.fetch_wallet_features(market["market_id"])
+    if not existing:
+        log.info("no wallet_features yet — running SQL calibration")
+        wallet_features.calibrate(slug=market["slug"])
+    else:
+        log.info("reusing %d cached wallet_features rows", len(existing))
+    # Phase 2: persona profiles (uses bio + display_name from dataapi_holders).
+    persona_generator.generate_for_market(
+        target_market_id=str(market["market_id"]), force=False, ch=ch,
+    )
+
+    # Phase 3: build population from priors JSON (everything data-derived).
+    population, priors = build_population_from_priors(
+        slug=market["slug"], ch=ch,
+    )
+    if not population:
+        raise SystemExit("calibrated population is empty; "
+                         "check wallet_features and wallet_personas.json cache")
+    consensus_mu = float(priors["signal_mu"])
+    n_ticks_eff = int(priors["n_ticks"]) if args.n_ticks <= 0 else args.n_ticks
+    fee_bps_eff = float(priors["taker_fee_bps"]) if args.taker_fee_bps < 0 \
+                  else args.taker_fee_bps
+    log.info(
+        "v7 priors loaded: signal_mu=%.3f n_ticks=%d taker_fee_bps=%.2f "
+        "tick_size=%.4f bootstrap=%.3f/%.3f/%.0f (%s)",
+        consensus_mu, n_ticks_eff, fee_bps_eff, priors["tick_size"],
+        priors["bootstrap"]["anchor_yes"], priors["bootstrap"]["spread"],
+        priors["bootstrap"]["depth_per_level"], priors["bootstrap"]["source"],
+    )
+    log.info("calibrated population: %d agents", len(population))
+    sim = make_sim(
+        market_id=market["market_id"], market_slug=market["slug"],
+        question=market["question"], description=market["description"],
+        end_date_str=end_date_str,
+        market_resolved_yes=market["resolved_yes"],
+        population=population, n_ticks=n_ticks_eff,
+        taker_fee_bps=fee_bps_eff,
+    )
+
     # Optional bootstrap liquidity (v4): seed both books with passive maker.
     # Anchor the YES book at consensus_mu (pre-event VWAP) and the NO book
     # at 1 - consensus_mu so the synthetic environmental MM does not impose
     # a 50/50 prior on a long-shot market.
     if args.seed_liquidity:
-        from ..core.env import seed_orderbook_liquidity
-        if consensus_mu is None:
-            yes_anchor = 0.5
-            log.warning(
-                "--seed-liquidity without calibrated population: anchor=0.5 "
-                "(may be wrong for long-shot markets)"
-            )
-        else:
-            yes_anchor = max(0.05, min(0.95, consensus_mu))
+        from ..core.env import seed_orderbook_liquidity, ENV_MAKER_AGENT_ID
+        # v7: ALL bootstrap params come from data-derived priors.
+        boot = priors["bootstrap"]
+        yes_anchor = max(0.05, min(0.95, float(boot["anchor_yes"])))
         seed_orderbook_liquidity(
             sim,
             yes_anchor=yes_anchor,
             no_anchor=1.0 - yes_anchor,
-            spread=args.seed_spread,
-            depth_levels=args.seed_depth_levels,
-            depth_per_level=args.seed_depth_per_level,
+            spread=float(boot["spread"]),
+            depth_levels=int(boot["depth_levels"]),
+            depth_per_level=float(boot["depth_per_level"]),
         )
-        from ..core.env import ENV_MAKER_AGENT_ID
         log.info(
             "seeded environmental orderbook liquidity "
-            "(agent_id=%d, yes_anchor=%.3f, spread=%.3f, %d×%d)",
-            ENV_MAKER_AGENT_ID, yes_anchor, args.seed_spread,
-            args.seed_depth_levels, int(args.seed_depth_per_level),
+            "(agent_id=%d, yes_anchor=%.3f, spread=%.3f, %d×%.0f, source=%s)",
+            ENV_MAKER_AGENT_ID, yes_anchor, boot["spread"],
+            int(boot["depth_levels"]), float(boot["depth_per_level"]),
+            boot["source"],
         )
 
     log.info("sim_id=%s n_agents=%d n_ticks=%d taker_fee_bps=%.1f",
              sim.sim_id, len(sim.agents), sim.n_ticks, sim.taker_fee_bps)
 
     if args.dry_run:
-        from .agent import AgentSnapshot, MarketSnapshot, build_user_prompt, _build_clob_system_prompt
+        from ..agent.decision import (
+            AgentSnapshot, MarketSnapshot, build_user_prompt,
+            _build_clob_system_prompt,
+        )
         sample_market = MarketSnapshot(
             yes_best_bid=None, yes_best_ask=None, yes_mid=0.5,
             no_best_bid=None, no_best_ask=None, no_mid=0.5,
@@ -320,22 +294,10 @@ def main() -> None:
     ))
     log.info("persisted simulation to ClickHouse: sim_id=%s", sim.sim_id)
 
-    if not args.skip_clob and market["clob_token_ids"]:
-        try:
-            condition_id = clob_history.fetch_condition_id(market["slug"])
-        except Exception as exc:  # noqa: BLE001
-            log.warning("could not resolve conditionId; skipping CLOB fetch: %s", exc)
-            condition_id = ""
-        if condition_id:
-            for token_id in market["clob_token_ids"]:
-                log.info("fetching real CLOB trades for token %s...", token_id[:16] + "...")
-                try:
-                    clob_history.fetch_and_store_trades(
-                        ch, market_id=market["market_id"], token_id=token_id,
-                        condition_id=condition_id,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("CLOB fetch failed for %s: %s", token_id[:16], exc)
+    # v7: dropped the post-sim CLOB-history fetch. dataapi_trades
+    # already covers 110k markets including this one, populated by
+    # `python -m src.ingest.data_api`. The post-hoc real-vs-sim
+    # comparison reads from there directly (see src/analysis/comparison.py).
 
 
 if __name__ == "__main__":

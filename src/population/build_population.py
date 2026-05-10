@@ -12,6 +12,7 @@ Output: list[AgentInit]. The simulator (env.py) consumes this directly.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import random
 import statistics
@@ -60,69 +61,6 @@ def derive_signal_sigma(
     return max(floor, min(cap, sigma))
 
 
-def pre_event_consensus_p(
-    ch: ClickHouse, market_id: str, yes_token_id: str,
-    horizon_hours: float | None = None,
-    allow_missing: bool = False,
-) -> float:
-    """Volume-weighted average YES price over the first `horizon_hours`
-    of trade history for the YES token. Strictly ex-ante for any agent
-    decision — the trades happened, the resolution did not.
-
-    Raises SystemExit if `market_trade_history` is empty for the token
-    (run `clob_history.fetch_and_store_trades` first), unless
-    `allow_missing=True` is set, in which case logs a warning and
-    returns a neutral 0.5 prior. Defaulting to silent 0.5 was a v4
-    audit finding — see docs/EXPERIMENT_LOG.md §audit.
-    """
-    s = get_settings()
-    horizon_hours = s.PRE_EVENT_VWAP_HOURS if horizon_hours is None else horizon_hours
-
-    rows = ch.client.execute(
-        f"""
-        SELECT min(trade_time) AS t0
-        FROM {ch.database}.market_trade_history
-        WHERE market_id = %(mid)s AND token_id = %(tid)s
-        """,
-        {"mid": str(market_id), "tid": str(yes_token_id)},
-    )
-    if not rows or rows[0][0] is None:
-        msg = (
-            f"market_trade_history empty for market={market_id} "
-            f"token={yes_token_id[:12]}... — run "
-            f"clob_history.fetch_and_store_trades(ch, market_id, token_id) first"
-        )
-        if not allow_missing:
-            raise SystemExit(msg)
-        log.warning("%s; falling back to neutral 0.5 prior", msg)
-        return 0.5
-    t0: dt.datetime = rows[0][0]
-    cutoff = t0 + dt.timedelta(hours=horizon_hours)
-    rows = ch.client.execute(
-        f"""
-        SELECT price, size
-        FROM {ch.database}.market_trade_history
-        WHERE market_id = %(mid)s AND token_id = %(tid)s
-              AND trade_time < %(cut)s
-        """,
-        {"mid": str(market_id), "tid": str(yes_token_id), "cut": cutoff},
-    )
-    if not rows:
-        msg = (
-            f"market_trade_history has data for the token but none "
-            f"within the first {horizon_hours}h after market open"
-        )
-        if not allow_missing:
-            raise SystemExit(msg)
-        log.warning("%s; falling back to neutral 0.5 prior", msg)
-        return 0.5
-    weighted = sum(p * sz for p, sz in rows)
-    total_size = sum(sz for _, sz in rows)
-    if total_size <= 0:
-        return statistics.fmean(p for p, _ in rows) if rows else 0.5
-    return max(0.01, min(0.99, weighted / total_size))
-
-
 def draw_private_signal(
     mu: float, sigma: float, rng: random.Random,
 ) -> float:
@@ -148,8 +86,9 @@ def build_population(
 ) -> list[AgentInit]:
     """Materialize the AgentInit population for the calibrated sim.
 
-    `consensus_mu`: if pre-computed by the caller, reuse it; else
-    derive via `pre_event_consensus_p`. The runner passes it in so the
+    `consensus_mu`: REQUIRED — must be supplied by the caller (v7
+    flow loads it from `data/priors_<slug>.json` via
+    `build_population_from_priors`). The runner passes it in so the
     same value can also seed the bootstrap orderbook anchor.
 
     Note: agent.risk_aversion is set to a neutral 0.5 placeholder. The
@@ -177,7 +116,11 @@ def build_population(
     cache = load_cache(cache_path).get(str(target_market_id), {})
 
     if consensus_mu is None:
-        consensus_mu = pre_event_consensus_p(ch, target_market_id, yes_token_id)
+        raise SystemExit(
+            "consensus_mu must be supplied (read it from priors JSON via "
+            "`build_population_from_priors(slug)`); v7 dropped the legacy "
+            "market_trade_history fallback."
+        )
     log.info("pre-event consensus YES p ≈ %.3f", consensus_mu)
 
     rng = random.Random(seed)
@@ -222,3 +165,67 @@ def build_population(
         consensus_mu,
     )
     return population
+
+
+def load_priors(slug: str, data_dir: Path = Path("data")) -> dict:
+    """Load `data/priors_<slug>.json` produced by derive_priors.py."""
+    path = data_dir / f"priors_{slug}.json"
+    if not path.exists():
+        raise SystemExit(
+            f"priors not found at {path}; run "
+            f"`python scripts/03_derive_calibration_priors.py --slug {slug}` first"
+        )
+    return json.loads(path.read_text())
+
+
+def build_population_from_priors(
+    slug: str, seed: int = 0,
+    cache_path: Path = CACHE_PATH,
+    data_dir: Path = Path("data"),
+    ch: Optional[ClickHouse] = None,
+) -> tuple[list[AgentInit], dict]:
+    """v7 entry point: load priors JSON, then build the population
+    using ALL data-derived parameters (no Settings defaults). Returns
+    (population, priors_dict) — runner uses `priors_dict` to also
+    seed the bootstrap orderbook.
+    """
+    priors = load_priors(slug, data_dir=data_dir)
+
+    # Derive empirical capital floor / cap from THIS market's wallet
+    # population (5th and 95th percentiles of capital_usd in
+    # wallet_features). Per v7 plan, no fixed $50/$50 000 defaults.
+    settings = get_settings()
+    if ch is None:
+        ch = ClickHouse(
+            host=settings.CLICKHOUSE_HOST, port=settings.CLICKHOUSE_PORT,
+            user=settings.CLICKHOUSE_USER, password=settings.CLICKHOUSE_PASSWORD,
+            database=settings.CLICKHOUSE_DATABASE,
+        )
+    rows = ch.client.execute(
+        f"""
+        SELECT quantile(0.05)(capital_usd), quantile(0.95)(capital_usd)
+        FROM polymetl.wallet_features FINAL
+        WHERE target_market_id = %(cid)s AND capital_usd > 0
+        """,
+        {"cid": priors["condition_id"]},
+    )
+    cap_floor, cap_cap = rows[0] if rows else (0.0, 0.0)
+    if cap_cap <= cap_floor:
+        # Degenerate distribution (e.g. all wallets equal). Use min/max
+        # bounded sensibly; documented in EMPIRICAL_PRIORS.md.
+        cap_floor, cap_cap = max(1.0, cap_floor), max(cap_floor + 1.0, cap_cap, 100.0)
+    log.info(
+        "empirical capital bounds for %s: floor=$%.0f cap=$%.0f",
+        priors["condition_id"][:18], cap_floor, cap_cap,
+    )
+
+    pop = build_population(
+        target_market_id=priors["condition_id"],
+        yes_token_id=priors["yes_token_id"],
+        consensus_mu=priors["signal_mu"],
+        capital_scale=1.0,
+        capital_floor_usd=float(cap_floor),
+        capital_cap_usd=float(cap_cap),
+        seed=seed, cache_path=cache_path, ch=ch,
+    )
+    return pop, priors

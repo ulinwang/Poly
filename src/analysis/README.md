@@ -8,7 +8,7 @@ either a numerical report (SERD) or a figure (plots).
 |---|---|
 | `serd.py` | Structural-Entropy Role Discovery (Gomez-Cram et al. 2026): build maker→taker net-flow network from `agent_fills`, assign quartile roles, compute ROI per role, head-to-head vs DBSCAN+KMeans baseline |
 | `comparison.py` | Sim-vs-real price-path comparison metrics |
-| `plots.py` | (Stage D) matplotlib + seaborn figure functions, publication-quality |
+| `plots.py` | matplotlib + seaborn — 6 paper figures, headless (`Agg`), saves PNG + PDF to `figures/` |
 
 ## Public API
 
