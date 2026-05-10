@@ -251,6 +251,13 @@ def run_postprocess(
                         getattr(sim, "n_ticks", 0),
                         pnl, priors_summary, serd_report=serd_report)
 
+    # HTML report (self-contained; opens in any browser).
+    try:
+        from viz.report import build_report
+        build_report(out_dir)
+    except Exception as exc:        # noqa: BLE001
+        log.warning("HTML report failed: %s", exc)
+
     return {
         "serd_report": serd_report,
         "role_summary": role_summary,

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ exp_id }} — PolyMETL report</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: #222; max-width: 1100px; margin: 32px auto; padding: 0 24px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 32px 0 12px; border-bottom: 1px solid #e5e5e5; padding-bottom: 4px; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 24px; }
+  .meta code { background: #f4f4f4; padding: 1px 6px; border-radius: 3px; }
+  table.kv { border-collapse: collapse; width: 100%; }
+  table.kv td { padding: 4px 12px 4px 0; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  table.kv td:first-child { color: #666; width: 220px; font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  table.df { border-collapse: collapse; font-size: 12px; }
+  table.df th, table.df td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; }
+  table.df th { background: #fafafa; font-weight: 600; }
+  table.df td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  details { margin-bottom: 4px; }
+  details summary {
+    cursor: pointer; padding: 4px 8px; border-radius: 3px; font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  details summary:hover { background: #f4f4f4; }
+  details[open] summary { background: #eef4ff; }
+  details pre {
+    background: #fafafa; padding: 12px; border-radius: 4px;
+    overflow-x: auto; font-size: 11px; line-height: 1.4;
+    border: 1px solid #eee; max-height: 480px;
+  }
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  .figs figure { margin: 0; }
+  .figs img { max-width: 100%; border: 1px solid #eee; border-radius: 4px; }
+  .figs figcaption { color: #888; font-size: 12px; margin-top: 4px; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; margin-left: 8px;
+  }
+  .badge.yes { background: #ddf4dd; color: #1a4d1a; }
+  .badge.no { background: #f4dcdc; color: #5d1a1a; }
+</style>
+</head>
+<body>
+
+<h1>
+  {{ meta.config.market.slug }}
+  {%- if winning_idx == 0 %}<span class="badge yes">YES</span>
+  {%- elif winning_idx == 1 %}<span class="badge no">NO</span>
+  {%- endif %}
+</h1>
+<div class="meta">
+  exp <code>{{ exp_id }}</code>
+  · git <code>{{ meta.git_sha[:8] if meta.git_sha else "unknown" }}</code>
+  · sim <code>{{ meta.sim_id[:10] if meta.sim_id else "—" }}</code>
+  · started {{ meta.started_at }}
+</div>
+
+<h2>Run summary</h2>
+<table class="kv">
+  <tr><td>config</td><td>{{ meta.config.name }} — {{ meta.config.description.strip().splitlines()[0] if meta.config.description else "" }}</td></tr>
+  <tr><td>n_agents · n_ticks</td><td>{{ meta.n_agents }} · {{ meta.n_ticks }}</td></tr>
+  <tr><td>signal_mu (consensus)</td><td>{{ "%.3f"|format(priors.signal_mu) }}</td></tr>
+  <tr><td>n_ticks (priors-derived)</td><td>{{ priors.n_ticks }}</td></tr>
+  <tr><td>tick_size · taker_fee_bps</td><td>{{ priors.tick_size }} · {{ priors.taker_fee_bps }}</td></tr>
+  <tr><td>bootstrap source</td><td><code>{{ priors.bootstrap_source }}</code></td></tr>
+  {%- if pnl_summary %}
+  <tr><td>pnl mean (live runs only)</td><td>${{ "%+.2f"|format(pnl_summary.mean_pnl) }}</td></tr>
+  {%- endif %}
+  {%- if serd %}
+  <tr><td>SERD ΔROI (top − bottom)</td><td>{{ "%+.4f"|format(serd.delta_roi_serd) }} <span style="color:#888">(monotonic: {{ serd.monotonic }})</span></td></tr>
+  <tr><td>SERD ΔROI vs baseline</td><td>{{ "%+.4f"|format(serd.delta_roi_serd - serd.delta_roi_baseline) }} (DBSCAN+KMeans baseline = {{ "%+.4f"|format(serd.delta_roi_baseline) }})</td></tr>
+  {%- endif %}
+</table>
+
+<h2>YES mid trajectory</h2>
+{{ price_div | safe }}
+
+<div class="grid2">
+  <div>
+    <h2>Per-agent PnL</h2>
+    {{ pnl_div | safe }}
+  </div>
+  <div>
+    <h2>Action mix per tick</h2>
+    {{ action_div | safe }}
+  </div>
+</div>
+
+<h2>Calibrated agents ({{ personas|length }})</h2>
+<table class="df">
+  <thead>
+    <tr>
+      <th>id</th><th>wallet</th><th class="num">capital</th>
+      <th class="num">μ</th><th class="num">σ</th><th>profile (truncated)</th>
+    </tr>
+  </thead>
+  <tbody>
+  {%- for p in personas %}
+    <tr>
+      <td>{{ p.agent_id }}</td>
+      <td><code>{{ p.wallet[:10] if p.wallet else "—" }}</code></td>
+      <td class="num">${{ "%.0f"|format(p.capital_initial) }}</td>
+      <td class="num">{{ "%.2f"|format(p.private_signal_mu) if p.private_signal_mu is not none else "—" }}</td>
+      <td class="num">{{ "%.2f"|format(p.private_signal_sigma) if p.private_signal_sigma is not none else "—" }}</td>
+      <td style="font-size: 11px; color: #555">{{ p.profile_text[:160] }}{% if p.profile_text|length > 160 %}…{% endif %}</td>
+    </tr>
+  {%- endfor %}
+  </tbody>
+</table>
+
+{%- if static_figures %}
+<h2>Static figures</h2>
+<div class="figs">
+  {%- for path in static_figures %}
+  <figure>
+    <img src="figure/{{ path.name }}" alt="{{ path.stem }}">
+    <figcaption>{{ path.stem }}</figcaption>
+  </figure>
+  {%- endfor %}
+</div>
+{%- endif %}
+
+{%- if llm_calls %}
+<h2>LLM calls ({{ llm_calls|length }} total)</h2>
+{%- for call in llm_calls %}
+<details>
+  <summary>tick {{ "%2d"|format(call.tick) }} · agent {{ "%2d"|format(call.agent_id) }} · response {{ call.response|length }}B</summary>
+  <pre>{{ call.response[:6000] }}{% if call.response|length > 6000 %}
+
+…[truncated, full response is {{ call.response|length }} bytes]
+{% endif %}</pre>
+</details>
+{%- endfor %}
+{%- endif %}
+
+<div class="meta" style="margin-top: 48px; text-align: center;">
+  PolyMETL v8.2 · static report (no server) · open <code>report.html</code> in any browser
+</div>
+
+</body>
+</html>

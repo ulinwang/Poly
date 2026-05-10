@@ -21,6 +21,8 @@ dependencies = [
 	"jinja2>=3.1",
 	# v8.1: OpenAI-compatible client for DeepSeek tool calling
 	"openai>=1.40",
+	# v8.2: interactive HTML reports for experiments
+	"plotly>=5.18",
 ]
 
 [build-system]
