@@ -235,7 +235,12 @@ def run_experiment(
             )
         except Exception as exc:        # noqa: BLE001
             log.warning("dry-run postprocess failed: %s", exc)
-        log.info("[dry-run] wrote %s/{meta.json, raw/, analysis/, figure/}",
+        try:
+            from viz.report import build_report
+            build_report(out)
+        except Exception as exc:        # noqa: BLE001
+            log.warning("HTML report failed: %s", exc)
+        log.info("[dry-run] wrote %s/{meta.json, raw/, analysis/, figure/, report.html}",
                  out)
         return exp_id
 
@@ -356,6 +361,13 @@ def run_experiment(
         sim_id=sim.sim_id, n_agents=len(pop), n_ticks=n_ticks,
         git_sha=git_sha, priors_summary=priors_summary,
     )
+
+    # 8. HTML report (reads meta.json + parquet + figures we just wrote).
+    try:
+        from viz.report import build_report
+        build_report(out)
+    except Exception as exc:        # noqa: BLE001
+        log.warning("HTML report failed: %s", exc)
 
     log.info("Experiment %s done; artifacts in %s", exp_id, out)
     return exp_id
