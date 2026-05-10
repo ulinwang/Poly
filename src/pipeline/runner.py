@@ -17,7 +17,7 @@ from typing import Optional
 from data.store.clickhouse import ClickHouse
 from data.store.config import get_settings
 from ..analysis import comparison
-from ..core.env import make_sim, run_simulation, settle
+from environment.env import make_sim, run_simulation, settle
 from agent.personas.persona import Persona
 
 
@@ -192,7 +192,7 @@ def main() -> None:
     # at 1 - consensus_mu so the synthetic environmental MM does not impose
     # a 50/50 prior on a long-shot market.
     if args.seed_liquidity:
-        from ..core.env import seed_orderbook_liquidity, ENV_MAKER_AGENT_ID
+        from environment.env import seed_orderbook_liquidity, ENV_MAKER_AGENT_ID
         # v7: ALL bootstrap params come from data-derived priors.
         boot = priors["bootstrap"]
         yes_anchor = max(0.05, min(0.95, float(boot["anchor_yes"])))

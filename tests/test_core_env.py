@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.core import env
+from environment import env
 from agent.decision import Decision
 from agent.personas.persona import Persona
 from tests._helpers import make_test_personas

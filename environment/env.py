@@ -24,8 +24,11 @@ from typing import Optional
 from agent.decision import (
     AgentSnapshot, Decision, MarketSnapshot, decide,
 )
-from .orderbook import Fill, OrderBook
 from agent.personas.persona import Persona
+from environment.ctf import split as ctf_split, merge as ctf_merge
+from environment.fees import taker_fee
+from environment.orderbook import Fill, OrderBook
+from environment.settlement import settle as _settle
 
 
 log = logging.getLogger(__name__)
@@ -256,22 +259,12 @@ def _execute_decision(
     # SPLIT: pay $X cash -> get X YES + X NO shares (capped by cash).
     # MERGE: destroy X YES + X NO -> get $X cash (capped by min held).
     if decision.order_type == "SPLIT":
-        amount = min(decision.size_usd, agent.cash)
-        if amount <= 0:
-            return [], 0.0, "insufficient_cash"
-        agent.cash -= amount
-        agent.yes_shares += amount
-        agent.no_shares += amount
-        return [], amount, ""
+        pairs, err = ctf_split(agent, decision.size_usd)
+        return [], pairs, err
 
     if decision.order_type == "MERGE":
-        pairs = min(decision.size_usd, agent.yes_shares, agent.no_shares)
-        if pairs <= 0:
-            return [], 0.0, "insufficient_pairs"
-        agent.cash += pairs
-        agent.yes_shares -= pairs
-        agent.no_shares -= pairs
-        return [], pairs, ""
+        pairs, err = ctf_merge(agent, decision.size_usd)
+        return [], pairs, err
 
     side = decision.side  # 'BUY' or 'SELL'
 
@@ -372,10 +365,9 @@ def _execute_decision(
                 maker.no_reserved = max(0.0, maker.no_reserved)
         if taker is not None:
             taker_side = "BUY" if f.maker_side == "SELL" else "SELL"
-            # Polymarket fee spec: fee = C * feeRate * p * (1 - p), where C is
-            # shares and p is fill price. Symmetric around 0.5 and ~0 at
-            # extremes (0.01 / 0.99). Maker pays no fee.
-            fee = f.size * (sim.taker_fee_bps / 10000.0) * f.price * (1.0 - f.price)
+            # Polymarket fee spec lives in environment.fees.taker_fee:
+            # symmetric around 0.5, ~0 at the 0.01/0.99 extremes.
+            fee = taker_fee(f.size, f.price, sim.taker_fee_bps)
             if taker_side == "BUY":
                 taker.cash -= notional + fee
                 _adjust_shares(taker, decision.outcome, +f.size)
@@ -479,16 +471,134 @@ def run_simulation(
 
 
 def settle(sim: Simulation) -> dict[int, float]:
-    if sim.market_resolved_yes is None:
-        return {}
-    yes_payoff = 1.0 if sim.market_resolved_yes == 1 else 0.0
-    no_payoff = 1.0 - yes_payoff
-    pnl: dict[int, float] = {}
-    for agent in sim.agents:
-        final_value = (
-            agent.cash
-            + agent.yes_shares * yes_payoff
-            + agent.no_shares * no_payoff
+    """Re-export of `environment.settlement.settle` so existing
+    callers `from environment.env import settle` keep working."""
+    return _settle(sim)
+
+
+# ============================================================
+# Gym-style facade — v8.
+# ============================================================
+
+class PolyEnv:
+    """Gym-ish wrapper over the imperative simulator.
+
+    Lifecycle:
+        env = PolyEnv(market_meta=..., population=...)
+        obs = env.reset(seed=0)            # dict[agent_id, (Market, Agent)]
+        for tick in range(env.n_ticks):
+            actions = {agent_id: Decision(...), ...}    # one per agent
+            obs, info = env.step(actions)
+        pnl = env.settle()                 # dict[agent_id, float]
+
+    The internal `Simulation` is exposed via `env.state` (read-only
+    snapshot) for testing / persistence / SERD network construction.
+    Action dispatch reuses `_execute_decision`; v9 will collapse that
+    into the per-tool dispatch in `environment.tools/*`.
+    """
+
+    def __init__(
+        self,
+        *,
+        market_meta: dict,
+        population: list,
+        n_ticks: int,
+        taker_fee_bps: float = 0.0,
+        sim_id: Optional[str] = None,
+        observer: str = "quote_only",
+    ):
+        self._market_meta = market_meta
+        self._population = population
+        self.n_ticks = int(n_ticks)
+        self.taker_fee_bps = float(taker_fee_bps)
+        self._sim_id = sim_id
+        self._observer = observer
+        self.sim: Optional[Simulation] = None
+        self._tick = 0
+        self._rng: Optional[random.Random] = None
+
+    def reset(self, seed: int = 0) -> dict:
+        """Build a fresh Simulation. Returns initial observations
+        keyed by agent_id."""
+        self.sim = make_sim(
+            market_id=self._market_meta["condition_id"],
+            market_slug=self._market_meta.get("slug", ""),
+            question=self._market_meta.get("question", ""),
+            description=self._market_meta.get("description", ""),
+            end_date_str=self._market_meta.get("end_date_iso", ""),
+            market_resolved_yes=self._market_meta.get("winning_idx"),
+            population=self._population,
+            n_ticks=self.n_ticks, taker_fee_bps=self.taker_fee_bps,
+            sim_id=self._sim_id,
         )
-        pnl[agent.agent_id] = final_value - agent.persona.capital_initial
-    return pnl
+        # Reset auxiliary clocks
+        setattr(self.sim, "_ticks_remaining", self.n_ticks)
+        self._tick = 0
+        self._rng = random.Random(seed)
+        return self._observations()
+
+    def step(self, actions: dict[int, Decision]) -> tuple[dict, dict]:
+        """Apply one tick of `{agent_id: Decision}`. Returns
+        (observations, info)."""
+        if self.sim is None:
+            raise RuntimeError("call .reset(seed) before .step()")
+        sim = self.sim
+        sim.yes_mid_history.append(sim.yes_mid)
+        sim.no_mid_history.append(sim.no_mid)
+        setattr(sim, "_ticks_remaining", self.n_ticks - self._tick)
+
+        order_idx = list(range(len(sim.agents)))
+        self._rng.shuffle(order_idx)              # type: ignore[union-attr]
+        n_fills = 0
+        for ai in order_idx:
+            agent = sim.agents[ai]
+            decision = actions.get(agent.agent_id)
+            if decision is None:
+                continue
+            yes_mid_before = sim.yes_mid
+            fills, shares_taken, exec_err = _execute_decision(
+                sim, agent, decision, self._tick,
+            )
+            yes_mid_after = sim.yes_mid
+            n_fills += len(fills)
+            sim.actions_log.append((
+                sim.sim_id, self._tick, agent.agent_id,
+                decision.order_type, decision.outcome, decision.side,
+                decision.price, decision.size_usd,
+                yes_mid_before, yes_mid_after, shares_taken,
+                len(fills),
+                decision.reasoning, decision.raw_response,
+                decision.api_latency_ms,
+                decision.api_error or exec_err, dt.datetime.utcnow(),
+            ))
+
+        for agent in sim.agents:
+            unrealized = (
+                agent.yes_shares * sim.yes_mid
+                + agent.no_shares * sim.no_mid
+            )
+            sim.positions_log.append((
+                sim.sim_id, self._tick, agent.agent_id,
+                agent.yes_shares, agent.no_shares, agent.cash,
+                0.0, unrealized,
+            ))
+        self._tick += 1
+        return self._observations(), {"n_fills": n_fills, "tick": self._tick}
+
+    def _observations(self) -> dict:
+        from environment.tools.observe import observe as obs_fn
+        return {
+            a.agent_id: obs_fn(self.sim, a.agent_id, observer=self._observer)
+            for a in self.sim.agents
+        }
+
+    @property
+    def state(self) -> Simulation:
+        if self.sim is None:
+            raise RuntimeError("env not yet reset; state unavailable")
+        return self.sim
+
+    def settle(self) -> dict[int, float]:
+        if self.sim is None:
+            raise RuntimeError("env not yet reset")
+        return _settle(self.sim)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.core.orderbook import OrderBook
+from environment.orderbook import OrderBook
 
 
 class OrderBookBasicsTest(unittest.TestCase):
