@@ -5,7 +5,7 @@ priors JSON. Each `render_*` function returns a (markdown, latex)
 tuple; `main()` writes them to `tables/`.
 
 CLI:
-    python -m src.thesis.tables --slug <slug> --sim-id <hex>
+    python -m experiments.analysis.tables --slug <slug> --sim-id <hex>
 """
 from __future__ import annotations
 

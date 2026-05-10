@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from src.thesis import tables
+from experiments.analysis import tables
 
 
 class _StubCH:

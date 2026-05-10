@@ -1,0 +1,37 @@
+name: calibrated_with_holders
+description: |
+  Variant of the baseline that seeds each agent with their REAL on-chain
+  starting position (from dataapi_holders). Useful for comparing
+  cash-only vs inventory-anchored populations.
+
+market:
+  slug: will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+  asof: market_open
+
+agent:
+  population: calibrated
+  features: [wallet, market, temporal]
+  persona_recipe:
+    use_bio: true
+    sanitize_labels: true
+    llm_temperature: 0.0
+  n_agents: null
+  seed: 0
+
+environment:
+  observer: quote_only
+  seeder: from_holders
+  fees_override_bps: null
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry:
+    max_attempts: 3
+    backoff_base_s: 2.0
+
+output:
+  dual_write_clickhouse: true
+  parquet_compression: zstd
+  output_dir: output

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.analysis import serd
+from experiments.analysis import serd
 
 
 class NetworkConstructionTest(unittest.TestCase):

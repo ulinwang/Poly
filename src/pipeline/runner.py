@@ -16,7 +16,7 @@ from typing import Optional
 
 from data.store.clickhouse import ClickHouse
 from data.store.config import get_settings
-from ..analysis import comparison
+from experiments.analysis import calibration as comparison
 from environment.env import make_sim, run_simulation, settle
 from agent.personas.persona import Persona
 

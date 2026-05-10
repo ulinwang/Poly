@@ -1,0 +1,36 @@
+name: baseline
+description: |
+  v7 reference reproduction on the SpaceX Starship Flight Test 11 market.
+  All values empirically derived; LLM temperature pinned to 0.
+
+market:
+  slug: will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+  asof: market_open
+
+agent:
+  population: calibrated
+  features: [wallet, market, temporal]
+  persona_recipe:
+    use_bio: true
+    sanitize_labels: true
+    llm_temperature: 0.0
+  n_agents: null      # null = every wallet with cached profile
+  seed: 0
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: null   # null = use clob_markets.taker_base_fee from priors
+
+llm:
+  model: null         # null = .env's POLYMETL_DEEPSEEK_MODEL
+  temperature: 0.0
+  timeout_s: 120.0
+  retry:
+    max_attempts: 3
+    backoff_base_s: 2.0
+
+output:
+  dual_write_clickhouse: true
+  parquet_compression: zstd
+  output_dir: output

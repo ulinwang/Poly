@@ -8,8 +8,8 @@ Read-only post-hoc plotting. Sources:
   * data/priors_<slug>.json — calibration metadata for figure annotations
 
 CLI:
-    python -m src.analysis.plots --output-dir figures/
-    python -m src.analysis.plots --slug <slug> --sim-id <hex>
+    python -m experiments.plots --output-dir figures/
+    python -m experiments.plots --slug <slug> --sim-id <hex>
 
 Each figure function returns the saved Path so tests can assert
 existence without inspecting pixel content. We DO NOT show() — these
@@ -297,7 +297,7 @@ def main() -> None:
     # SERD figures: read from analysis.serd if a sim_id is supplied,
     # otherwise render placeholders.
     if args.sim_id:
-        from .serd import analyze_sim, ROLES
+        from experiments.analysis.serd import analyze_sim, ROLES
         try:
             report = analyze_sim(args.sim_id, ch=ch)
             roles_data = [
