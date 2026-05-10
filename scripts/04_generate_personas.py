@@ -25,5 +25,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 4 of 8 — Generate personas via DeepSeek\n")
-    from src.population.persona_generator import main
+    from agent.personas.calibrated import main
     main()

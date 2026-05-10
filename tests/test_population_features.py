@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import unittest
 
-from src.population.wallet_features import compute_features
+from agent.features.wallet import compute_features
 
 
 def _t(cid, oidx, p, s, t=None):

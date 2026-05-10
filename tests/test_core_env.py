@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 
 from src.core import env
-from src.agent.decision import Decision
-from src.agent.persona import Persona
+from agent.decision import Decision
+from agent.personas.persona import Persona
 from tests._helpers import make_test_personas
 
 
@@ -274,7 +274,7 @@ class SettlementTest(unittest.TestCase):
 
 class V4PopulationTest(unittest.TestCase):
     def test_make_sim_accepts_population(self):
-        from src.population.build_population import AgentInit
+        from agent.factory import AgentInit
         pop = [
             AgentInit(
                 wallet_addr="0xabc", persona_type="Calibrated",

@@ -1,0 +1,17 @@
+{%- if signal_block -%}
+{{ signal_block }}
+
+{% endif -%}
+Order books right now:
+  YES book — bid {{ yes_bid }}, ask {{ yes_ask }}, mid {{ "%.3f"|format(yes_mid) }}
+  NO book  — bid {{ no_bid }}, ask {{ no_ask }}, mid {{ "%.3f"|format(no_mid) }}
+  YES mid history (last 3 ticks): {{ hist_str }}
+  Time remaining: {{ "%.0f"|format(time_remaining_pct * 100) }}% of market lifetime
+
+Your portfolio:
+  Cash: ${{ "%.2f"|format(cash) }}
+  YES shares: {{ "%.2f"|format(yes_shares) }}
+  NO shares:  {{ "%.2f"|format(no_shares) }}
+  Resting orders open: {{ n_resting_orders }}
+
+What is your action this tick? Reply with the JSON action object.

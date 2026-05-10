@@ -6,7 +6,7 @@ from `src.agent.persona`.
 """
 from __future__ import annotations
 
-from src.agent.persona import Persona
+from agent.personas.persona import Persona
 
 
 def make_test_personas(n: int) -> list[Persona]:

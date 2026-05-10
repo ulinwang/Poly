@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 import unittest
 
-from src.population import build_population as init
+from agent import factory as init
 
 
 class SignalSigmaTest(unittest.TestCase):

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import unittest
 
-from src.agent import persona as persona_mod
-from src.agent.decision import round_to_tick
+from agent.personas import persona as persona_mod
+from agent.decision import round_to_tick
 
 
 class PersonaDataclassTest(unittest.TestCase):
@@ -32,22 +32,32 @@ class PersonaDataclassTest(unittest.TestCase):
 
 
 class PromptTest(unittest.TestCase):
-    def test_build_system_prompt_includes_question_and_persona(self):
+    def test_build_clob_system_prompt_includes_question_and_persona(self):
+        from agent.prompt.builder import build_clob_system_prompt
         p = persona_mod.Persona(
-            persona_type="Calibrated", risk_aversion=0.5,
+            persona_type="HandCoded", risk_aversion=0.5,
             capital_initial=1000.0,
             profile_text="thoughtful, evidence-based trader",
         )
-        out = persona_mod.build_system_prompt(
+        out = build_clob_system_prompt(
             p, "Will X happen?", "Rules.", "2026-12-31",
         )
         self.assertIn("evidence-based", out)
         self.assertIn("Will X happen?", out)
         self.assertIn("2026-12-31", out)
+        # Non-Calibrated persona keeps the risk_aversion line.
+        self.assertIn("Risk aversion", out)
+
+    def test_calibrated_persona_omits_risk_aversion_line(self):
+        from agent.prompt.builder import build_clob_system_prompt
+        p = persona_mod.Persona("Calibrated", 0.5, 1000.0, "p")
+        out = build_clob_system_prompt(p, "q?", "Rules.", "2026-01-01")
+        self.assertNotIn("Risk aversion", out)
 
     def test_long_description_truncated(self):
+        from agent.prompt.builder import build_clob_system_prompt
         p = persona_mod.Persona("Calibrated", 0.5, 1000.0, "p")
-        out = persona_mod.build_system_prompt(p, "q?", "x" * 5000, "2026-01-01")
+        out = build_clob_system_prompt(p, "q?", "x" * 5000, "2026-01-01")
         self.assertIn("[truncated]", out)
 
 

@@ -1,16 +1,14 @@
-"""
-v4 Phase 2 — Generate behavioral profile_text from each wallet's
-pre-event features. Uses a one-shot DeepSeek call per wallet, cached
-to disk so repeated sims do not re-pay for LLM calls.
+"""LLM-generated calibrated personas.
 
-Methodological constraint: the prompt EXPLICITLY forbids role-typing
-words (no "market maker", "whale", "novice", "expert", "apex", "prey",
-etc.). This preserves the SERD validation principle that roles must
-emerge from the network, not from initialization labels.
+For each wallet in `wallet_features` for the target market, call
+DeepSeek once with sanitized bio + features → 3-4 sentence
+profile_text. Cached to `data/wallet_personas.json`.
 
-Usage:
-    uv run python -m src.sim.persona_generator \\
-        --target-market-id 581883 [--force]
+Methodological constraint: forbidden role-typing words ("market
+maker", "whale", "predator", etc.) are stripped from BOTH the LLM
+output AND the wallet's self-described bio (via `sanitize_bio`)
+BEFORE either reaches the LLM. SERD validation requires roles to
+emerge from the network, not from initialization.
 """
 from __future__ import annotations
 
@@ -18,25 +16,26 @@ import argparse
 import json
 import logging
 import re
-import os
 from pathlib import Path
 from typing import Optional
 
-from ..agent.llm_client import call_deepseek
+from agent.decision.llm import call_deepseek
+from data.query.holders import get_bios
+from data.query.wallets import list_wallets_in_market
 from data.store.clickhouse import ClickHouse
 from data.store.config import get_settings
 
 
 CACHE_PATH = Path("data/wallet_personas.json")
 
-# Words a profile must NOT contain. Verified post-generation.
 FORBIDDEN_LABELS = (
     "market maker", "market-maker", "whale", "novice", "expert",
     "apex", "prey", "predator", "pro trader", "amateur", "shark",
     "sophisticated investor",
 )
-_FORBIDDEN_RE = re.compile("|".join(re.escape(w) for w in FORBIDDEN_LABELS), re.IGNORECASE)
-
+_FORBIDDEN_RE = re.compile(
+    "|".join(re.escape(w) for w in FORBIDDEN_LABELS), re.IGNORECASE,
+)
 _BIO_REDACTED = "[redacted role label]"
 
 
@@ -51,35 +50,23 @@ SYSTEM_PROMPT = (
     "and accuracy track record using neutral language."
 )
 
-
 log = logging.getLogger(__name__)
 
 
 def sanitize_bio(bio: str) -> str:
-    """Apply the same FORBIDDEN_LABELS regex to the wallet's
-    self-described bio BEFORE it reaches the LLM. Without this,
-    SERD validation would be contaminated: a wallet whose bio
-    literally says 'I am a market maker' would seed the LLM with
-    the role label SERD is supposed to discover post-hoc.
-
-    Returns the cleaned bio (empty string if `bio` was empty/None
-    or became all-redacted)."""
+    """Redact forbidden role labels from a wallet bio BEFORE the LLM
+    sees it. Empty/None → empty string."""
     if not bio:
         return ""
-    cleaned = _FORBIDDEN_RE.sub(_BIO_REDACTED, bio).strip()
-    return cleaned
+    return _FORBIDDEN_RE.sub(_BIO_REDACTED, bio).strip()
+
+
+def _strip_role_labels(text: str) -> str:
+    """Defense against label leakage in LLM output."""
+    return _FORBIDDEN_RE.sub("this trader", text).strip()
 
 
 def _user_prompt(features: dict, bio: str = "", display_name: str = "") -> str:
-    """Build the wallet-features summary for the LLM. We intentionally
-    OMIT `maker_ratio` and `avg_holding_h` because the Polymarket
-    data-api does not expose either reliably (see wallet_features.py
-    docstring). Including them as the 0.0 placeholder would lead the
-    persona LLM to fabricate false 'facts' like 'you are 100% taker'.
-
-    `bio` and `display_name` come from `dataapi_holders` and are
-    expected to be ALREADY sanitized via `sanitize_bio()`. They are
-    optional — empty strings are acceptable."""
     cap = features["capital_usd"]
     tx = features["tx_count"]
     div = features["asset_diversity"]
@@ -109,59 +96,28 @@ def _user_prompt(features: dict, bio: str = "", display_name: str = "") -> str:
     return "\n".join(parts)
 
 
-def _strip_role_labels(text: str) -> str:
-    """Light defense against label leakage. If the LLM did slip a
-    forbidden label in, redact it by replacing with the neutral phrase
-    'this trader'. Caller still gets a regex check for QA."""
-    return _FORBIDDEN_RE.sub("this trader", text).strip()
-
-
 def generate_profile(
     features: dict,
     api_key: str, base_url: str, model: str,
     bio: str = "", display_name: str = "",
     timeout: float = 120.0, call_fn=call_deepseek,
 ) -> tuple[str, bool]:
-    """Returns (profile_text, ok). ok=False if generation failed or the
-    text contains a forbidden label after cleanup. `bio` and
-    `display_name` are optional inputs from dataapi_holders, which
-    must be sanitized via `sanitize_bio` before being passed in."""
+    """Returns (profile_text, ok). ok=False on failure or unredacted
+    forbidden labels remaining after cleanup."""
     try:
         result = call_fn(
             base_url=base_url, api_key=api_key, model=model,
             system_prompt=SYSTEM_PROMPT,
             user_prompt=_user_prompt(features, bio=bio, display_name=display_name),
-            # v7 reproducibility: temperature pinned to 0 for personas.
-            # Documented in EMPIRICAL_PRIORS.md — this is an explicit
-            # rigor commitment, not a free hyperparameter.
+            # v7: temperature pinned to 0 — see docs/EMPIRICAL_PRIORS.md.
             temperature=0.0, timeout=timeout,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:                # noqa: BLE001
         return f"[error: {exc}]", False
     raw = result.get("text", "").strip()
     cleaned = _strip_role_labels(raw)
     ok = not _FORBIDDEN_RE.search(cleaned)
     return cleaned, ok
-
-
-def fetch_bios(ch: ClickHouse, condition_id: str) -> dict[str, dict]:
-    """Pull (display_name, bio) for every wallet that holds the
-    target market's tokens. Returns {wallet: {"display_name", "bio"}};
-    bios are NOT yet sanitized — caller must `sanitize_bio()` before
-    passing into the prompt."""
-    rows = ch.client.execute(
-        f"""
-        SELECT proxy_wallet, any(display_name), any(bio)
-        FROM polymetl.dataapi_holders FINAL
-        WHERE condition_id = %(cid)s
-        GROUP BY proxy_wallet
-        """,
-        {"cid": condition_id},
-    )
-    return {
-        w: {"display_name": (dn or "").strip(), "bio": (bio or "").strip()}
-        for w, dn, bio in rows
-    }
 
 
 def load_cache(path: Path = CACHE_PATH) -> dict:
@@ -182,10 +138,13 @@ def generate_for_market(
     target_market_id: str, force: bool = False,
     cache_path: Path = CACHE_PATH, ch: Optional[ClickHouse] = None,
 ) -> int:
+    """Top-level: fetch wallet_features rows + bios, call LLM per
+    wallet, persist to JSON cache. Returns number of new profiles
+    generated."""
     settings = get_settings()
     if not settings.DEEPSEEK_API_KEY:
         raise SystemExit(
-            "POLYMETL_DEEPSEEK_API_KEY required (in .env) for persona generation"
+            "POLYMETL_DEEPSEEK_API_KEY required for persona generation"
         )
     if ch is None:
         ch = ClickHouse(
@@ -195,12 +154,15 @@ def generate_for_market(
         )
 
     rows = ch.fetch_wallet_features(target_market_id)
-    log.info("loaded %s wallet feature rows for market %s", len(rows), target_market_id)
+    log.info("loaded %d wallet_features rows for %s", len(rows), target_market_id)
     if not rows:
-        log.warning("no wallet_features rows; run scripts/02_build_wallet_features.py first")
+        log.warning(
+            "no wallet_features rows; build features first via "
+            "agent.features.wallet.calibrate(slug)"
+        )
         return 0
 
-    bios = fetch_bios(ch, target_market_id)
+    bios = get_bios(target_market_id, ch=ch)
     log.info("loaded bio/display_name for %d holders", len(bios))
 
     cache = load_cache(cache_path)
@@ -233,19 +195,22 @@ def generate_for_market(
         }
         n_generated += 1
         log.info(
-            "[%s/%s] %s ok=%s len=%d bio=%s",
+            "[%d/%d] %s ok=%s len=%d bio=%s",
             n_generated, len(rows), wallet[:10], ok, len(text),
             "yes" if bio else "no",
         )
     save_cache(cache, cache_path)
-    log.info("done; %s profiles generated/refreshed for market %s",
-             n_generated, target_market_id)
+    log.info(
+        "done; %d profiles generated/refreshed for %s",
+        n_generated, target_market_id,
+    )
     return n_generated
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target-market-id", required=True)
+    parser.add_argument("--target-market-id", required=True,
+                        help="condition_id (hex)")
     parser.add_argument("--force", action="store_true",
                         help="re-generate even if cached")
     parser.add_argument("--cache-path", default=str(CACHE_PATH))

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.population import persona_generator as pg
+from agent.personas import calibrated as pg
 
 
 SAMPLE_FEATURES = {

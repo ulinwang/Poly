@@ -18,7 +18,7 @@ from data.store.clickhouse import ClickHouse
 from data.store.config import get_settings
 from ..analysis import comparison
 from ..core.env import make_sim, run_simulation, settle
-from ..agent.persona import Persona
+from agent.personas.persona import Persona
 
 
 log = logging.getLogger(__name__)
@@ -143,8 +143,9 @@ def main() -> None:
             "scripts/04_generate_personas.py first."
         )
 
-    from ..population import wallet_features, persona_generator
-    from ..population.build_population import build_population_from_priors
+    from agent.features import wallet as wallet_features
+    from agent.personas import calibrated as persona_generator
+    from agent.factory import init_agents
     ch.ensure_wallet_features_schema()
     # Phase 1: ensure wallet_features rows exist (SQL-only, no network).
     existing = ch.fetch_wallet_features(market["market_id"])
@@ -159,7 +160,7 @@ def main() -> None:
     )
 
     # Phase 3: build population from priors JSON (everything data-derived).
-    population, priors = build_population_from_priors(
+    population, priors = init_agents(
         slug=market["slug"], ch=ch,
     )
     if not population:
@@ -215,7 +216,7 @@ def main() -> None:
              sim.sim_id, len(sim.agents), sim.n_ticks, sim.taker_fee_bps)
 
     if args.dry_run:
-        from ..agent.decision import (
+        from agent.decision import (
             AgentSnapshot, MarketSnapshot, build_user_prompt,
             _build_clob_system_prompt,
         )

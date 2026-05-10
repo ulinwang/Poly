@@ -1,8 +1,8 @@
 """DeepSeek chat-completions client.
 
 Single function `call_deepseek` consumed by both the per-tick agent
-decision flow (`src.agent.decision`) and the persona text generator
-(`src.population.persona_generator`). Stateless and synchronous.
+decision flow (`agent.decision.runtime`) and the persona text generator
+(`agent.personas.calibrated`). Stateless and synchronous.
 
 Why this is its own module:
 - Decouples the LLM call from any specific prompt or persona logic.

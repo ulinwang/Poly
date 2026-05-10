@@ -21,11 +21,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-from ..agent.decision import (
+from agent.decision import (
     AgentSnapshot, Decision, MarketSnapshot, decide,
 )
 from .orderbook import Fill, OrderBook
-from ..agent.persona import Persona
+from agent.personas.persona import Persona
 
 
 log = logging.getLogger(__name__)

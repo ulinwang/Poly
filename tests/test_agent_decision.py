@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.agent.decision import parse_decision, round_to_tick
+from agent.decision import parse_decision, round_to_tick
 
 
 class ParseSplitMergeTest(unittest.TestCase):

@@ -23,5 +23,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 2 of 8 — Build wallet features\n")
-    from src.population.wallet_features import main
+    from agent.features.wallet import main
     main()

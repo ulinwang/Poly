@@ -26,5 +26,5 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 if __name__ == "__main__":
     print("Step 3 of 8 — Derive calibration priors\n")
-    from src.population.derive_priors import main
+    from agent.features.market import main
     main()
