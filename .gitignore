@@ -18,8 +18,9 @@ wheels/
 /data/personas_*.json
 /data/runs/
 
-# v8 per-experiment artifacts
-/output/
+# v8 per-experiment artifacts (track the dir + .gitkeep, ignore subtrees)
+/output/*
+!/output/.gitkeep
 
 # v7-era artifact directories (kept for backwards compat)
 /figures/

@@ -42,8 +42,9 @@ from environment.seeders.from_clob_history import seed as seed_from_clob
 from environment.seeders.from_holders import seed as seed_from_holders
 from experiments.config import ExperimentConfig, parse_config
 from experiments.parquet_sink import (
-    PERSONA_COLUMNS, dump_simulation,
+    PERSONA_COLUMNS, append_llm_call, dump_simulation,
 )
+from experiments.postprocess import run_postprocess
 
 
 log = logging.getLogger(__name__)
@@ -208,7 +209,33 @@ def run_experiment(
                 "bootstrap_source": priors["bootstrap"]["source"],
             },
         )
-        log.info("[dry-run] wrote %s/{meta.json, raw/agent_personas.parquet}",
+        # Post-process even in dry-run: analysis/* + figure/* readable.
+        priors_summary = {
+            "signal_mu": priors["signal_mu"],
+            "n_ticks": n_ticks,
+            "tick_size": priors["tick_size"],
+            "taker_fee_bps": priors["taker_fee_bps"],
+            "bootstrap_source": priors["bootstrap"]["source"],
+            "dry_run": True,
+        }
+        pp_ch = None
+        if config.output.dual_write_clickhouse:
+            from data.store.clickhouse import ClickHouse
+            pp_ch = ClickHouse(
+                host=settings.CLICKHOUSE_HOST, port=settings.CLICKHOUSE_PORT,
+                user=settings.CLICKHOUSE_USER, password=settings.CLICKHOUSE_PASSWORD,
+                database=settings.CLICKHOUSE_DATABASE,
+            )
+        try:
+            run_postprocess(
+                out_dir=out, slug=config.market.slug, sim=sim, pnl={},
+                priors_summary=priors_summary,
+                compression=config.output.parquet_compression,
+                ch=pp_ch, want_serd=False,    # no fills yet → skip SERD
+            )
+        except Exception as exc:        # noqa: BLE001
+            log.warning("dry-run postprocess failed: %s", exc)
+        log.info("[dry-run] wrote %s/{meta.json, raw/, analysis/, figure/}",
                  out)
         return exp_id
 
@@ -239,6 +266,15 @@ def run_experiment(
                 max_attempts=config.llm.retry.max_attempts,
             )
             actions[aid] = decision
+            # Persist full LLM in/out for reproducibility (raw response
+            # is in decision.raw_response; the prompts are reproducible
+            # from persona + state, but capturing them once is cheap).
+            append_llm_call(
+                out, sim.sim_id, tick, aid,
+                system_prompt="(reproducible from persona + clob_system.j2)",
+                user_prompt="(reproducible from MarketSnapshot + AgentSnapshot)",
+                response=decision.raw_response,
+            )
         obs, info = env.step(actions)
         log.info("  tick=%d/%d fills=%d yes_mid=%.3f",
                  tick + 1, n_ticks, info["n_fills"], sim.yes_mid)
@@ -284,21 +320,41 @@ def run_experiment(
         ))
         log.info("  ClickHouse dual-write: sim_id=%s", sim.sim_id)
 
-    # 6. meta.json
+    # 6. Post-process: analysis/* + figure/* + summary.json
+    priors_summary = {
+        "signal_mu": priors["signal_mu"],
+        "n_ticks": n_ticks,
+        "tick_size": priors["tick_size"],
+        "taker_fee_bps": priors["taker_fee_bps"],
+        "bootstrap_source": priors["bootstrap"]["source"],
+        "pnl_summary": {
+            "n_agents": len(pnl),
+            "mean_pnl": (sum(pnl.values()) / len(pnl)) if pnl else 0.0,
+        },
+    }
+    pp_ch = None
+    if config.output.dual_write_clickhouse:
+        from data.store.clickhouse import ClickHouse
+        pp_ch = ClickHouse(
+            host=settings.CLICKHOUSE_HOST, port=settings.CLICKHOUSE_PORT,
+            user=settings.CLICKHOUSE_USER, password=settings.CLICKHOUSE_PASSWORD,
+            database=settings.CLICKHOUSE_DATABASE,
+        )
+    try:
+        run_postprocess(
+            out_dir=out, slug=config.market.slug, sim=sim, pnl=pnl,
+            priors_summary=priors_summary,
+            compression=config.output.parquet_compression,
+            ch=pp_ch, want_serd=True,
+        )
+    except Exception as exc:        # noqa: BLE001
+        log.warning("post-process step failed: %s — meta.json + raw/ still written", exc)
+
+    # 7. meta.json
     write_meta(
         out, exp_id, config, started_at, ended_at,
         sim_id=sim.sim_id, n_agents=len(pop), n_ticks=n_ticks,
-        git_sha=git_sha, priors_summary={
-            "signal_mu": priors["signal_mu"],
-            "n_ticks": n_ticks,
-            "tick_size": priors["tick_size"],
-            "taker_fee_bps": priors["taker_fee_bps"],
-            "bootstrap_source": priors["bootstrap"]["source"],
-            "pnl_summary": {
-                "n_agents": len(pnl),
-                "mean_pnl": (sum(pnl.values()) / len(pnl)) if pnl else 0.0,
-            },
-        },
+        git_sha=git_sha, priors_summary=priors_summary,
     )
 
     log.info("Experiment %s done; artifacts in %s", exp_id, out)

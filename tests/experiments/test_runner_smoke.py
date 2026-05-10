@@ -31,7 +31,7 @@ def _personas_cached() -> bool:
 
 @unittest.skipUnless(_personas_cached(), "spacex personas not cached locally")
 class RunnerDryRunTest(unittest.TestCase):
-    def test_dry_run_writes_meta_and_parquet(self):
+    def test_dry_run_writes_full_tree(self):
         from experiments.runner import run_experiment
 
         with tempfile.TemporaryDirectory() as d:
@@ -40,11 +40,30 @@ class RunnerDryRunTest(unittest.TestCase):
                 output_dir=d, dry_run=True,
             )
             base = Path(d) / exp_id
+
             self.assertTrue((base / "meta.json").exists())
-            self.assertTrue((base / "raw" / "agent_personas.parquet").exists())
             meta = json.loads((base / "meta.json").read_text())
             self.assertEqual(meta["config"]["name"], "baseline")
             self.assertGreater(meta["n_agents"], 0)
+
+            # raw/ — 4 parquet files always written
+            for f in ("agent_actions", "agent_fills",
+                      "agent_positions", "agent_personas"):
+                self.assertTrue(
+                    (base / "raw" / f"{f}.parquet").exists(),
+                    f"missing raw/{f}.parquet",
+                )
+
+            # analysis/ — pnl + summary + at least 2 tables
+            self.assertTrue(
+                (base / "analysis" / "pnl_by_persona.parquet").exists())
+            self.assertTrue((base / "analysis" / "summary.json").exists())
+            tables = list((base / "analysis" / "tables").glob("*.md"))
+            self.assertGreaterEqual(len(tables), 2)
+
+            # figure/ — at least 4 of 6 in dry-run
+            figs = list((base / "figure").glob("*.png"))
+            self.assertGreaterEqual(len(figs), 4)
 
 
 if __name__ == "__main__":
