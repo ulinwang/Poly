@@ -1,110 +1,135 @@
-# PolyMETL — v7
+# PolyMETL — v8
 
 LLM-driven multi-agent simulation of Polymarket trader behavior,
 calibrated from real on-chain wallet history. **Graduation thesis**
-project; the codebase is organized to be scientifically rigorous and
-reproducible:
+project; the codebase is organized as five top-level packages that
+mirror the experimental flow:
 
-- Every "hyperparameter" is a deterministic function of ClickHouse
-  state — see [`docs/EMPIRICAL_PRIORS.md`](docs/EMPIRICAL_PRIORS.md).
-- LLM `temperature = 0.0` for both persona generation and trader
-  decisions — the only externally-stochastic component is the LLM
-  endpoint itself.
-- Pipeline is laid out as 8 numbered scripts in `scripts/` so the
-  experimental flow is obvious from the directory listing.
+```
+data/         all ETL + ClickHouse access + read queries
+agent/        features → personas → prompt → decision → memory
+environment/  Gym-style CLOB env; only tools are visible to agents
+experiments/  YAML config → run → output/<exp_id>/{raw,analysis,figure}
+output/       per-experiment artifact trees
+```
 
-## The 8-step pipeline
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full
+dependency diagram + the strict no-direct-CH-from-agent rule.
 
-| Step | Script | What it does |
-|---|---|---|
-| **0** | `00_ingest_{clob,dataapi,gamma}.py` | Populate ClickHouse from Polymarket APIs (resumable; run once) |
-| **1** | `01_select_target_market.py` | SQL-pick a resolved binary market matching criteria |
-| **2** | `02_build_wallet_features.py` | Aggregate per-wallet pre-event features (SQL only, no live API) |
-| **3** | `03_derive_calibration_priors.py` | Emit `data/priors_<slug>.json` with every empirical hyperparameter |
-| **4** | `04_generate_personas.py` | LLM-generate sanitized persona text per wallet (with bio + display_name from `dataapi_holders`) |
-| **5** | `05_run_simulation.py` | Run multi-agent CLOB sim; persist actions / fills / positions |
-| **6** | `06_analyze_serd.py` | SERD post-hoc validation (Gomez-Cram et al. 2026) |
-| **7** | `07_render_figures.py` | 6 paper figures → `figures/{png,pdf}` |
-| **8** | `08_render_tables.py` | 4 paper tables → `tables/{md,tex}` |
+## One command to reproduce a thesis run
 
-End-to-end commands are in
-[`scripts/README.md`](scripts/README.md) (one-target-market reference
-flow at the bottom).
+```bash
+uv sync                                              # one-time
+clickhouse-client --query "CREATE DATABASE IF NOT EXISTS polymetl"
+
+# Step A — ingest data layer (resumable, hours-days; one-time)
+python -m data.sources.gamma_api.cli      # ~146k markets
+python -m data.sources.clob_api.cli       # ~16M price-history bars
+python -m data.sources.data_api.cli       # ~42M trades, 2.9M holders
+
+# Step B — pick a market slug, build features + personas (~5 min)
+python -m agent.features.market --slug <slug>     # priors JSON
+python -m agent.features.wallet --slug <slug>     # wallet_features rows
+python -m agent.personas.calibrated --target-market-id <condition_id>
+
+# Step C — run the experiment from a YAML config (~75 min live)
+python -m experiments run experiments/configs/exp001_baseline.yaml
+# → output/<exp_id>/{meta.json, raw/*.parquet, analysis/, figure/}
+
+# Step D — list / inspect prior runs
+python -m experiments list
+python -m experiments show <exp_id>
+```
+
+End-to-end recipe in [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
 
 ## Module map
 
 ```
-src/
-├── ingest/       Step 0 — user-authored ETL (clob_api, data_api, gamma_full)
-├── core/         Sim engine: CLOB orderbook, env, lifecycle
-├── agent/        Persona dataclass, decision LLM client
-├── population/   Step 1-4: market selection, wallet features, priors,
-│                            persona generation, build_population
-├── pipeline/     Step 5: runner.py orchestrates one sim run; ClickHouse client
-├── analysis/     Step 6-7: SERD, sim-vs-real comparison, plots
-└── thesis/       Step 8: paper tables (md + LaTeX)
+data/
+├── sources/{clob_api,data_api,gamma_api,onchain}/{puller,schema,parsers,cli}.py
+├── store/{clickhouse,config}.py + views/*.sql
+├── query/{markets,trades,orderbook,prices,holders,wallets,onchain}.py
+├── exports/, docs/, analysis/
+
+agent/
+├── features/{wallet,market,temporal,pipeline}.py
+├── personas/{persona,calibrated,library}.py + templates/*.{txt,j2}
+├── prompt/{builder,tokens}.py
+├── decision/{types,llm,parser,retry,runtime}.py
+├── memory/episodic.py
+└── factory.py                  ← init_agents(slug)
+
+environment/
+├── env.py (PolyEnv), orderbook.py, ctf.py, fees.py, settlement.py
+├── tools/{place_order,cancel_order,split_position,merge_position,
+│            redeem,observe}.py
+├── observers/{quote_only,tape,full_book}.py
+└── seeders/{from_clob_history,from_holders}.py
+
+experiments/
+├── runner.py                   ← run_experiment(config_path)
+├── config.py (pydantic), parquet_sink.py, cli.py
+├── configs/exp001_baseline.yaml, exp002_calibrated.yaml
+├── analysis/{serd,calibration,tables,pnl}.py
+└── plots/{market_landscape,wallet_population,price_curve,
+          role_quartiles,pnl_distribution,action_mix}.py + _shared.py
 ```
 
-Each package has a one-page `README.md` covering its public API and
-methodological commitments.
+Each package has its own `README.md` covering public API and
+methodological commitments (most are folded into the package
+`__init__.py` docstrings in v8).
 
-## Data layer (ClickHouse)
+## Data layer (ClickHouse) — current row counts
 
-| Table | Rows | Source / role |
+| Table | Rows | Used by |
 |---|---|---|
-| `markets_full` | ~146k | Gamma full payload (~125 fields) |
-| `markets_resolved` | (view) | Resolved-only filter on `markets_full` |
-| `clob_markets` | ~1.05M | CLOB `/markets` (tick_size, taker_base_fee, neg_risk, ...) |
-| `clob_orderbook` | ~2.7M | Book snapshots (bootstrap-depth source) |
-| `clob_quotes` | ~103k | Best bid/ask/mid snapshots |
-| `clob_prices_history` | ~10M | Hourly CLOB bars (signal_mu primary source) |
-| `dataapi_trades` | ~42M | Per-trade resolution (signal_mu / wallet feature backbone) |
-| `dataapi_holders` | ~2.9M | Bio + display_name per wallet (persona input) |
-| `dataapi_oi` | ~113k | Open-interest snapshots |
-| `wallet_features` | small | Step 2 output |
-| `agent_simulations`, `agent_actions`, `agent_fills`, `agent_positions`, `agent_personas`, `serd_results` | small | Step 5 + 6 outputs |
+| `dataapi_trades` | 42,042,912 | features.wallet, query.trades |
+| `clob_prices_history` | 16,075,541 | query.prices, features.market |
+| `dataapi_holders` | 2,895,288 | query.holders, calibrated personas |
+| `clob_orderbook` | 2,732,298 | query.orderbook, bootstrap priors |
+| `clob_markets` | 1,050,851 | query.markets (slug → condition_id) |
+| `markets_full` | 146,231 | source for `markets_resolved` view |
+| `agent_*`, `serd_results` | per-sim | experiments.runner outputs |
+| `onchain_*` | 0 (scaffold) | data.sources.onchain (v9 ingest) |
 
-Schema details and row counts live in
-[`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md).
+Live snapshot in [`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md).
+
+## Methodological constraints
+
+1. **No look-ahead leakage**: every wallet feature is filtered by
+   `trade_time < market_open_ts` (= first observed trade in the
+   target market). No future-information contamination.
+2. **No role labels in initialization**: persona generator strips
+   forbidden labels from BOTH LLM output AND the wallet's
+   self-described bio. Roles must emerge from the network in step 6
+   (SERD), not from initialization.
+3. **No magic constants**: every "hyperparameter" the simulator
+   consumes is in `data/priors_<slug>.json`, derived from SQL. The
+   only constants in source are numerical safeguards (epsilon, price
+   floor/cap) and the explicit rigor commitment of LLM temperature 0.
+4. **Reproducible exp_id**: `<utc_ts>-<config_name>-<git_sha8>-<config_hash8>`.
+   `meta.json` captures git sha + config snapshot + priors summary
+   so any `output/<exp_id>/` is fully replayable.
 
 ## Setup
 
 ```bash
-git clone <repo>
-cd polymetl
-uv sync                                   # installs everything in pyproject.toml
-cp .env.example .env && $EDITOR .env      # fill DEEPSEEK key + CH host
+git clone <repo> polymetl && cd polymetl
+uv sync
+cp .env.example .env && $EDITOR .env  # set DEEPSEEK key + CH host
 clickhouse-client --query "CREATE DATABASE IF NOT EXISTS polymetl"
-uv run python -m unittest discover tests  # ~140 tests should pass
+uv run python -m unittest discover -s tests -t .   # ~240 tests
 ```
-
-## Reproducing the thesis run
-
-See [`docs/REPRODUCE.md`](docs/REPRODUCE.md). The default reference
-market is `will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster`
-(SpaceX flight test; resolved NO).
-
-## Methodological constraints
-
-1. **No look-ahead leakage**: every feature query is filtered by
-   `trade_time < market_open_ts`, where `market_open_ts =
-   min(trade_time)` of the target market.
-2. **No role labels in initialization**: `persona_generator.py`
-   strips `FORBIDDEN_LABELS` from BOTH the LLM output AND the
-   wallet's self-described `bio` (via `sanitize_bio`). Roles must
-   emerge from the network in step 6 (SERD), not from initialization.
-3. **No magic constants**: every "hyperparameter" the simulator
-   consumes is in `data/priors_<slug>.json`, derived from SQL. The
-   only constants in `src/` are numerical safeguards (epsilon, price
-   floor/cap) and the explicit rigor commitment of LLM temperature 0.
 
 ## Documentation
 
 | File | Purpose |
 |---|---|
-| [`docs/PAPER.md`](docs/PAPER.md) | Thesis paper outline (8 sections) |
-| [`docs/EMPIRICAL_PRIORS.md`](docs/EMPIRICAL_PRIORS.md) | Every prior + its source SQL + the few explicit constants |
-| [`docs/REPRODUCE.md`](docs/REPRODUCE.md) | Step-by-step reproduction recipe |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | v8 module dependency diagram + the no-CH rule |
+| [`docs/PAPER.md`](docs/PAPER.md) | 8-section thesis paper outline |
+| [`docs/EMPIRICAL_PRIORS.md`](docs/EMPIRICAL_PRIORS.md) | Every prior + its source SQL |
+| [`docs/REPRODUCE.md`](docs/REPRODUCE.md) | Step-by-step recipe |
 | [`docs/DATA_INVENTORY.md`](docs/DATA_INVENTORY.md) | Tables, row counts, freshness |
 | [`docs/EXPERIMENT_LOG.md`](docs/EXPERIMENT_LOG.md) | Run history + audit findings |
 | [`docs/ANALYSES.md`](docs/ANALYSES.md) | Catalogue of analysis SQL |

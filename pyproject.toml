@@ -27,5 +27,5 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["data*", "agent*", "environment*", "experiments*", "src*"]
-exclude = ["tests*", "scripts*", "docs*", "output*", "figures*", "tables*"]
+include = ["data*", "agent*", "environment*", "experiments*"]
+exclude = ["tests*", "docs*", "output*", "figures*", "tables*"]
