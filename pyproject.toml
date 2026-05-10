@@ -11,6 +11,10 @@ dependencies = [
 	"pydantic-settings==2.4.0",
 	"tenacity==8.5.0",
 	"python-dotenv==1.0.1",
+	# v7: plotting + table generation for thesis
+	"matplotlib>=3.8",
+	"seaborn>=0.13",
+	"pandas>=2.0",
 ]
 
 [build-system]

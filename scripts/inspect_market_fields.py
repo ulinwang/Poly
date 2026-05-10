@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.gamma import fetch_markets_page  # noqa: E402
+from src.ingest.gamma_full import fetch_markets_page  # noqa: E402
 
 
 GROUPS: dict[str, list[str]] = {
