@@ -21,11 +21,14 @@ It does NOT touch SQL directly.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime as dt
 import hashlib
 import json
 import logging
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -123,6 +126,76 @@ def write_meta(out_dir: Path, exp_id: str, config: ExperimentConfig,
         "priors_summary": priors_summary or {},
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, default=str))
+
+
+# ============================================================
+# Per-tick decision dispatch (v9.3 — concurrent)
+# ============================================================
+
+
+def _resolve_concurrency(requested: Optional[int], n_agents: int) -> int:
+    """Translate config.llm.concurrency → effective worker count.
+
+    None → min(n_agents, 16); 0 or 1 → serial; else clamp to n_agents.
+    """
+    if requested is None:
+        return max(1, min(n_agents, 16))
+    if requested <= 1:
+        return 1
+    return min(int(requested), n_agents)
+
+
+def _decide_all_agents(
+    *, sim, obs: dict, meta: dict, tick: int, n_ticks_eff: int,
+    api_key: str, base_url: str, model: str, tick_size: float,
+    temperature: float, timeout_s: float, max_attempts: int,
+    concurrency: int, out_dir: Path,
+):
+    """Run `decide()` for every agent in `obs` and return the
+    `{agent_id: Decision}` dict the env expects.
+
+    Concurrency: 1 = serial (legacy); >1 = thread pool. Within a tick
+    all agents see the SAME pre-built obs, so order doesn't affect
+    each agent's input. Engine still processes them in the random
+    order the env shuffled (in `env.step`)."""
+
+    def _one(aid: int):
+        market, agent_state = obs[aid]
+        agent = next(a for a in sim.agents if a.agent_id == aid)
+        decision = decide(
+            persona=agent.persona,
+            question=meta["question"],
+            description=meta.get("description", ""),
+            end_date=meta.get("end_date_iso", ""),
+            market=market, agent=agent_state,
+            api_key=api_key, base_url=base_url, model=model,
+            tick_size=tick_size,
+            temperature=temperature,
+            timeout=timeout_s,
+            max_attempts=max_attempts,
+        )
+        append_llm_call(
+            out_dir, sim.sim_id, tick, aid,
+            system_prompt="(reproducible from persona + clob_system.j2)",
+            user_prompt="(reproducible from MarketSnapshot + AgentSnapshot)",
+            response=decision.raw_response,
+        )
+        return aid, decision
+
+    actions: dict = {}
+    if concurrency <= 1:
+        for aid in obs:
+            aid_, dec = _one(aid)
+            actions[aid_] = dec
+        return actions
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=concurrency,
+        thread_name_prefix=f"tick{tick}",
+    ) as pool:
+        for aid_, dec in pool.map(_one, list(obs)):
+            actions[aid_] = dec
+    return actions
 
 
 # ============================================================
@@ -252,37 +325,26 @@ def run_experiment(
         )
 
     model = config.llm.model or settings.DEEPSEEK_MODEL
+    concurrency = _resolve_concurrency(config.llm.concurrency, len(pop))
+    log.info("  per-tick LLM concurrency: %d (config=%s, n_agents=%d)",
+             concurrency, config.llm.concurrency, len(pop))
     for tick in range(n_ticks):
-        actions = {}
-        for aid, (market, agent_state) in obs.items():
-            agent = next(a for a in sim.agents if a.agent_id == aid)
-            decision = decide(
-                persona=agent.persona,
-                question=meta["question"],
-                description=meta.get("description", ""),
-                end_date=meta.get("end_date_iso", ""),
-                market=market, agent=agent_state,
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=settings.DEEPSEEK_BASE_URL,
-                model=model,
-                tick_size=priors["tick_size"],
-                temperature=config.llm.temperature,
-                timeout=config.llm.timeout_s,
-                max_attempts=config.llm.retry.max_attempts,
-            )
-            actions[aid] = decision
-            # Persist full LLM in/out for reproducibility (raw response
-            # is in decision.raw_response; the prompts are reproducible
-            # from persona + state, but capturing them once is cheap).
-            append_llm_call(
-                out, sim.sim_id, tick, aid,
-                system_prompt="(reproducible from persona + clob_system.j2)",
-                user_prompt="(reproducible from MarketSnapshot + AgentSnapshot)",
-                response=decision.raw_response,
-            )
+        tick_started = time.time()
+        actions = _decide_all_agents(
+            sim=sim, obs=obs, meta=meta,
+            tick=tick, n_ticks_eff=n_ticks,
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url=settings.DEEPSEEK_BASE_URL,
+            model=model, tick_size=priors["tick_size"],
+            temperature=config.llm.temperature,
+            timeout_s=config.llm.timeout_s,
+            max_attempts=config.llm.retry.max_attempts,
+            concurrency=concurrency, out_dir=out,
+        )
         obs, info = env.step(actions)
-        log.info("  tick=%d/%d fills=%d yes_mid=%.3f",
-                 tick + 1, n_ticks, info["n_fills"], sim.yes_mid)
+        log.info("  tick=%d/%d fills=%d yes_mid=%.3f (%.1fs)",
+                 tick + 1, n_ticks, info["n_fills"], sim.yes_mid,
+                 time.time() - tick_started)
 
     pnl = env.settle()
     ended_at = dt.datetime.utcnow()

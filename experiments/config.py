@@ -48,6 +48,9 @@ class LLMConfig(BaseModel):
     temperature: float = 0.0
     timeout_s: float = 120.0
     retry: LLMRetry = Field(default_factory=LLMRetry)
+    # v9.3: parallel per-tick LLM calls. 0 or 1 = serial (legacy
+    # behavior); None = auto (= n_agents capped at 16, polite default).
+    concurrency: Optional[int] = None
 
 
 class OutputConfig(BaseModel):

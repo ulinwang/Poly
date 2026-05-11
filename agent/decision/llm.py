@@ -19,13 +19,20 @@ transport — DeepSeek exposes an OpenAI-compatible endpoint.
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from typing import Any, Optional
 
 from openai import OpenAI
 
 
+@lru_cache(maxsize=4)
 def _client(api_key: str, base_url: str, timeout: float) -> OpenAI:
-    """Build a per-call client. SDK pools its own HTTP connections."""
+    """Process-singleton OpenAI client per (api_key, base_url, timeout).
+
+    The OpenAI SDK is thread-safe and pools HTTP connections internally,
+    so a single client serves all concurrent agent decisions. The cache
+    is keyed because tests inject distinct api_key/base_url stubs.
+    """
     return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
 

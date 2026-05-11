@@ -8,6 +8,7 @@ dual-write mode (Stage 4 default per user decision).
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Sequence
 
@@ -90,12 +91,18 @@ def dump_simulation(
     return out
 
 
+_LLM_CALLS_LOCK = threading.Lock()
+
+
 def append_llm_call(
     out_dir: Path, sim_id: str, tick: int, agent_id: int,
     system_prompt: str, user_prompt: str, response: str,
 ) -> None:
     """One JSONL entry per LLM call for full replay capability.
-    Append-only — runner calls this from inside the per-tick loop."""
+    Append-only — runner calls this from inside the per-tick loop.
+
+    Thread-safe via a module-level lock: v9.3's concurrent per-tick
+    decisions would otherwise interleave bytes from different lines."""
     raw = out_dir / "raw"
     raw.mkdir(parents=True, exist_ok=True)
     p = raw / "llm_calls.jsonl"
@@ -103,7 +110,7 @@ def append_llm_call(
         "sim_id": sim_id, "tick": tick, "agent_id": agent_id,
         "system": system_prompt, "user": user_prompt, "response": response,
     }, ensure_ascii=False)
-    with p.open("a", encoding="utf-8") as f:
+    with _LLM_CALLS_LOCK, p.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 
