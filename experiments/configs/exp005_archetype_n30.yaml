@@ -1,0 +1,35 @@
+name: archetype_n30
+description: |
+  v10 ablation B: larger archetype-sampled population (n=30) on the
+  Roman Roy market. Tests whether richer cluster mix changes the
+  emergent price path + PnL distribution.
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: archetype
+  n_agents: 30
+  seed: 42
+  persona_recipe:
+    use_bio: false
+    sanitize_labels: true
+    llm_temperature: 0.0
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: null
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output

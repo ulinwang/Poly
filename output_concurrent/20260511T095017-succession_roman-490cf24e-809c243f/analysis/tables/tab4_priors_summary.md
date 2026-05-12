@@ -1,0 +1,12 @@
+| Prior | Value | Source |
+| --- | --- | --- |
+| market_open_iso | 2023-05-23T15:37:21 | dataapi_trades.min(trade_time) |
+| tick_size | 0.01 | clob_markets.minimum_tick_size |
+| taker_fee_bps | 0.0000 | clob_markets.taker_base_fee |
+| n_ticks | 20 | lifetime/6h, clamped [8,48] |
+| signal_mu | 0.1500 | clob_prices_history (n=1) |
+| bootstrap.anchor_yes | 0.1600 | dataapi_trades_dispersion |
+| bootstrap.spread | 0.0500 | dataapi_trades_dispersion |
+| bootstrap.depth_per_level | 294 | dataapi_trades_dispersion |
+| bootstrap.depth_levels | 3 | constant (3, see EMPIRICAL_PRIORS.md) |
+| winning_idx | 1 | markets_resolved |

@@ -1,0 +1,38 @@
+name: archetype_n9
+description: |
+  v10 ablation A: same Roman Roy market, but agents drawn from
+  the K-means archetype distribution (K=5, fitted on 1.19M wallets).
+  Population size matches baseline (9 agents).
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: archetype
+  features: [wallet, market, temporal]
+  persona_recipe:
+    use_bio: false
+    sanitize_labels: true
+    llm_temperature: 0.0
+  n_agents: 9
+  seed: 42
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: null
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry:
+    max_attempts: 3
+    backoff_base_s: 2.0
+  concurrency: null    # auto = min(n_agents, 16) = 9
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output

@@ -110,11 +110,18 @@ def init_agents(
     (v7 default). Truncating to a smaller count uses deterministic
     seed-based shuffle.
     """
-    if persona_set != "calibrated":
-        raise NotImplementedError(
-            f"persona_set={persona_set!r}; only 'calibrated' is "
-            f"supported in v8. Hand-coded archetypes ship empty."
+    if persona_set == "archetype":
+        return _init_agents_archetype(
+            slug=slug, n_agents=n_agents or 30, seed=seed,
+            data_dir=data_dir, ch=ch,
         )
+    if persona_set not in ("calibrated", "no_signal"):
+        raise NotImplementedError(
+            f"persona_set={persona_set!r}; supported: "
+            f"'calibrated', 'archetype', 'no_signal'."
+        )
+    # 'calibrated' and 'no_signal' share the body below; the latter
+    # zeroes signals at the end (used by the v10 ablation).
 
     priors = load_priors(slug, data_dir=data_dir)
     ch = get_ch(ch)
@@ -169,10 +176,27 @@ def init_agents(
         rng.shuffle(population)
         population = population[:n_agents]
 
+    # v10 ablation: blank out private signal for the 'no_signal' variant.
+    if persona_set == "no_signal":
+        population = [
+            AgentInit(
+                wallet_addr=a.wallet_addr, persona_type="NoSignal",
+                capital_initial=a.capital_initial,
+                profile_text=a.profile_text,
+                private_signal_mu=0.5, private_signal_sigma=0.5,
+                risk_aversion=a.risk_aversion,
+                src_tx_count=a.src_tx_count,
+                src_maker_ratio=a.src_maker_ratio,
+                src_avg_position_usd=a.src_avg_position_usd,
+                src_asset_diversity=a.src_asset_diversity,
+            )
+            for a in population
+        ]
+
     log.info(
-        "init_agents(%s): %d agents (capital $%.0f..$%.0f, "
+        "init_agents(%s, %s): %d agents (capital $%.0f..$%.0f, "
         "mu %.2f..%.2f, consensus_mu=%.3f)",
-        slug, len(population),
+        slug, persona_set, len(population),
         min((a.capital_initial for a in population), default=0.0),
         max((a.capital_initial for a in population), default=0.0),
         min((a.private_signal_mu for a in population), default=0.0),
@@ -180,6 +204,71 @@ def init_agents(
         consensus_mu,
     )
     return population, priors
+
+
+def _init_agents_archetype(
+    *, slug: str, n_agents: int, seed: int,
+    data_dir: Path, ch: Optional[ClickHouse],
+) -> tuple[list[AgentInit], dict]:
+    """v10: build a population by sampling K-means archetypes from the
+    1.19M-wallet empirical distribution. No live LLM persona call:
+    profile_text is the wallet's raw feature values, the trader LLM
+    infers style at decision time."""
+    from agent.personas.archetype import build_archetype_population
+
+    priors = load_priors(slug, data_dir=data_dir)
+    ch = get_ch(ch)
+    cap_floor, cap_cap = q_wallets.empirical_capital_bounds(
+        priors["condition_id"], ch=ch,
+    )
+    if cap_cap <= cap_floor:
+        cap_floor, cap_cap = max(1.0, cap_floor), max(cap_floor + 1.0, cap_cap, 100.0)
+
+    rng = random.Random(seed)
+    consensus_mu = float(priors["signal_mu"])
+    pop = build_archetype_population(n_agents=n_agents, seed=seed)
+    out: list[AgentInit] = []
+    for i, a in enumerate(pop):
+        f = a["features"]
+        capital = max(cap_floor, min(cap_cap, float(f["total_notional"])))
+        past_acc = f.get("past_accuracy")
+        past_acc = 0.5 if (past_acc is None or
+                            (isinstance(past_acc, float) and math.isnan(past_acc))) \
+                       else float(past_acc)
+        sigma = derive_signal_sigma(past_acc)
+        signal = draw_private_signal(consensus_mu, sigma, rng)
+        out.append(AgentInit(
+            wallet_addr=a["wallet_addr"],
+            persona_type=f"Archetype-C{a['cluster_id']}",
+            capital_initial=capital,
+            profile_text=a["profile_text"],
+            private_signal_mu=signal,
+            private_signal_sigma=sigma,
+            risk_aversion=0.5,
+            src_tx_count=int(f["tx_count"]),
+            src_maker_ratio=0.0,
+            src_avg_position_usd=float(f["total_notional"]) / max(int(f["tx_count"]), 1),
+            src_asset_diversity=int(f["n_markets"]),
+        ))
+
+    by_cluster = {}
+    for a in out:
+        by_cluster.setdefault(a.persona_type, 0)
+        by_cluster[a.persona_type] += 1
+    log.info(
+        "init_agents(%s, persona_set=archetype): %d agents, cluster mix=%s, "
+        "capital $%.0f..$%.0f, mu %.2f..%.2f",
+        slug, len(out), by_cluster,
+        min((a.capital_initial for a in out), default=0.0),
+        max((a.capital_initial for a in out), default=0.0),
+        min((a.private_signal_mu for a in out), default=0.0),
+        max((a.private_signal_mu for a in out), default=0.0),
+    )
+    return out, priors
+
+
+# math import for archetype path
+import math
 
 
 def main() -> None:

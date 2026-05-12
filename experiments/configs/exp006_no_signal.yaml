@@ -1,0 +1,36 @@
+name: no_signal
+description: |
+  v10 ablation C: same calibrated population as baseline (9 SpaceX
+  wallets…wait, Roman Roy wallets), but private_signal_mu / sigma
+  zeroed out. Isolates the effect of the empirical-prior injection
+  on directional accuracy.
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: no_signal
+  n_agents: null
+  seed: 0
+  persona_recipe:
+    use_bio: true
+    sanitize_labels: true
+    llm_temperature: 0.0
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: null
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output
