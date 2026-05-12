@@ -25,7 +25,7 @@ class PersonaRecipe(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    population: Literal["calibrated", "hand_coded"] = "calibrated"
+    population: Literal["calibrated", "hand_coded", "archetype", "no_signal"] = "calibrated"
     features: list[str] = Field(default_factory=lambda: ["wallet", "market", "temporal"])
     persona_recipe: PersonaRecipe = Field(default_factory=PersonaRecipe)
     n_agents: Optional[int] = None        # None = all wallets with cached profile
