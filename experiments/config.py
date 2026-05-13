@@ -38,10 +38,10 @@ class AgentConfig(BaseModel):
     #   - first_window_vwap : current default; 24h post-open VWAP
     #   - bootstrap_anchor  : reuse the orderbook bootstrap anchor_yes
     signal_mu_source: Literal["first_window_vwap", "bootstrap_anchor"] = "first_window_vwap"
-    # v13 (B4): forward-compatible flag for the belief-update tool
-    # added by AGT-4. The runner dispatches on this when wiring the
-    # belief tool into the LLM call.
-    belief_update_enabled: bool = False
+    # v13 (B4): toggle the AGT-4 update_belief tool. Default True keeps
+    # the post-merge behaviour (tool always offered to the LLM); set False
+    # in B4 ablation configs to fall back to v12 tool inventory.
+    belief_update_enabled: bool = True
 
 
 class EnvironmentConfig(BaseModel):

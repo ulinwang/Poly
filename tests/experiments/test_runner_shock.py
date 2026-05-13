@@ -49,8 +49,18 @@ class ShockConfigParseTest(unittest.TestCase):
         cfg = parse_config({"name": "n", "market": {"slug": "x"}})
         self.assertIsNone(cfg.experiment.shock)
 
-    def test_belief_update_flag_default_false(self):
+    def test_belief_update_flag_default_true(self):
+        # v13 reconciled: default is True post-merge so the AGT-4
+        # update_belief tool is in the inventory by default. B4 ablation
+        # configs explicitly set False.
         cfg = parse_config({"name": "n", "market": {"slug": "x"}})
+        self.assertTrue(cfg.agent.belief_update_enabled)
+
+    def test_belief_update_flag_can_disable(self):
+        cfg = parse_config({
+            "name": "n", "market": {"slug": "x"},
+            "agent": {"belief_update_enabled": False},
+        })
         self.assertFalse(cfg.agent.belief_update_enabled)
 
 

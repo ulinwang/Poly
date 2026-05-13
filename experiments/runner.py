@@ -190,6 +190,7 @@ def _decide_all_agents(
     api_key: str, base_url: str, model: str, tick_size: float,
     temperature: float, timeout_s: float, max_attempts: int,
     concurrency: int, out_dir: Path,
+    tools: list[dict] | None = None,
 ):
     """Run `decide()` for every agent in `obs` and return the
     `{agent_id: Decision}` dict the env expects.
@@ -213,6 +214,7 @@ def _decide_all_agents(
             temperature=temperature,
             timeout=timeout_s,
             max_attempts=max_attempts,
+            tools=tools,
         )
         append_llm_call(
             out_dir, sim.sim_id, tick, aid,
@@ -388,6 +390,12 @@ def run_experiment(
     concurrency = _resolve_concurrency(config.llm.concurrency, len(pop))
     log.info("  per-tick LLM concurrency: %d (config=%s, n_agents=%d)",
              concurrency, config.llm.concurrency, len(pop))
+    # v13 (B4): honour config.agent.belief_update_enabled by trimming
+    # update_belief out of the tool inventory when the ablation is OFF.
+    from agent.decision.tool_schemas import select_tools
+    tools = select_tools(
+        belief_update_enabled=config.agent.belief_update_enabled,
+    )
     sensitivity_ticks = list(sensitivity_ticks or [])
     sensitivity_results: dict[int, dict] = {}
     for tick in range(n_ticks):
@@ -402,6 +410,7 @@ def run_experiment(
             timeout_s=config.llm.timeout_s,
             max_attempts=config.llm.retry.max_attempts,
             concurrency=concurrency, out_dir=out,
+            tools=tools,
         )
         # v13 (AGT-4): optionally probe within-tick ordering sensitivity
         # BEFORE the real step (so the probe doesn't pollute the run).

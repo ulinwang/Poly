@@ -181,6 +181,16 @@ TOOL_SCHEMAS = [
 ]
 
 
+def select_tools(*, belief_update_enabled: bool = True) -> list[dict]:
+    """v13 (B4): return TOOL_SCHEMAS, optionally without the belief tool.
+
+    Used by the runner to honour ExperimentConfig.agent.belief_update_enabled.
+    """
+    if belief_update_enabled:
+        return TOOL_SCHEMAS
+    return [t for t in TOOL_SCHEMAS if t["function"]["name"] != "update_belief"]
+
+
 # Map function name → engine `order_type`. Used by parser.parse_tool_call.
 # v13 (AGT-4): `update_belief` is dispatched specially — it sets the
 # agent's posterior on AgentRuntime and emits an UPDATE_BELIEF action

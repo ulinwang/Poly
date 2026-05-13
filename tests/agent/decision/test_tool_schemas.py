@@ -4,8 +4,22 @@ from __future__ import annotations
 import unittest
 
 from agent.decision.tool_schemas import (
-    NAME_TO_ORDER_TYPE, TOOL_SCHEMAS,
+    NAME_TO_ORDER_TYPE, TOOL_SCHEMAS, select_tools,
 )
+
+
+class SelectToolsTest(unittest.TestCase):
+    def test_default_includes_belief(self):
+        tools = select_tools()
+        names = {t["function"]["name"] for t in tools}
+        self.assertIn("update_belief", names)
+        self.assertEqual(len(tools), len(TOOL_SCHEMAS))
+
+    def test_disabled_drops_belief(self):
+        tools = select_tools(belief_update_enabled=False)
+        names = {t["function"]["name"] for t in tools}
+        self.assertNotIn("update_belief", names)
+        self.assertEqual(len(tools), len(TOOL_SCHEMAS) - 1)
 
 
 class ToolSchemaShapeTest(unittest.TestCase):
