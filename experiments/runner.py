@@ -54,6 +54,46 @@ log = logging.getLogger(__name__)
 
 
 # ============================================================
+# v13 (B6) — synthetic external-news shock
+# ============================================================
+
+
+def apply_shock_if_due(sim, tick: int, shock_cfg) -> int:
+    """Inject a synthetic memory entry into every agent if ``tick``
+    matches ``shock_cfg.tick``. Returns the number of agents touched
+    (0 means no shock fired). Idempotent: safe to call once per tick.
+
+    The injection mutates ``agent.memory`` directly so the next call
+    to ``observe()`` packs the synthetic entry into
+    ``AgentSnapshot.recent_decisions``."""
+    if shock_cfg is None:
+        return 0
+    if int(tick) != int(shock_cfg.tick):
+        return 0
+    entry = {
+        "tick": int(shock_cfg.tick),
+        "action": "EXTERNAL_NEWS",
+        "outcome": "",
+        "side": "",
+        "price": 0.0,
+        "size_usd": 0.0,
+        "fills": 0,
+        "yes_mid_after": float(getattr(sim, "yes_mid", 0.5)),
+        "reasoning": str(shock_cfg.payload.text)[:240],
+        "kind": shock_cfg.kind,
+    }
+    n = 0
+    for a in sim.agents:
+        if getattr(a, "memory", None) is None:
+            a.memory = []
+        a.memory.append(entry)
+        n += 1
+    log.info("shock fired at tick=%d (kind=%s, n_agents=%d): %s",
+             tick, shock_cfg.kind, n, entry["reasoning"][:80])
+    return n
+
+
+# ============================================================
 # exp_id derivation
 # ============================================================
 
@@ -378,6 +418,14 @@ def run_experiment(
             except Exception as exc:        # noqa: BLE001
                 log.warning("sensitivity_run failed at tick %d: %s", tick, exc)
         obs, info = env.step(actions)
+        # v13 (B6): fire external-news shock at the configured tick.
+        # Injecting AFTER env.step means agents see the synthetic
+        # entry in their next-tick prompt's recent_decisions block.
+        apply_shock_if_due(sim, tick, config.experiment.shock)
+        # Re-pack observations so the next tick's obs sees the shock.
+        if (config.experiment.shock is not None
+                and tick == config.experiment.shock.tick):
+            obs = env._observations()  # noqa: SLF001
         log.info("  tick=%d/%d fills=%d yes_mid=%.3f (%.1fs)",
                  tick + 1, n_ticks, info["n_fills"], sim.yes_mid,
                  time.time() - tick_started)

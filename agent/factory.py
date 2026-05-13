@@ -143,10 +143,16 @@ def init_agents(
             slug=slug, n_agents=n_agents or 30, seed=seed,
             data_dir=data_dir, ch=ch,
         )
+    if persona_set in ("marginal_random", "uniform_random"):
+        return _init_agents_random_baseline(
+            slug=slug, n_agents=n_agents or 30, seed=seed,
+            data_dir=data_dir, ch=ch, variant=persona_set,
+        )
     if persona_set not in ("calibrated", "no_signal"):
         raise NotImplementedError(
-            f"persona_set={persona_set!r}; supported: "
-            f"'calibrated', 'archetype', 'no_signal'."
+            f"persona_set={persona_set!r}; supported: 'calibrated', "
+            f"'archetype', 'marginal_random', 'uniform_random', "
+            f"'no_signal'."
         )
     # 'calibrated' and 'no_signal' share the body below; the latter
     # zeroes signals at the end (used by the v10 ablation).
@@ -296,6 +302,67 @@ def _init_agents_archetype(
         "init_agents(%s, persona_set=archetype): %d agents, cluster mix=%s, "
         "capital $%.0f..$%.0f, mu %.2f..%.2f",
         slug, len(out), by_cluster,
+        min((a.capital_initial for a in out), default=0.0),
+        max((a.capital_initial for a in out), default=0.0),
+        min((a.private_signal_mu for a in out), default=0.0),
+        max((a.private_signal_mu for a in out), default=0.0),
+    )
+    return out, priors
+
+
+def _init_agents_random_baseline(
+    *, slug: str, n_agents: int, seed: int,
+    data_dir: Path, ch: Optional[ClickHouse], variant: str,
+) -> tuple[list[AgentInit], dict]:
+    """v13: B3 baselines — wallets sampled either uniformly or
+    stratified to match population marginals. Same AgentInit shape as
+    the archetype path."""
+    from agent.personas.random_baseline import (
+        build_marginal_population, build_uniform_population,
+    )
+
+    priors = load_priors(slug, data_dir=data_dir)
+    ch = get_ch(ch)
+    rng = random.Random(seed)
+    consensus_mu = float(priors["signal_mu"])
+
+    if variant == "marginal_random":
+        pop = build_marginal_population(n_agents=n_agents, seed=seed)
+    elif variant == "uniform_random":
+        pop = build_uniform_population(n_agents=n_agents, seed=seed)
+    else:  # pragma: no cover - guarded upstream
+        raise ValueError(f"unknown random-baseline variant {variant!r}")
+
+    out: list[AgentInit] = []
+    for a in pop:
+        f = a["features"]
+        capital = max(10.0, float(f["total_notional"]))
+        past_acc = f.get("past_accuracy")
+        past_acc = 0.5 if (past_acc is None or
+                           (isinstance(past_acc, float) and math.isnan(past_acc))) \
+                      else float(past_acc)
+        sigma = derive_signal_sigma(past_acc)
+        signal = draw_private_signal(consensus_mu, sigma, rng)
+        persona_label = ("Marginal" if variant == "marginal_random"
+                         else "Uniform")
+        out.append(AgentInit(
+            wallet_addr=a["wallet_addr"],
+            persona_type=f"{persona_label}-C{a.get('cluster_id', -1)}",
+            capital_initial=capital,
+            profile_text=a["profile_text"],
+            private_signal_mu=signal,
+            private_signal_sigma=sigma,
+            risk_aversion=0.5,
+            src_tx_count=int(f["tx_count"]),
+            src_maker_ratio=0.0,
+            src_avg_position_usd=float(f["total_notional"])
+                / max(int(f["tx_count"]), 1),
+            src_asset_diversity=int(f["n_markets"]),
+        ))
+    log.info(
+        "init_agents(%s, persona_set=%s): %d agents, "
+        "capital $%.0f..$%.0f, mu %.2f..%.2f",
+        slug, variant, len(out),
         min((a.capital_initial for a in out), default=0.0),
         max((a.capital_initial for a in out), default=0.0),
         min((a.private_signal_mu for a in out), default=0.0),
