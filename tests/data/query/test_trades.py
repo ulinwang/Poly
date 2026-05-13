@@ -14,10 +14,13 @@ class MarketOpenTsTest(unittest.TestCase):
         out = q.market_open_ts("0xCID", ch=ch)
         self.assertEqual(out, int(first.timestamp()))
 
-    def test_no_trades_raises(self):
+    def test_no_trades_falls_back(self):
+        """Live markets may have zero ingested trades — return now - 7d."""
         ch = StubCH({"FROM polymetl.dataapi_trades": [(None,)]})
-        with self.assertRaises(SystemExit):
-            q.market_open_ts("0xCID", ch=ch)
+        import time
+        out = q.market_open_ts("0xCID", ch=ch)
+        # within a few seconds of now - 7d
+        self.assertAlmostEqual(out, int(time.time()) - 7 * 86400, delta=5)
 
 
 class FirstWindowVwapTest(unittest.TestCase):

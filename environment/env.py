@@ -547,7 +547,14 @@ class PolyEnv:
             question=self._market_meta.get("question", ""),
             description=self._market_meta.get("description", ""),
             end_date_str=self._market_meta.get("end_date_iso", ""),
-            market_resolved_yes=self._market_meta.get("winning_idx"),
+            # Live markets have winning_idx = -1 (unresolved).
+            # Treat as None so settle() returns no payouts.
+            market_resolved_yes=(
+                self._market_meta["winning_idx"]
+                if (self._market_meta.get("winning_idx") is not None
+                    and self._market_meta.get("winning_idx") >= 0)
+                else None
+            ),
             population=self._population,
             n_ticks=self.n_ticks, taker_fee_bps=self.taker_fee_bps,
             sim_id=self._sim_id,

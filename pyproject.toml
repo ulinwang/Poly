@@ -23,6 +23,14 @@ dependencies = [
 	"openai>=1.40",
 	# v8.2: interactive HTML reports for experiments
 	"plotly>=5.18",
+	# v10: K-means clustering of wallet behavioral fingerprints
+	"scikit-learn>=1.3",
+	# v10: maker-taker network analysis
+	"networkx>=3.2",
+	# v12: live-streaming web demo
+	"fastapi>=0.110",
+	"uvicorn[standard]>=0.27",
+	"sse-starlette>=2.0",
 ]
 
 [build-system]
@@ -31,5 +39,5 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["data*", "agent*", "environment*", "experiments*"]
+include = ["data*", "agent*", "environment*", "experiments*", "viz*", "webapp*"]
 exclude = ["tests*", "docs*", "output*", "figures*", "tables*"]

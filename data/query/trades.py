@@ -9,9 +9,14 @@ from ._ch import get_ch
 log = logging.getLogger(__name__)
 
 
-def market_open_ts(condition_id: str, ch=None) -> int:
+def market_open_ts(condition_id: str, ch=None,
+                    fallback_seconds_ago: int = 7 * 86400) -> int:
     """Unix timestamp of the FIRST trade in `condition_id`.
-    Raises SystemExit if the market has zero trades."""
+
+    For live / unresolved markets that may have only just opened and
+    have no trades yet ingested, fall back to (now - fallback_seconds_ago).
+    """
+    import time
     ch = get_ch(ch)
     rows = ch.client.execute(
         """
@@ -21,10 +26,7 @@ def market_open_ts(condition_id: str, ch=None) -> int:
         {"cid": condition_id},
     )
     if not rows or rows[0][0] is None:
-        raise SystemExit(
-            f"no trades in dataapi_trades for {condition_id}; "
-            f"ingest data_api first"
-        )
+        return int(time.time()) - fallback_seconds_ago
     return int(rows[0][0].timestamp())
 
 
