@@ -75,8 +75,25 @@ def derive_bootstrap_book(
     }
 
 
-def derive_priors(slug: str, ch: Optional[ClickHouse] = None) -> dict:
-    """Top-level: produce the priors dict for one market slug."""
+def derive_priors(
+    slug: str, ch: Optional[ClickHouse] = None,
+    signal_mu_source: str = "first_window_vwap",
+) -> dict:
+    """Top-level: produce the priors dict for one market slug.
+
+    ``signal_mu_source`` controls the anchor for the agents' private
+    signal mean:
+      - ``first_window_vwap``: 24h post-open volume-weighted YES price
+        (legacy / default).
+      - ``bootstrap_anchor``: reuse the bootstrap orderbook anchor_yes
+        (an ablation knob; see audit L-6).
+    """
+    if signal_mu_source not in ("first_window_vwap", "bootstrap_anchor"):
+        raise ValueError(
+            f"unknown signal_mu_source={signal_mu_source!r}; expected "
+            "'first_window_vwap' or 'bootstrap_anchor'"
+        )
+
     meta = q_markets.get_market_meta(slug, ch=ch)
     if meta is None:
         raise SystemExit(f"market slug {slug!r} not found in clob_markets")
@@ -91,6 +108,19 @@ def derive_priors(slug: str, ch: Optional[ClickHouse] = None) -> dict:
     last_ts = q_trades.market_last_trade_ts(meta["condition_id"], ch=ch) \
               or (open_ts + 24 * 3600)
     n_ticks = n_ticks_for_lifetime(open_ts, last_ts)
+
+    if signal_mu_source == "bootstrap_anchor":
+        signal_mu = float(book["anchor_yes"])
+        signal_mu_meta = {
+            "source": f"bootstrap_anchor:{book['source']}",
+            "n_obs": 1, "horizon_hours": vwap["hours"],
+        }
+    else:
+        signal_mu = float(vwap["vwap"])
+        signal_mu_meta = {
+            "source": vwap["source"], "n_obs": vwap["n_trades"],
+            "horizon_hours": vwap["hours"],
+        }
 
     return {
         "schema_version": "v7-priors-1",
@@ -108,11 +138,8 @@ def derive_priors(slug: str, ch: Optional[ClickHouse] = None) -> dict:
         # Sim execution parameters (derived):
         "n_ticks": n_ticks,
         # Private signal anchor:
-        "signal_mu": vwap["vwap"],
-        "signal_mu_meta": {
-            "source": vwap["source"], "n_obs": vwap["n_trades"],
-            "horizon_hours": vwap["hours"],
-        },
+        "signal_mu": signal_mu,
+        "signal_mu_meta": signal_mu_meta,
         # Bootstrap orderbook seed:
         "bootstrap": book,
         "_eps": _EPS,

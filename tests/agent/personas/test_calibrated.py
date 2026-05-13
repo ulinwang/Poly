@@ -37,11 +37,17 @@ class UserPromptTest(unittest.TestCase):
         self.assertNotIn("maker", head)
         self.assertNotIn("holding time", head)
 
-    def test_includes_bio_when_provided(self):
-        out = pg._user_prompt(SAMPLE_FEATURES, bio="loves NBA",
-                               display_name="Alice")
-        self.assertIn("loves NBA", out)
-        self.assertIn("Alice", out)
+    def test_no_bio_or_display_name(self):
+        """v13 (audit L-7): bios and display names must never reach
+        the LLM — they're post-cutoff editable content."""
+        out = pg._user_prompt(SAMPLE_FEATURES)
+        self.assertNotIn("bio", out.lower())
+        self.assertNotIn("display name", out.lower())
+        # Function signature no longer accepts bio/display_name kwargs.
+        import inspect
+        sig = inspect.signature(pg._user_prompt)
+        self.assertNotIn("bio", sig.parameters)
+        self.assertNotIn("display_name", sig.parameters)
 
 
 class GenerateProfileTest(unittest.TestCase):

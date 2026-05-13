@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 from functools import lru_cache
 from pathlib import Path
@@ -32,21 +33,55 @@ CLUSTERING_DIR = Path("data/clustering")
 PROFILES_PATH = CLUSTERING_DIR / "cluster_profiles.json"
 WALLETS_PATH = CLUSTERING_DIR / "wallet_clusters.parquet"
 
+# v13 (audit L-1): each cutoff produces its own
+# wallet_clusters_<ISO>.parquet + cluster_profiles_<ISO>.json. The
+# experiment factory sets these env vars per-run so the archetype
+# sampler picks the cutoff-matched table; if unset we fall back to
+# the legacy non-suffixed files for backward compat with v10/v11.
+_ENV_WALLETS = "POLYMETL_WALLET_CLUSTERS"
+_ENV_PROFILES = "POLYMETL_CLUSTER_PROFILES"
+
+
+def _resolve_profiles_path() -> Path:
+    override = os.environ.get(_ENV_PROFILES)
+    return Path(override) if override else PROFILES_PATH
+
+
+def _resolve_wallets_path() -> Path:
+    override = os.environ.get(_ENV_WALLETS)
+    return Path(override) if override else WALLETS_PATH
+
 
 @lru_cache(maxsize=1)
 def load_cluster_distribution() -> dict:
-    """Read the K-means cluster_profiles.json artifact."""
-    if not PROFILES_PATH.exists():
+    """Read the K-means cluster_profiles.json artifact.
+
+    Honors ``POLYMETL_CLUSTER_PROFILES`` env override.
+    """
+    path = _resolve_profiles_path()
+    if not path.exists():
         raise FileNotFoundError(
-            f"missing {PROFILES_PATH}; run scripts/cluster_wallets.py first"
+            f"missing {path}; run scripts.clustering.cluster_wallets first"
         )
-    return json.loads(PROFILES_PATH.read_text())
+    return json.loads(path.read_text())
 
 
 @lru_cache(maxsize=1)
 def _wallet_pool() -> pd.DataFrame:
-    """Lazy-load the full 1.19M-wallet cluster assignment table."""
-    return pd.read_parquet(WALLETS_PATH)
+    """Lazy-load the cluster assignment table.
+
+    Honors ``POLYMETL_WALLET_CLUSTERS`` env override so per-experiment
+    cutoff-conditioned tables (e.g. ``wallet_clusters_<ISO>.parquet``)
+    can be selected without editing this module.
+    """
+    return pd.read_parquet(_resolve_wallets_path())
+
+
+def reset_caches() -> None:
+    """Test/Factory helper: clear the lru_caches so the next call
+    re-reads the (possibly env-overridden) paths."""
+    load_cluster_distribution.cache_clear()
+    _wallet_pool.cache_clear()
 
 
 def sample_archetype(rng: random.Random) -> int:

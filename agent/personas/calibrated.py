@@ -1,14 +1,24 @@
 """LLM-generated calibrated personas.
 
 For each wallet in `wallet_features` for the target market, call
-DeepSeek once with sanitized bio + features → 3-4 sentence
+DeepSeek once with anonymous numerical features → 3-4 sentence
 profile_text. Cached to `data/wallet_personas.json`.
 
-Methodological constraint: forbidden role-typing words ("market
-maker", "whale", "predator", etc.) are stripped from BOTH the LLM
-output AND the wallet's self-described bio (via `sanitize_bio`)
-BEFORE either reaches the LLM. SERD validation requires roles to
-emerge from the network, not from initialization.
+Methodological constraints:
+
+1. Forbidden role-typing words ("market maker", "whale", "predator",
+   etc.) are stripped from LLM output via ``_strip_role_labels``.
+   SERD validation requires roles to emerge from the network, not
+   from initialization.
+
+2. (v13) Bios and display names from ``holders.bios`` are **no longer
+   fed to the LLM**. The bio rendered on Polymarket's profile page is
+   the CURRENT bio, not the bio as of ``market_open_ts``; many users
+   edit their bio in response to wins/losses ("Roman Roy was 12c, free
+   money"), which is a direct post-cutoff leak. See
+   ``docs/v13/DATA_HYGIENE_AUDIT.md`` finding L-7. We keep
+   ``sanitize_bio`` exported (and tested) since downstream code still
+   imports the symbol, but the persona pipeline no longer calls it.
 """
 from __future__ import annotations
 
@@ -20,7 +30,6 @@ from pathlib import Path
 from typing import Optional
 
 from agent.decision.llm import call_deepseek
-from data.query.holders import get_bios
 from data.query.wallets import list_wallets_in_market
 from data.store.clickhouse import ClickHouse
 from data.store.config import get_settings
@@ -66,7 +75,8 @@ def _strip_role_labels(text: str) -> str:
     return _FORBIDDEN_RE.sub("this trader", text).strip()
 
 
-def _user_prompt(features: dict, bio: str = "", display_name: str = "") -> str:
+def _user_prompt(features: dict) -> str:
+    """v13: bio and display_name removed from prompt (audit L-7)."""
     cap = features["capital_usd"]
     tx = features["tx_count"]
     div = features["asset_diversity"]
@@ -79,36 +89,30 @@ def _user_prompt(features: dict, bio: str = "", display_name: str = "") -> str:
         f"- Trades: {tx} across {div} different markets",
         f"- Average position size per trade: ${avg:,.2f}",
         f"- Past prediction accuracy: {acc:.0%} (across {n} resolved markets)",
-    ]
-    if display_name:
-        parts.append(f"- Display name on Polymarket: {display_name}")
-    if bio:
-        parts.append(f'- Self-described bio (sanitized): "{bio}"')
-    parts.append("")
-    parts.append(
+        "",
         "Write the 3-4 sentence behavioral profile per the rules above. "
-        "Use the bio (if present) only for non-role-label colour like "
-        "stated topic interests; do not promote it to an archetype. "
         "Do not invent facts beyond what's listed; in particular do not "
         "claim anything about maker/taker behavior or holding time, "
-        "which are not in the input."
-    )
+        "which are not in the input.",
+    ]
     return "\n".join(parts)
 
 
 def generate_profile(
     features: dict,
     api_key: str, base_url: str, model: str,
-    bio: str = "", display_name: str = "",
     timeout: float = 120.0, call_fn=call_deepseek,
 ) -> tuple[str, bool]:
     """Returns (profile_text, ok). ok=False on failure or unredacted
-    forbidden labels remaining after cleanup."""
+    forbidden labels remaining after cleanup.
+
+    v13: bio / display_name kwargs removed; see audit L-7.
+    """
     try:
         result = call_fn(
             base_url=base_url, api_key=api_key, model=model,
             system_prompt=SYSTEM_PROMPT,
-            user_prompt=_user_prompt(features, bio=bio, display_name=display_name),
+            user_prompt=_user_prompt(features),
             # v7: temperature pinned to 0 — see docs/EMPIRICAL_PRIORS.md.
             temperature=0.0, timeout=timeout,
         )
@@ -162,9 +166,9 @@ def generate_for_market(
         )
         return 0
 
-    bios = get_bios(target_market_id, ch=ch)
-    log.info("loaded bio/display_name for %d holders", len(bios))
-
+    # v13: bios are intentionally NOT loaded; audit L-7 marks them as a
+    # post-cutoff leak source. The persona prompt now uses numerical
+    # features only.
     cache = load_cache(cache_path)
     market_cache = cache.setdefault(str(target_market_id), {})
 
@@ -181,23 +185,20 @@ def generate_for_market(
             "asset_diversity": asset_diversity, "avg_holding_h": avg_holding_h,
             "past_accuracy": past_accuracy, "n_resolved_prior": n_resolved_prior,
         }
-        meta = bios.get(wallet, {})
-        bio = sanitize_bio(meta.get("bio", ""))
-        display_name = meta.get("display_name", "")
         text, ok = generate_profile(
             features, api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL, model=settings.DEEPSEEK_MODEL,
-            bio=bio, display_name=display_name,
         )
         market_cache[wallet] = {
             "profile_text": text, "ok": ok,
-            "bio_used": bio, "display_name": display_name,
+            # v13: bio_used / display_name kept as empty for cache
+            # schema compatibility; not consumed.
+            "bio_used": "", "display_name": "",
         }
         n_generated += 1
         log.info(
-            "[%d/%d] %s ok=%s len=%d bio=%s",
+            "[%d/%d] %s ok=%s len=%d",
             n_generated, len(rows), wallet[:10], ok, len(text),
-            "yes" if bio else "no",
         )
     save_cache(cache, cache_path)
     log.info(

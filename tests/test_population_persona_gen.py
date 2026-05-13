@@ -76,16 +76,19 @@ class SanitizeBioTest(unittest.TestCase):
 
 
 class UserPromptWithBioTest(unittest.TestCase):
-    def test_includes_bio_when_provided(self):
-        p = pg._user_prompt(SAMPLE_FEATURES, bio="loves NBA",
-                             display_name="Alice")
-        self.assertIn("loves NBA", p)
-        self.assertIn("Alice", p)
+    """v13 (audit L-7): _user_prompt no longer accepts bio /
+    display_name. Tests are updated to assert the removal."""
 
-    def test_omits_bio_block_when_empty(self):
-        p = pg._user_prompt(SAMPLE_FEATURES, bio="", display_name="")
+    def test_no_bio_block_anywhere(self):
+        p = pg._user_prompt(SAMPLE_FEATURES)
         self.assertNotIn("Self-described bio", p)
         self.assertNotIn("Display name", p)
+
+    def test_signature_drops_bio_kwargs(self):
+        import inspect
+        sig = inspect.signature(pg._user_prompt)
+        self.assertNotIn("bio", sig.parameters)
+        self.assertNotIn("display_name", sig.parameters)
 
 
 class GenerateProfileTest(unittest.TestCase):

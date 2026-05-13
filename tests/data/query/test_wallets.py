@@ -40,6 +40,28 @@ class ResolvedOutcomesTest(unittest.TestCase):
         out = q.get_resolved_outcomes(["A", "B"], ch=ch)
         self.assertEqual(out, {"A": 0, "B": 1})
 
+    def test_cutoff_propagated_into_sql(self):
+        """v13 L-4 / L-10: cutoff_ts must filter end_date in SQL."""
+        ch = StubCH({
+            "FROM polymetl.markets_resolved": [("A", 0)],
+        })
+        out = q.get_resolved_outcomes(
+            ["A", "B"], ch=ch, cutoff_ts=1_700_000_000,
+        )
+        self.assertEqual(out, {"A": 0})
+        sql, params = ch.client.calls[0]
+        self.assertIn("toUnixTimestamp(end_date) < %(cutoff_ts)s", sql)
+        self.assertEqual(params["cutoff_ts"], 1_700_000_000)
+
+    def test_no_cutoff_omits_end_date_clause(self):
+        """Backward compat: when cutoff_ts is None, no end_date filter."""
+        ch = StubCH({
+            "FROM polymetl.markets_resolved": [("A", 0), ("B", 1)],
+        })
+        q.get_resolved_outcomes(["A", "B"], ch=ch)
+        sql, _ = ch.client.calls[0]
+        self.assertNotIn("end_date", sql)
+
 
 class CapitalBoundsTest(unittest.TestCase):
     def test_returns_quantiles(self):

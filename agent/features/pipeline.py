@@ -18,14 +18,20 @@ log = logging.getLogger(__name__)
 def build_features(
     slug: str, asof: str = "market_open",
     include_wallet_rows: bool = True,
-    include_bios: bool = True,
+    include_bios: bool = False,
     ch: Optional[ClickHouse] = None,
 ) -> dict:
-    """Bundle priors + wallet feature rows + bios for `slug`.
+    """Bundle priors + wallet feature rows (+ optionally bios) for `slug`.
 
     `asof` is reserved for v9 multi-snapshot support; in v8 only
     "market_open" is supported (the priors flow uses
     `market_open_ts` from `data.query.trades`).
+
+    v13: ``include_bios`` defaults to False — Polymarket bios are
+    user-editable and can carry post-cutoff information; see
+    ``docs/v13/DATA_HYGIENE_AUDIT.md`` finding L-7. The flag is kept
+    for backward-compat with offline analyses that explicitly want
+    bios but should not be flipped for simulation runs.
     """
     if asof != "market_open":
         raise NotImplementedError(

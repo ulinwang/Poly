@@ -1,11 +1,17 @@
 """v10 archetype sampling — distribution faithful to source + profile rendering."""
 from __future__ import annotations
 
+import json
+import os
 import random
+import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
 
+import pandas as pd
+
+from agent.personas import archetype as ap
 from agent.personas.archetype import (
     build_archetype_population,
     build_archetype_profile_text,
@@ -94,6 +100,61 @@ class ArchetypeSamplingTest(unittest.TestCase):
             [x["wallet_addr"] for x in a],
             [x["wallet_addr"] for x in b],
         )
+
+
+class EnvOverrideTest(unittest.TestCase):
+    """v13 (Fix 7): POLYMETL_WALLET_CLUSTERS / POLYMETL_CLUSTER_PROFILES
+    redirect the archetype sampler to a cutoff-conditioned table.
+    """
+
+    def setUp(self):
+        self._saved_w = os.environ.pop("POLYMETL_WALLET_CLUSTERS", None)
+        self._saved_p = os.environ.pop("POLYMETL_CLUSTER_PROFILES", None)
+        ap.reset_caches()
+
+    def tearDown(self):
+        os.environ.pop("POLYMETL_WALLET_CLUSTERS", None)
+        os.environ.pop("POLYMETL_CLUSTER_PROFILES", None)
+        if self._saved_w is not None:
+            os.environ["POLYMETL_WALLET_CLUSTERS"] = self._saved_w
+        if self._saved_p is not None:
+            os.environ["POLYMETL_CLUSTER_PROFILES"] = self._saved_p
+        ap.reset_caches()
+
+    def test_env_var_redirects_paths(self):
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            # Fake clusters parquet
+            df = pd.DataFrame({
+                "wallet": ["0xfake1", "0xfake2"],
+                "cluster": [0, 0],
+                "total_notional": [123.0, 456.0],
+                "tx_count": [3, 4],
+                "n_markets": [1, 2],
+                "top_market_share": [1.0, 0.5],
+                "mean_price": [0.5, 0.4],
+                "price_std": [0.1, 0.2],
+                "tail_trade_pct": [0.0, 0.1],
+                "log_active_days": [1.0, 2.0],
+                "past_accuracy": [0.55, 0.6],
+                "n_resolved_prior": [5, 6],
+            })
+            wc = tdp / "wallet_clusters_FAKE.parquet"
+            cp = tdp / "cluster_profiles_FAKE.json"
+            df.to_parquet(wc)
+            cp.write_text(json.dumps({
+                "K": 1, "seed": 42, "feat_cols": [],
+                "clusters": {"0": {"size": 2, "pct": 1.0,
+                                    "centroid": {}, "features": {}}},
+            }))
+            os.environ["POLYMETL_WALLET_CLUSTERS"] = str(wc)
+            os.environ["POLYMETL_CLUSTER_PROFILES"] = str(cp)
+
+            d = load_cluster_distribution()
+            self.assertEqual(d["K"], 1)
+            rng = random.Random(0)
+            w = sample_wallet_in_cluster(0, rng)
+            self.assertIn(w["wallet"], ("0xfake1", "0xfake2"))
 
 
 if __name__ == "__main__":

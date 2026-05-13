@@ -123,7 +123,11 @@ def calibrate(
         if not trades:
             continue
         cids = list({c for c, _, _, _, _ in trades})
-        resolved = q_wallets.get_resolved_outcomes(cids, ch=ch)
+        # v13: honor the same cutoff already used for trade fetching;
+        # see docs/v13/DATA_HYGIENE_AUDIT.md L-4 / L-10.
+        resolved = q_wallets.get_resolved_outcomes(
+            cids, ch=ch, cutoff_ts=cutoff_ts,
+        )
         feat = compute_features(trades, resolved)
         if i <= 10 or i % 50 == 0:
             log.info(

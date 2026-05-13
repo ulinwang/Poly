@@ -14,8 +14,10 @@ Output is consumed by `environment.env.PolyEnv` (Stage 3).
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import logging
+import os
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +88,32 @@ def load_priors(slug: str, data_dir: Path = Path("data")) -> dict:
             f"`python -m agent.features.market --slug {slug}` first"
         )
     return json.loads(path.read_text())
+
+
+def _maybe_wire_archetype_paths(
+    priors: dict, clustering_dir: Path = Path("data/clustering"),
+) -> None:
+    """v13 (Fix 7): if a cutoff-conditioned cluster table exists for
+    this market's open, export ``POLYMETL_WALLET_CLUSTERS`` and
+    ``POLYMETL_CLUSTER_PROFILES`` so ``agent.personas.archetype`` picks
+    it up. No-op if the cutoff-suffixed files aren't on disk."""
+    open_ts = priors.get("market_open_ts")
+    if open_ts is None:
+        return
+    suffix = dt.datetime.utcfromtimestamp(int(open_ts)).strftime("%Y%m%dT%H%M%SZ")
+    wc = clustering_dir / f"wallet_clusters_{suffix}.parquet"
+    cp = clustering_dir / f"cluster_profiles_{suffix}.json"
+    if wc.exists() and cp.exists():
+        os.environ["POLYMETL_WALLET_CLUSTERS"] = str(wc)
+        os.environ["POLYMETL_CLUSTER_PROFILES"] = str(cp)
+        log.info("archetype: using cutoff-conditioned cluster tables %s / %s",
+                 wc.name, cp.name)
+    else:
+        log.info(
+            "archetype: no cutoff-conditioned cluster table at %s; "
+            "falling back to legacy non-suffixed files",
+            wc.name,
+        )
 
 
 def init_agents(
@@ -214,10 +242,19 @@ def _init_agents_archetype(
     1.19M-wallet empirical distribution. No live LLM persona call:
     profile_text is the wallet's raw feature values, the trader LLM
     infers style at decision time."""
-    from agent.personas.archetype import build_archetype_population
+    from agent.personas import archetype as _archetype
 
     priors = load_priors(slug, data_dir=data_dir)
     ch = get_ch(ch)
+
+    # v13 (audit L-1, Fix 7): if a cutoff-conditioned cluster table
+    # exists for this market's open, prefer it over the legacy
+    # non-suffixed files. We point the archetype sampler at the new
+    # paths via environment variables so existing callers keep
+    # working (env-var override is module-level).
+    _maybe_wire_archetype_paths(priors)
+    _archetype.reset_caches()
+    build_archetype_population = _archetype.build_archetype_population
     # v10.1: archetype path NO LONGER clamps capital to the target market's
     # p5/p95 wallet_features distribution — doing so was inconsistent with
     # the profile_text (which states the wallet's real $XXX notional) and

@@ -35,21 +35,37 @@ def get_pre_event_trades(
 
 
 def get_resolved_outcomes(
-    condition_ids: list[str], ch=None,
+    condition_ids: list[str], ch=None, cutoff_ts: int | None = None,
 ) -> dict[str, int]:
     """Batched lookup: condition_id → winning_idx (-1 = unresolved
-    or unknown)."""
+    or unknown).
+
+    v13: pass ``cutoff_ts`` (unix int) to honor data hygiene; only
+    markets whose ``end_date`` strictly precedes ``cutoff_ts`` are
+    returned. See docs/v13/DATA_HYGIENE_AUDIT.md L-4 / L-10.
+    """
     if not condition_ids:
         return {}
     ch = get_ch(ch)
-    rows = ch.client.execute(
-        """
-        SELECT condition_id, winning_idx
-        FROM polymetl.markets_resolved FINAL
-        WHERE condition_id IN %(ids)s
-        """,
-        {"ids": tuple(condition_ids)},
-    )
+    if cutoff_ts is None:
+        rows = ch.client.execute(
+            """
+            SELECT condition_id, winning_idx
+            FROM polymetl.markets_resolved FINAL
+            WHERE condition_id IN %(ids)s
+            """,
+            {"ids": tuple(condition_ids)},
+        )
+    else:
+        rows = ch.client.execute(
+            """
+            SELECT condition_id, winning_idx
+            FROM polymetl.markets_resolved FINAL
+            WHERE condition_id IN %(ids)s
+              AND toUnixTimestamp(end_date) < %(cutoff_ts)s
+            """,
+            {"ids": tuple(condition_ids), "cutoff_ts": int(cutoff_ts)},
+        )
     return {cid: int(idx) for cid, idx in rows}
 
 

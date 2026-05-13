@@ -30,6 +30,11 @@ class AgentConfig(BaseModel):
     persona_recipe: PersonaRecipe = Field(default_factory=PersonaRecipe)
     n_agents: Optional[int] = None        # None = all wallets with cached profile
     seed: int = 0
+    # v13 (audit L-6): which signal does derive_priors expose as the
+    # private-information anchor for agents?
+    #   - first_window_vwap : current default; 24h post-open VWAP
+    #   - bootstrap_anchor  : reuse the orderbook bootstrap anchor_yes
+    signal_mu_source: Literal["first_window_vwap", "bootstrap_anchor"] = "first_window_vwap"
 
 
 class EnvironmentConfig(BaseModel):
