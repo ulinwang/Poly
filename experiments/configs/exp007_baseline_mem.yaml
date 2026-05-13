@@ -1,0 +1,31 @@
+name: baseline_mem
+description: |
+  v10.1 ablation D: baseline calibrated population on Roman Roy with
+  v10.1 episodic memory enabled (each tick the LLM sees its last 3
+  decision summaries). Tests whether the CANCEL spam (53-74% in v10
+  ablations) drops materially when LLM has self-state visibility.
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: calibrated
+  n_agents: null
+  seed: 0
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output

@@ -34,11 +34,17 @@ def observe(sim, agent_id: int) -> tuple[MarketSnapshot, AgentSnapshot]:
                     + sim.book_no.bids + sim.book_no.asks)
         if o.agent_id == agent_id
     )
+    # v10.1: copy the last MEMORY_DEPTH entries from agent.memory so
+    # the LLM can see its own recent actions (fixes the CANCEL spam).
+    MEMORY_DEPTH = 3
+    recent = list(getattr(agent, "memory", []) or [])[-MEMORY_DEPTH:]
+
     state = AgentSnapshot(
         agent_id=agent.agent_id, cash=agent.cash,
         yes_shares=agent.yes_shares, no_shares=agent.no_shares,
         n_resting_orders=n_resting,
         private_signal_mu=agent.private_signal_mu,
         private_signal_sigma=agent.private_signal_sigma,
+        recent_decisions=recent,
     )
     return market, state

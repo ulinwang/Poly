@@ -13,5 +13,14 @@ Your portfolio:
   YES shares: {{ "%.2f"|format(yes_shares) }}
   NO shares:  {{ "%.2f"|format(no_shares) }}
   Resting orders open: {{ n_resting_orders }}
+{%- if recent_decisions %}
+
+Your recent decisions (most recent last; the engine has already executed each):
+{%- for d in recent_decisions %}
+  tick {{ d.tick }}: {{ d.action }} {{ d.outcome }}/{{ d.side }}{% if d.price > 0 %} @{{ "%.2f"|format(d.price) }}{% endif %}{% if d.size_usd > 0 %} ${{ "%.0f"|format(d.size_usd) }}{% endif %} → {{ d.fills }} fill(s), yes_mid {{ "%.3f"|format(d.yes_mid_after) }}
+{%- endfor %}
+
+Reminder: do NOT cancel a resting order just to "clean the slate" — re-cancelling work you already approved wastes capacity. Only cancel if your view has changed materially since the order was placed.
+{%- endif %}
 
 What is your action this tick? Reply with the JSON action object.

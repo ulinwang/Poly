@@ -102,4 +102,5 @@ def build_user_prompt(
         cash=agent.cash,
         yes_shares=agent.yes_shares, no_shares=agent.no_shares,
         n_resting_orders=agent.n_resting_orders,
+        recent_decisions=getattr(agent, "recent_decisions", None) or [],
     )

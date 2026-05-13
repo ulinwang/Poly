@@ -1,0 +1,30 @@
+name: archetype_n30_mem
+description: |
+  v10.1 ablation E: archetype-sampled population n=30 with v10.1
+  memory + v10.1 fixed capital_initial (archetype agents now start
+  with REAL notional, not the Roman-Roy clamped value).
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: archetype
+  n_agents: 30
+  seed: 42
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output

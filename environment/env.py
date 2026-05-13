@@ -61,6 +61,16 @@ class AgentRuntime:
     cash_reserved: float = 0.0
     yes_reserved: float = 0.0
     no_reserved: float = 0.0
+    # v10.1: episodic memory — list of compact dicts summarizing the
+    # agent's recent decisions, written by env.step after each tick.
+    # Read by the prompt builder; the LLM sees the last MEMORY_DEPTH
+    # entries to avoid blind self-cancellation.
+    memory: list = None  # default_factory in __post_init__ to keep
+    # the dataclass default order stable
+
+    def __post_init__(self):
+        if self.memory is None:
+            self.memory = []
 
 
 def available_cash(a: "AgentRuntime") -> float:
@@ -448,6 +458,14 @@ def run_simulation(
                 decision.api_latency_ms,
                 decision.api_error or exec_err, now,
             ))
+            # v10.1: episodic memory (parallel to actions_log, kept on agent)
+            if getattr(agent, "memory", None) is not None:
+                agent.memory.append({
+                    "tick": tick, "action": decision.order_type,
+                    "outcome": decision.outcome, "side": decision.side,
+                    "price": float(decision.price), "size_usd": float(decision.size_usd),
+                    "fills": len(fills), "yes_mid_after": float(yes_mid_after),
+                })
             if log_progress:
                 err = decision.api_error or exec_err
                 err_s = f" err={err}" if err else ""
@@ -571,6 +589,18 @@ class PolyEnv:
                 decision.api_latency_ms,
                 decision.api_error or exec_err, dt.datetime.utcnow(),
             ))
+            # v10.1: append a compact memory entry for the next tick's prompt
+            if getattr(agent, "memory", None) is not None:
+                agent.memory.append({
+                    "tick": self._tick,
+                    "action": decision.order_type,
+                    "outcome": decision.outcome,
+                    "side": decision.side,
+                    "price": float(decision.price),
+                    "size_usd": float(decision.size_usd),
+                    "fills": len(fills),
+                    "yes_mid_after": float(yes_mid_after),
+                })
 
         for agent in sim.agents:
             unrealized = (

@@ -218,19 +218,19 @@ def _init_agents_archetype(
 
     priors = load_priors(slug, data_dir=data_dir)
     ch = get_ch(ch)
-    cap_floor, cap_cap = q_wallets.empirical_capital_bounds(
-        priors["condition_id"], ch=ch,
-    )
-    if cap_cap <= cap_floor:
-        cap_floor, cap_cap = max(1.0, cap_floor), max(cap_floor + 1.0, cap_cap, 100.0)
-
+    # v10.1: archetype path NO LONGER clamps capital to the target market's
+    # p5/p95 wallet_features distribution — doing so was inconsistent with
+    # the profile_text (which states the wallet's real $XXX notional) and
+    # caused exp004 to be unusually quiet. Use the wallet's REAL total
+    # notional as starting cash, bounded only by a $10 minimum to avoid
+    # degenerate zero-capital agents.
     rng = random.Random(seed)
     consensus_mu = float(priors["signal_mu"])
     pop = build_archetype_population(n_agents=n_agents, seed=seed)
     out: list[AgentInit] = []
     for i, a in enumerate(pop):
         f = a["features"]
-        capital = max(cap_floor, min(cap_cap, float(f["total_notional"])))
+        capital = max(10.0, float(f["total_notional"]))
         past_acc = f.get("past_accuracy")
         past_acc = 0.5 if (past_acc is None or
                             (isinstance(past_acc, float) and math.isnan(past_acc))) \

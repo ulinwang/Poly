@@ -30,6 +30,11 @@ class AgentSnapshot:
     n_resting_orders: int
     private_signal_mu: float | None = None
     private_signal_sigma: float | None = None
+    # v10.1: recent decision log entries (most-recent-last). Each entry
+    # is a small dict {"tick", "action", "outcome", "side", "price",
+    # "size_usd", "fills", "yes_mid_after"}. The observer caps this
+    # at MEMORY_DEPTH ≈ 3 to keep the prompt small.
+    recent_decisions: list[dict] | None = None
 
 
 @dataclass
