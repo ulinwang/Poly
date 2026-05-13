@@ -1,0 +1,32 @@
+name: b1_replication
+description: |
+  v13 B1 — External-validity replication. Archetype-30 + memory across
+  a panel of 10 resolved binary markets. The {market.slug} placeholder
+  is substituted per-market by scripts/run_experiment_suite.py, which
+  reads experiments/configs/b1_markets.yaml.
+
+market:
+  slug: "{slug}"   # filled in by run_experiment_suite.py
+  asof: market_open
+
+agent:
+  population: archetype
+  n_agents: 30
+  seed: 0
+  belief_update_enabled: false
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output_v13/b1

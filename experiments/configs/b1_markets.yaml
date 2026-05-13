@@ -1,0 +1,79 @@
+_generated_by: scripts/select_replication_markets.py
+seed: 0
+balance: yes_no
+min_volume: 5000.0
+max_volume: 5000000.0
+min_wallets: 30
+n_requested: 10
+n_returned: 10
+markets:
+- slug: dogecoin-above-0pt34-on-january-17
+  condition_id: '0x602f372beb47e4b43befa74114db87932a3d4566abb11f2d3cbfdc4dad7158d6'
+  winning_idx: 0
+  volume: 199496.164682
+  end_date: '2025-01-17T12:00:00'
+  question: Dogecoin above $0.34 on January 17?
+  n_wallets: 2637
+- slug: nba-por-mia-2025-01-21
+  condition_id: '0x7f7a2f4257f0b500dc49c24f6c95c9c44ee8a82d9961d5727a3572682212c516'
+  winning_idx: 0
+  volume: 284415.094787
+  end_date: '2025-01-29T00:30:00'
+  question: Trail Blazers vs. Heat
+  n_wallets: 2385
+- slug: will-yamand-orsi-win-the-2024-uruguay-presidential-election
+  condition_id: '0x24849f6151db4691a332ea8beaa12af9c290340062f664797e6034d0cf4ea61a'
+  winning_idx: 0
+  volume: 360312.012788
+  end_date: '2024-10-27T12:00:00'
+  question: "Will Yamand\xFA Orsi win the 2024 Uruguay presidential election?"
+  n_wallets: 2051
+- slug: nba-gsw-min-2025-01-15
+  condition_id: '0x62f6e845e4cb01e95a11d582b8580f27715aa4d34a9f2bd05abe94ba49d8a77b'
+  winning_idx: 0
+  volume: 496443.88821
+  end_date: '2025-01-23T01:00:00'
+  question: Warriors vs. Timberwolves
+  n_wallets: 1922
+- slug: will-cducsu-and-spd-form-the-next-german-government
+  condition_id: '0xff9fc7e6239b4d92f24d9100f3b1415dfcbb34ec15afcdcc4359692b0517e20e'
+  winning_idx: 0
+  volume: 1934548.249683
+  end_date: '2025-02-23T12:00:00'
+  question: Will CDU/CSU and SPD form the next German Government?
+  n_wallets: 1951
+- slug: will-xrp-dip-to-1pt50-in-august-343-253-666-332-591
+  condition_id: '0x21c48b3fc19c56b9d3da77a9717fdc55b21e0f109d361bbb7b1b39b0948cf0cd'
+  winning_idx: 1
+  volume: 202276.555028
+  end_date: '2025-09-01T04:00:00'
+  question: Will XRP dip to $1.50 in August?
+  n_wallets: 2112
+- slug: nba-phx-ind-2025-01-04
+  condition_id: '0x74a4f98027d0df96f393c4b5ec32b4a5ce3a67945450c5b8553cf26fc56555c8'
+  winning_idx: 1
+  volume: 302377.005548
+  end_date: '2025-01-12T00:00:00'
+  question: Suns vs. Pacers
+  n_wallets: 2003
+- slug: will-the-price-of-bitcoin-be-less-than-78000-on-mar-28
+  condition_id: '0x97708953d0cd07f3484daf495563dbbff7326a118e5072a007c587a8d07c603d'
+  winning_idx: 1
+  volume: 405981.304859
+  end_date: '2025-03-28T12:00:00'
+  question: Will the price of Bitcoin be less than $78000 on Mar 28?
+  n_wallets: 2305
+- slug: will-xrp-dip-to-1pt00-in-march
+  condition_id: '0xc7bb18f830ef96d092319dbf5962c16ecaadb3f88a2f6f187ce4e0f04ca9f410'
+  winning_idx: 1
+  volume: 494680.161094
+  end_date: '2025-03-31T12:00:00'
+  question: Will XRP dip to $1.00 in March?
+  n_wallets: 2286
+- slug: will-elon-musk-buy-msnbc-before-april-2025
+  condition_id: '0xa93623e5dcd6a82ba77044a9d0f97e1afe97c2d7a15529076f9e2837b058b5ca'
+  winning_idx: 1
+  volume: 2252815.806165
+  end_date: '2025-03-31T12:00:00'
+  question: Will Elon Musk buy MSNBC?
+  n_wallets: 2568
