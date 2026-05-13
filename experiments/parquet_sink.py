@@ -88,6 +88,24 @@ def dump_simulation(
             persona_rows, PERSONA_COLUMNS,
             raw / "agent_personas.parquet", compression,
         )
+    # Persist agent.memory (belief trajectory). One row per
+    # (agent_id, tick) entry; columns mirror the memory dict.
+    memory_rows = []
+    for a in getattr(sim, "agents", []) or []:
+        for m in getattr(a, "memory", None) or []:
+            memory_rows.append((
+                sim.sim_id, a.agent_id, int(m.get("tick", -1)),
+                m.get("action", ""), m.get("outcome", ""), m.get("side", ""),
+                float(m.get("price", 0.0)), float(m.get("size_usd", 0.0)),
+                int(m.get("fills", 0)), float(m.get("yes_mid_after", 0.0)),
+                m.get("reasoning", ""),
+            ))
+    out["agent_memory"] = write_parquet(
+        memory_rows,
+        ["sim_id", "agent_id", "tick", "action", "outcome", "side",
+         "price", "size_usd", "fills", "yes_mid_after", "reasoning"],
+        raw / "agent_memory.parquet", compression,
+    )
     return out
 
 

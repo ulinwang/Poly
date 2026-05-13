@@ -15,12 +15,16 @@ Your portfolio:
   Resting orders open: {{ n_resting_orders }}
 {%- if recent_decisions %}
 
-Your recent decisions (most recent last; the engine has already executed each):
+Your most recent stated view (last tick): "{{ recent_decisions[-1].reasoning }}"
+
+Your recent actions (most recent last; the engine has already executed each):
 {%- for d in recent_decisions %}
   tick {{ d.tick }}: {{ d.action }} {{ d.outcome }}/{{ d.side }}{% if d.price > 0 %} @{{ "%.2f"|format(d.price) }}{% endif %}{% if d.size_usd > 0 %} ${{ "%.0f"|format(d.size_usd) }}{% endif %} → {{ d.fills }} fill(s), yes_mid {{ "%.3f"|format(d.yes_mid_after) }}
 {%- endfor %}
 
-Reminder: do NOT cancel a resting order just to "clean the slate" — re-cancelling work you already approved wastes capacity. Only cancel if your view has changed materially since the order was placed.
+Guidance:
+- Treat your "most recent stated view" as your prior; only revise it if NEW information justifies it (price moved, time decayed, your bet sized).
+- Do NOT cancel a resting order just to "clean the slate" — re-cancelling work you already approved wastes capacity. Only cancel if your view has materially changed.
 {%- endif %}
 
 What is your action this tick? Reply with the JSON action object.

@@ -1,0 +1,29 @@
+name: archetype_n100
+description: |
+  Scale experiment B: 100 archetype-sampled agents with belief memory.
+  Largest population tested; ~10× the real market's wallet count.
+
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+
+agent:
+  population: archetype
+  n_agents: 100
+  seed: 42
+
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+
+llm:
+  model: null
+  temperature: 0.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output

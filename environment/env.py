@@ -458,13 +458,16 @@ def run_simulation(
                 decision.api_latency_ms,
                 decision.api_error or exec_err, now,
             ))
-            # v10.1: episodic memory (parallel to actions_log, kept on agent)
+            # Episodic memory: action + reasoning. The reasoning is the
+            # LLM's own update on its market view; carrying it across
+            # ticks gives the agent persistent belief continuity.
             if getattr(agent, "memory", None) is not None:
                 agent.memory.append({
                     "tick": tick, "action": decision.order_type,
                     "outcome": decision.outcome, "side": decision.side,
                     "price": float(decision.price), "size_usd": float(decision.size_usd),
                     "fills": len(fills), "yes_mid_after": float(yes_mid_after),
+                    "reasoning": (decision.reasoning or "").strip()[:240],
                 })
             if log_progress:
                 err = decision.api_error or exec_err
@@ -589,7 +592,7 @@ class PolyEnv:
                 decision.api_latency_ms,
                 decision.api_error or exec_err, dt.datetime.utcnow(),
             ))
-            # v10.1: append a compact memory entry for the next tick's prompt
+            # Episodic memory: action + reasoning (belief carrier).
             if getattr(agent, "memory", None) is not None:
                 agent.memory.append({
                     "tick": self._tick,
@@ -600,6 +603,7 @@ class PolyEnv:
                     "size_usd": float(decision.size_usd),
                     "fills": len(fills),
                     "yes_mid_after": float(yes_mid_after),
+                    "reasoning": (decision.reasoning or "").strip()[:240],
                 })
 
         for agent in sim.agents:
