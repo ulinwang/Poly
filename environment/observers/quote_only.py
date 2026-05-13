@@ -39,6 +39,11 @@ def observe(sim, agent_id: int) -> tuple[MarketSnapshot, AgentSnapshot]:
     MEMORY_DEPTH = 3
     recent = list(getattr(agent, "memory", []) or [])[-MEMORY_DEPTH:]
 
+    # v13 (AGT-4): copy the agent's current explicit belief, if any,
+    # so the prompt builder can render "Your current stated belief".
+    belief_snapshot = getattr(agent, "belief", None)
+    belief_copy = dict(belief_snapshot) if belief_snapshot else None
+
     state = AgentSnapshot(
         agent_id=agent.agent_id, cash=agent.cash,
         yes_shares=agent.yes_shares, no_shares=agent.no_shares,
@@ -46,5 +51,6 @@ def observe(sim, agent_id: int) -> tuple[MarketSnapshot, AgentSnapshot]:
         private_signal_mu=agent.private_signal_mu,
         private_signal_sigma=agent.private_signal_sigma,
         recent_decisions=recent,
+        belief_snapshot=belief_copy,
     )
     return market, state

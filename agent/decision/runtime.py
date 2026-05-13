@@ -12,7 +12,7 @@ import time
 import urllib.error
 
 from agent.decision.llm import call_deepseek_with_tools
-from agent.decision.parser import parse_tool_call
+from agent.decision.parser import parse_belief_tool_call, parse_tool_call
 from agent.decision.retry import call_with_retry
 from agent.decision.tool_schemas import TOOL_SCHEMAS
 from agent.decision.types import AgentSnapshot, Decision, MarketSnapshot
@@ -58,6 +58,7 @@ def decide(
         "order_type": "HOLD", "outcome": "YES", "side": "BUY",
         "price": 0.5, "size_usd": 0.0, "reasoning": "",
     }
+    belief_update = None
     try:
         result = call_with_retry(
             call_fn,
@@ -69,6 +70,19 @@ def decide(
         )
         raw = result.get("raw", "")
         parsed = parse_tool_call(result.get("tool_call"), tick_size=tick_size)
+        # v13: if the LLM combined update_belief with a trade tool,
+        # extract the belief payload from the FIRST update_belief call
+        # in tool_calls and attach it to the (trade) Decision. If
+        # update_belief was the only call, parse_tool_call already
+        # produced an UPDATE_BELIEF decision with belief_update set.
+        if parsed["order_type"] != "UPDATE_BELIEF":
+            for tc in (result.get("tool_calls") or []):
+                bu = parse_belief_tool_call(tc)
+                if bu is not None:
+                    belief_update = bu
+                    break
+        else:
+            belief_update = parsed.get("belief_update")
         # If the LLM put prose in `text` (e.g. tool_choice=auto and it
         # declined to call), pin it as the reasoning so we don't lose
         # the trace.
@@ -89,4 +103,5 @@ def decide(
         side=parsed["side"], price=parsed["price"],
         size_usd=parsed["size_usd"], reasoning=parsed["reasoning"],
         raw_response=raw, api_latency_ms=latency_ms, api_error=api_error,
+        belief_update=belief_update,
     )

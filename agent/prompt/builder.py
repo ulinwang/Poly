@@ -90,6 +90,16 @@ def build_user_prompt(
             f"Update it as the market evolves; it is your starting belief, not ground truth."
         )
 
+    # v13 (AGT-4): surface the agent's explicit belief (if it has set
+    # one via update_belief). `ticks_ago` is derived from the current
+    # tick (= total_ticks - ticks_remaining) and the set_at_tick.
+    belief = getattr(agent, "belief_snapshot", None) or None
+    if belief is not None:
+        current_tick = max(0, market.total_ticks - market.ticks_remaining)
+        ticks_ago = max(0, current_tick - int(belief.get("set_at_tick", 0)))
+    else:
+        ticks_ago = 0
+
     tmpl = _env().get_template("user_state.j2")
     return tmpl.render(
         signal_block=signal_block,
@@ -103,4 +113,6 @@ def build_user_prompt(
         yes_shares=agent.yes_shares, no_shares=agent.no_shares,
         n_resting_orders=agent.n_resting_orders,
         recent_decisions=getattr(agent, "recent_decisions", None) or [],
+        belief_snapshot=belief,
+        ticks_ago=ticks_ago,
     )

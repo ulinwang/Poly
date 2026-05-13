@@ -9,8 +9,9 @@ from agent.decision.tool_schemas import (
 
 
 class ToolSchemaShapeTest(unittest.TestCase):
-    def test_has_five_tools(self):
-        self.assertEqual(len(TOOL_SCHEMAS), 5)
+    def test_has_six_tools(self):
+        # v13 (AGT-4) added `update_belief`; bumped from 5 → 6.
+        self.assertEqual(len(TOOL_SCHEMAS), 6)
 
     def test_names_match_dispatcher(self):
         names = {t["function"]["name"] for t in TOOL_SCHEMAS}

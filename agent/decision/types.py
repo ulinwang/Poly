@@ -35,6 +35,11 @@ class AgentSnapshot:
     # "size_usd", "fills", "yes_mid_after"}. The observer caps this
     # at MEMORY_DEPTH ≈ 3 to keep the prompt small.
     recent_decisions: list[dict] | None = None
+    # v13 (AGT-4): the agent's most recent posterior on P(YES) as set
+    # by an `update_belief` tool call. Shape:
+    # {"yes_prob": float, "confidence": float, "set_at_tick": int,
+    #  "rationale": str}. None until the agent first calls update_belief.
+    belief_snapshot: dict | None = None
 
 
 @dataclass
@@ -48,3 +53,8 @@ class Decision:
     raw_response: str
     api_latency_ms: int
     api_error: str
+    # v13 (AGT-4): if the LLM called `update_belief` (either alone or
+    # in combination with a trade tool), this holds the posterior to
+    # be persisted onto the agent before applying the trade.
+    # Shape: {"yes_prob": float, "confidence": float, "rationale": str}.
+    belief_update: dict | None = None

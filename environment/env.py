@@ -14,9 +14,11 @@ Structure:
 """
 from __future__ import annotations
 
+import copy
 import datetime as dt
 import logging
 import random
+import statistics
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
@@ -65,8 +67,14 @@ class AgentRuntime:
     # agent's recent decisions, written by env.step after each tick.
     # Read by the prompt builder; the LLM sees the last MEMORY_DEPTH
     # entries to avoid blind self-cancellation.
+    # v13 (AGT-4): each memory entry additionally carries optional
+    # `belief_yes_prob` / `belief_confidence` keys reflecting whichever
+    # explicit belief the agent had set by the end of that tick. The
+    # current posterior lives on `belief` below (None until the agent
+    # first calls update_belief).
     memory: list = None  # default_factory in __post_init__ to keep
     # the dataclass default order stable
+    belief: Optional[dict] = None
 
     def __post_init__(self):
         if self.memory is None:
@@ -238,6 +246,49 @@ def _agent_resting_count(book: OrderBook, agent_id: int) -> int:
     )
 
 
+def _apply_belief_update(
+    agent: "AgentRuntime", decision: Decision, tick: int,
+) -> dict | None:
+    """If `decision.belief_update` is set (or decision.order_type is
+    UPDATE_BELIEF), persist the posterior onto `agent.belief` and
+    return it. Otherwise return None.
+
+    Returns the dict that was written so the caller can emit a
+    matching UPDATE_BELIEF row into actions_log.
+    """
+    payload = getattr(decision, "belief_update", None)
+    if not payload:
+        return None
+    snapshot = {
+        "yes_prob": float(payload["yes_prob"]),
+        "confidence": float(payload["confidence"]),
+        "rationale": str(payload.get("rationale", "")),
+        "set_at_tick": int(tick),
+    }
+    agent.belief = snapshot
+    return snapshot
+
+
+def _belief_action_row(
+    sim: Simulation, agent: "AgentRuntime",
+    belief: dict, tick: int,
+) -> tuple:
+    """Build an actions_log row for an UPDATE_BELIEF event. Keeps the
+    column layout identical to other rows so downstream parquet writers
+    don't need a special path."""
+    now = dt.datetime.utcnow()
+    return (
+        sim.sim_id, tick, agent.agent_id,
+        "UPDATE_BELIEF", "", "",
+        float(belief["yes_prob"]), 0.0,
+        sim.yes_mid, sim.yes_mid, 0.0,
+        0,
+        belief.get("rationale", ""), "",
+        0,
+        "", now,
+    )
+
+
 def _execute_decision(
     sim: Simulation, agent: AgentRuntime, decision: Decision, tick: int,
 ) -> tuple[list[Fill], float, str]:
@@ -247,6 +298,10 @@ def _execute_decision(
     book = _book_for(sim, decision.outcome)
 
     if decision.order_type == "HOLD":
+        return [], 0.0, ""
+    # v13 (AGT-4): UPDATE_BELIEF is a HOLD with a side-effect (already
+    # applied by the caller on agent.belief). No book interaction.
+    if decision.order_type == "UPDATE_BELIEF":
         return [], 0.0, ""
     # CANCEL has size_usd=0 by design; do NOT short-circuit on size.
     if decision.order_type != "CANCEL" and decision.size_usd <= 0:
@@ -443,6 +498,10 @@ def run_simulation(
                 market=market, agent=agent_state,
                 api_key=api_key, base_url=base_url, model=model,
             )
+            # v13: apply update_belief side effect BEFORE the trade so
+            # the belief is set even if execution errors out, and so
+            # the memory writer below captures the new belief.
+            belief_applied = _apply_belief_update(agent, decision, tick)
             yes_mid_before = sim.yes_mid
             fills, shares_taken, exec_err = _execute_decision(sim, agent, decision, tick)
             yes_mid_after = sim.yes_mid
@@ -458,16 +517,29 @@ def run_simulation(
                 decision.api_latency_ms,
                 decision.api_error or exec_err, now,
             ))
+            # v13: belief paired with a *trade* tool — emit a separate
+            # UPDATE_BELIEF row so downstream analysis can count belief
+            # updates independently of trade actions. Solo UPDATE_BELIEF
+            # decisions are already represented by the row above.
+            if belief_applied and decision.order_type != "UPDATE_BELIEF":
+                sim.actions_log.append(
+                    _belief_action_row(sim, agent, belief_applied, tick)
+                )
             # Episodic memory: action + reasoning. The reasoning is the
             # LLM's own update on its market view; carrying it across
             # ticks gives the agent persistent belief continuity.
+            # v13: ALSO record the agent's stated belief snapshot at this
+            # tick (None if the agent has not called update_belief yet).
             if getattr(agent, "memory", None) is not None:
+                b = getattr(agent, "belief", None) or {}
                 agent.memory.append({
                     "tick": tick, "action": decision.order_type,
                     "outcome": decision.outcome, "side": decision.side,
                     "price": float(decision.price), "size_usd": float(decision.size_usd),
                     "fills": len(fills), "yes_mid_after": float(yes_mid_after),
                     "reasoning": (decision.reasoning or "").strip()[:240],
+                    "belief_yes_prob": b.get("yes_prob"),
+                    "belief_confidence": b.get("confidence"),
                 })
             if log_progress:
                 err = decision.api_error or exec_err
@@ -565,9 +637,21 @@ class PolyEnv:
         self._rng = random.Random(seed)
         return self._observations()
 
-    def step(self, actions: dict[int, Decision]) -> tuple[dict, dict]:
+    def step(
+        self,
+        actions: dict[int, Decision],
+        *,
+        order: list[int] | None = None,
+    ) -> tuple[dict, dict]:
         """Apply one tick of `{agent_id: Decision}`. Returns
-        (observations, info)."""
+        (observations, info).
+
+        v13 (AGT-4): `order` optionally fixes the within-tick processing
+        order as a list of agent indices (positions in `sim.agents`).
+        If None (default), behaviour is unchanged — env's RNG shuffles
+        the order. Tests and the sensitivity runner use this hook to
+        measure within-tick ordering effects.
+        """
         if self.sim is None:
             raise RuntimeError("call .reset(seed) before .step()")
         sim = self.sim
@@ -575,14 +659,19 @@ class PolyEnv:
         sim.no_mid_history.append(sim.no_mid)
         setattr(sim, "_ticks_remaining", self.n_ticks - self._tick)
 
-        order_idx = list(range(len(sim.agents)))
-        self._rng.shuffle(order_idx)              # type: ignore[union-attr]
+        if order is None:
+            order_idx = list(range(len(sim.agents)))
+            self._rng.shuffle(order_idx)          # type: ignore[union-attr]
+        else:
+            order_idx = list(order)
         n_fills = 0
         for ai in order_idx:
             agent = sim.agents[ai]
             decision = actions.get(agent.agent_id)
             if decision is None:
                 continue
+            # v13: belief side-effect applied prior to trade execution.
+            belief_applied = _apply_belief_update(agent, decision, self._tick)
             yes_mid_before = sim.yes_mid
             fills, shares_taken, exec_err = _execute_decision(
                 sim, agent, decision, self._tick,
@@ -599,8 +688,14 @@ class PolyEnv:
                 decision.api_latency_ms,
                 decision.api_error or exec_err, dt.datetime.utcnow(),
             ))
+            if belief_applied and decision.order_type != "UPDATE_BELIEF":
+                sim.actions_log.append(
+                    _belief_action_row(sim, agent, belief_applied, self._tick)
+                )
             # Episodic memory: action + reasoning (belief carrier).
+            # v13: include belief snapshot keys (None if no belief set).
             if getattr(agent, "memory", None) is not None:
+                b = getattr(agent, "belief", None) or {}
                 agent.memory.append({
                     "tick": self._tick,
                     "action": decision.order_type,
@@ -611,6 +706,8 @@ class PolyEnv:
                     "fills": len(fills),
                     "yes_mid_after": float(yes_mid_after),
                     "reasoning": (decision.reasoning or "").strip()[:240],
+                    "belief_yes_prob": b.get("yes_prob"),
+                    "belief_confidence": b.get("confidence"),
                 })
 
         for agent in sim.agents:
@@ -643,3 +740,80 @@ class PolyEnv:
         if self.sim is None:
             raise RuntimeError("env not yet reset")
         return _settle(self.sim)
+
+
+# ============================================================
+# v13 (AGT-4) — within-tick ordering sensitivity probe.
+# ============================================================
+
+
+def sensitivity_run(
+    env: "PolyEnv",
+    actions: dict[int, "Decision"],
+    n_orders: int = 10,
+    *,
+    rng: Optional[random.Random] = None,
+) -> dict:
+    """Probe how within-tick agent processing order affects outcomes.
+
+    Each permutation:
+      1. Restore a deepcopy of the env (sim + _tick + _rng).
+      2. Run env.step(actions, order=<perm>) once.
+      3. Record final yes_mid and the number of fills returned.
+
+    Returns:
+      {
+        "permutations": [
+            {"order": [...], "yes_mid": float, "n_fills": int}, ...
+        ],
+        "yes_mid_std": float,       # 0.0 if only one perm or no variance
+        "n_fills_range": int,       # max - min over permutations
+      }
+
+    The original env is NOT mutated.
+    """
+    if env.sim is None:
+        raise RuntimeError("call env.reset(seed) before sensitivity_run")
+    rng = rng or random.Random(0)
+    n_agents = len(env.sim.agents)
+    base_perm = list(range(n_agents))
+
+    # Snapshot the live env state once. Each permutation deepcopy-clones
+    # from this snapshot so they share an identical starting point.
+    snapshot_sim = copy.deepcopy(env.sim)
+    snapshot_tick = env._tick
+    # _rng is a random.Random which copy.deepcopy handles via its
+    # __getstate__; we snapshot it so each replay sees identical rng.
+    snapshot_rng = copy.deepcopy(env._rng) if env._rng is not None else None
+
+    perms_seen: list[list[int]] = []
+    results: list[dict] = []
+    for i in range(n_orders):
+        perm = list(base_perm)
+        rng.shuffle(perm)
+        perms_seen.append(perm)
+        # Restore env state
+        env.sim = copy.deepcopy(snapshot_sim)
+        env._tick = snapshot_tick
+        env._rng = copy.deepcopy(snapshot_rng) if snapshot_rng else random.Random(0)
+        env.step(actions, order=perm)
+        results.append({
+            "order": perm,
+            "yes_mid": float(env.sim.yes_mid),
+            "n_fills": int(len(env.sim.fills_log) - len(snapshot_sim.fills_log)),
+        })
+
+    # Restore the original env at the end so the caller can continue.
+    env.sim = snapshot_sim
+    env._tick = snapshot_tick
+    env._rng = snapshot_rng if snapshot_rng is not None else random.Random(0)
+
+    yes_mids = [r["yes_mid"] for r in results]
+    n_fills_vals = [r["n_fills"] for r in results]
+    yes_mid_std = float(statistics.pstdev(yes_mids)) if len(yes_mids) > 1 else 0.0
+    n_fills_range = (max(n_fills_vals) - min(n_fills_vals)) if n_fills_vals else 0
+    return {
+        "permutations": results,
+        "yes_mid_std": yes_mid_std,
+        "n_fills_range": int(n_fills_range),
+    }

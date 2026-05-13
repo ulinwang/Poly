@@ -13,6 +13,20 @@ Your portfolio:
   YES shares: {{ "%.2f"|format(yes_shares) }}
   NO shares:  {{ "%.2f"|format(no_shares) }}
   Resting orders open: {{ n_resting_orders }}
+{%- if belief_snapshot %}
+
+Your current stated belief (set at tick {{ belief_snapshot.set_at_tick }}, {{ ticks_ago }} ticks ago):
+  P(YES) = {{ belief_snapshot.yes_prob | round(3) }}
+  Confidence = {{ belief_snapshot.confidence | round(2) }}
+  Rationale: "{{ belief_snapshot.rationale }}"
+
+If your view has changed, you SHOULD call update_belief again. If not, you may
+omit update_belief and just trade (or HOLD).
+{%- else %}
+
+You have not yet stated a belief in this market. Consider calling update_belief
+to anchor your view before trading.
+{%- endif %}
 {%- if recent_decisions %}
 
 Your most recent stated view (last tick): "{{ recent_decisions[-1].reasoning }}"
