@@ -1,7 +1,17 @@
 """Phase A.1: compute 7 orthogonal-ish behavioral features per wallet
-from the full 1.42M-wallet Polymarket population, save to parquet."""
+from the Polymarket trade population, save to parquet.
+
+v13: time-cutoff aware. Every SELECT over ``polymetl.dataapi_trades`` is
+``AND toUnixTimestamp(trade_time) < cutoff_ts``-filtered, and the
+``markets_resolved`` join (for ``past_accuracy``) is filtered by
+``mr.end_date < cutoff``. The output filename encodes the cutoff so
+multiple cutoffs can coexist on disk. See ``docs/v13/DATA_HYGIENE_AUDIT.md``
+findings L-1, L-5, L-9.
+"""
 from __future__ import annotations
 
+import argparse
+import datetime as dt
 import time
 from pathlib import Path
 
@@ -18,6 +28,7 @@ WITH per_market AS (
         condition_id,
         sum(price * size) AS market_notional
     FROM polymetl.dataapi_trades
+    WHERE toUnixTimestamp(trade_time) < %(cutoff_ts)s
     GROUP BY pw, condition_id
 ),
 agg_per_wallet AS (
@@ -38,6 +49,7 @@ trade_stats AS (
         countIf(price < 0.1 OR price > 0.9) / count() AS tail_trade_pct,
         toUInt32(toUnixTimestamp(max(trade_time)) - toUnixTimestamp(min(trade_time))) AS span_secs
     FROM polymetl.dataapi_trades
+    WHERE toUnixTimestamp(trade_time) < %(cutoff_ts)s
     GROUP BY pw
 ),
 acc AS (
@@ -50,7 +62,9 @@ acc AS (
     INNER JOIN (
         SELECT condition_id, winning_idx FROM polymetl.markets_resolved FINAL
         WHERE winning_idx >= 0
+          AND end_date < toDateTime(%(cutoff_ts)s)
     ) AS mr ON mr.condition_id = t.condition_id
+    WHERE toUnixTimestamp(t.trade_time) < %(cutoff_ts)s
     GROUP BY pw
     HAVING resolved_notional > 0
 )
@@ -80,45 +94,98 @@ WHERE
     AND ts.tx_count >= 2  -- need at least 2 trades to compute std + price std
 """
 
-OUT = Path("/Users/moonshot/Projects/Poly/polymetl/data/clustering/wallet_features_full.parquet")
 
-print(f"=" * 70)
-print(f"Phase A.1: computing 7-feature matrix for full Polymarket population")
-print(f"=" * 70)
-t0 = time.time()
-ch = get_ch()
-rows = ch.client.execute(SQL)
-t1 = time.time()
-print(f"SQL: {len(rows):,} rows in {t1-t0:.1f}s")
+COLS = [
+    "wallet", "log_notional", "top_market_share", "n_markets_per_log_dollar",
+    "mean_price", "tail_trade_pct", "log_active_days", "price_std",
+    "n_markets", "tx_count", "total_notional",
+    "past_accuracy", "n_resolved_prior",
+]
 
-cols = ["wallet", "log_notional", "top_market_share", "n_markets_per_log_dollar",
-        "mean_price", "tail_trade_pct", "log_active_days", "price_std",
-        "n_markets", "tx_count", "total_notional",
-        "past_accuracy", "n_resolved_prior"]
-df = pd.DataFrame(rows, columns=cols)
-print(f"\n--- 描述统计 ---")
-print(df[["log_notional", "top_market_share", "n_markets_per_log_dollar",
-          "mean_price", "tail_trade_pct", "log_active_days", "price_std",
-          "past_accuracy"]].describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]).round(3))
+CLUSTER_FEAT_COLS = [
+    "log_notional", "top_market_share", "n_markets_per_log_dollar",
+    "mean_price", "tail_trade_pct", "log_active_days", "price_std",
+]
 
-print(f"\n--- 相关性矩阵(7 个 clustering 特征)---")
-feat_cols = ["log_notional", "top_market_share", "n_markets_per_log_dollar",
-             "mean_price", "tail_trade_pct", "log_active_days", "price_std"]
-corr = df[feat_cols].corr()
-# Show only abs > 0.4 for readability
-for i, a in enumerate(feat_cols):
-    line = f"  {a:<28}"
-    for j, b in enumerate(feat_cols):
-        v = corr.iloc[i, j]
-        if i == j:
-            line += "   .   "
-        elif abs(v) > 0.4:
-            line += f"{v:>+6.2f} "
-        else:
-            line += f"({v:>+5.2f})"
-    print(line)
 
-# Save
-OUT.parent.mkdir(parents=True, exist_ok=True)
-df.to_parquet(OUT, compression="zstd")
-print(f"\nwrote {OUT} ({OUT.stat().st_size/1024/1024:.1f} MB, {len(df):,} rows)")
+def cutoff_iso_compact(cutoff_ts: int) -> str:
+    """Compact ISO suffix for filenames: YYYYMMDDTHHMMSSZ."""
+    return dt.datetime.utcfromtimestamp(int(cutoff_ts)).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _resolve_cutoff(args: argparse.Namespace) -> int:
+    if args.cutoff_ts is not None and args.cutoff_iso is not None:
+        raise SystemExit("--cutoff-ts and --cutoff-iso are mutually exclusive")
+    if args.cutoff_ts is not None:
+        return int(args.cutoff_ts)
+    if args.cutoff_iso is not None:
+        s = args.cutoff_iso.replace("Z", "+00:00")
+        d = dt.datetime.fromisoformat(s)
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=dt.timezone.utc)
+        return int(d.timestamp())
+    raise SystemExit("one of --cutoff-ts or --cutoff-iso is required")
+
+
+def compute(
+    cutoff_ts: int, out_dir: Path, ch=None,
+) -> Path:
+    """Run the SQL + write parquet. Returns the output path.
+
+    Split out from ``main`` so unit tests can inject a stubbed ``ch``
+    object and avoid a real ClickHouse connection.
+    """
+    print("=" * 70)
+    iso = dt.datetime.utcfromtimestamp(cutoff_ts).isoformat() + "Z"
+    print(f"Phase A.1: feature matrix, cutoff_ts={cutoff_ts} ({iso})")
+    print("=" * 70)
+    ch = get_ch(ch)
+    t0 = time.time()
+    rows = ch.client.execute(SQL, {"cutoff_ts": int(cutoff_ts)})
+    t1 = time.time()
+    print(f"SQL: {len(rows):,} rows in {t1 - t0:.1f}s")
+
+    df = pd.DataFrame(rows, columns=COLS)
+
+    if len(df) > 0:
+        n10 = int((df["tx_count"] >= 10).sum())
+        q = df["total_notional"].quantile([0.25, 0.5, 0.75])
+        print(
+            f"summary: n={len(df):,}  pct_N>=10={n10 / len(df):.3f}  "
+            f"total_notional p25/p50/p75=${q.loc[0.25]:,.0f}/"
+            f"${q.loc[0.5]:,.0f}/${q.loc[0.75]:,.0f}"
+        )
+
+        print("\n--- descriptive stats ---")
+        cluster_cols = [c for c in CLUSTER_FEAT_COLS if c in df.columns]
+        with pd.option_context("display.width", 160, "display.max_columns", 20):
+            print(df[cluster_cols + ["past_accuracy"]].describe(
+                percentiles=[0.1, 0.25, 0.5, 0.75, 0.9],
+            ).round(3))
+
+    suffix = cutoff_iso_compact(cutoff_ts)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"wallet_features_{suffix}.parquet"
+    df.to_parquet(out_path, compression="zstd")
+    size_mb = out_path.stat().st_size / 1024 / 1024
+    print(f"\nwrote {out_path} ({size_mb:.1f} MB, {len(df):,} rows)")
+    return out_path
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--cutoff-ts", type=int, default=None,
+                   help="unix timestamp; trades with trade_time < cutoff_ts kept")
+    p.add_argument("--cutoff-iso", type=str, default=None,
+                   help="ISO-8601 cutoff (mutually exclusive with --cutoff-ts)")
+    p.add_argument("--out-dir", default="data/clustering",
+                   help="output directory for the parquet file")
+    args = p.parse_args()
+
+    cutoff_ts = _resolve_cutoff(args)
+    out_dir = Path(args.out_dir)
+    compute(cutoff_ts=cutoff_ts, out_dir=out_dir)
+
+
+if __name__ == "__main__":
+    main()

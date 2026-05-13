@@ -1,15 +1,31 @@
 """Phase A.2: K-means clustering on the 7-feature matrix.
 
-Pipeline:
-- Z-score standardize the 7 clustering features
-- Run K-means for K in {3..10}, compute silhouette on a 50k subsample
-- Run GMM with same K range, compute BIC on a 50k subsample
-- Pick the K that maximizes silhouette while keeping cluster sizes >= 2%
-- Save cluster assignment + cluster centroids (in raw feature space) + summary stats
+v13: hardened pipeline. See ``data/clustering/REVIEW.md`` §5.1/5.2.
+
+- Compare ``StandardScaler`` and ``RobustScaler``; pick the variant
+  with the higher silhouette under K=5 for the full sweep.
+- Sweep K in {2,3,4,5,6,7,8}. For each K compute silhouette + 50-iter
+  bootstrap Jaccard (subsample 100k, n_init=3).
+- Pick the smallest K satisfying:
+    (a) silhouette >= 0.20
+    (b) median per-cluster Jaccard >= 0.75
+    (c) every cluster >= 3% of population
+  If no K qualifies, fall back to K=2 with a warning.
+- Write cluster assignments + cluster_profiles + clustering_summary,
+  each suffixed with the cutoff_iso so multiple cutoffs coexist.
+
+CLI:
+    uv run python -m scripts.clustering.cluster_wallets \\
+        --features-parquet data/clustering/wallet_features_<ISO>.parquet \\
+        --out-dir data/clustering
 """
 from __future__ import annotations
 
+import argparse
+import datetime as dt
 import json
+import re
+import time
 import warnings
 from pathlib import Path
 
@@ -17,16 +33,11 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from sklearn.mixture import GaussianMixture
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-ROOT = Path("/Users/moonshot/Projects/Poly/polymetl/data/clustering")
-IN = ROOT / "wallet_features_full.parquet"
-OUT_CLUSTERS = ROOT / "wallet_clusters.parquet"
-OUT_PROFILES = ROOT / "cluster_profiles.json"
 
 FEAT_COLS = [
     "log_notional",          # activity scale
@@ -44,74 +55,197 @@ PROMPT_COLS = ["n_markets", "tx_count", "total_notional",
 
 SEED = 42
 SILH_SUBSAMPLE = 50_000   # silhouette is O(n²) memory
+K_SWEEP = (2, 3, 4, 5, 6, 7, 8)
+BOOTSTRAP_ITERS = 50
+BOOTSTRAP_SUBSAMPLE = 100_000
+MIN_CLUSTER_PCT = 0.03
+MIN_SILHOUETTE = 0.20
+MIN_MEDIAN_JACCARD = 0.75
+
+_SUFFIX_RE = re.compile(r"wallet_features_([0-9TZ]+)\.parquet$")
 
 
-def main():
+def _extract_suffix(features_path: Path) -> str:
+    m = _SUFFIX_RE.search(features_path.name)
+    if m:
+        return m.group(1)
+    s = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    print(f"WARN: could not parse cutoff suffix from {features_path.name}; "
+          f"using {s}")
+    return s
+
+
+def _pairwise_jaccard(
+    labels_full_on_sub: np.ndarray, labels_sub: np.ndarray,
+    k_full: int, k_sub: int,
+) -> np.ndarray:
+    """For each cluster c in the full labels, find the best-matching
+    cluster c' in the subsample labels and return Jaccard(c, c').
+    Both arrays cover the same subsampled rows."""
+    out = np.zeros(k_full, dtype=float)
+    for c in range(k_full):
+        a = labels_full_on_sub == c
+        if a.sum() == 0:
+            out[c] = 0.0
+            continue
+        best = 0.0
+        for c2 in range(k_sub):
+            b = labels_sub == c2
+            inter = int(np.logical_and(a, b).sum())
+            union = int(np.logical_or(a, b).sum())
+            if union == 0:
+                continue
+            j = inter / union
+            if j > best:
+                best = j
+        out[c] = best
+    return out
+
+
+def _bootstrap_jaccard(
+    Xs: np.ndarray, labels_full: np.ndarray, k: int,
+    n_iters: int, subsample: int, seed: int,
+) -> np.ndarray:
+    """Return (k,) median Jaccard per cluster across `n_iters`
+    bootstrap subsamples."""
+    rng = np.random.RandomState(seed)
+    n = len(Xs)
+    size = min(subsample, n)
+    per_iter = np.zeros((n_iters, k), dtype=float)
+    for it in range(n_iters):
+        idx = rng.choice(n, size=size, replace=False)
+        km = KMeans(n_clusters=k, n_init=3, random_state=seed + it)
+        sub_labels = km.fit_predict(Xs[idx])
+        per_iter[it] = _pairwise_jaccard(
+            labels_full[idx], sub_labels, k_full=k, k_sub=k,
+        )
+    return np.median(per_iter, axis=0)
+
+
+def _fit_and_score(
+    Xs: np.ndarray, k: int, silh_idx: np.ndarray, seed: int,
+) -> tuple[KMeans, np.ndarray, float]:
+    km = KMeans(n_clusters=k, n_init=10, random_state=seed)
+    labels = km.fit_predict(Xs)
+    silh = float(silhouette_score(Xs[silh_idx], labels[silh_idx]))
+    return km, labels, silh
+
+
+def _select_k(sweep_records: list[dict]) -> tuple[int, bool]:
+    """Apply the three-criterion rule. Returns (K, used_fallback)."""
+    for r in sorted(sweep_records, key=lambda r: r["k"]):
+        if (
+            r["silhouette"] >= MIN_SILHOUETTE
+            and r["median_jaccard"] >= MIN_MEDIAN_JACCARD
+            and r["min_cluster_pct"] >= MIN_CLUSTER_PCT
+        ):
+            return int(r["k"]), False
+    return 2, True
+
+
+def run(features_parquet: Path, out_dir: Path) -> dict:
+    """Top-level entry. Returns the clustering_summary dict (also
+    written to disk)."""
     print("=" * 70)
-    print("Phase A.2: clustering 1.19M wallets")
+    print(f"Phase A.2: clustering — input={features_parquet}")
     print("=" * 70)
-    df = pd.read_parquet(IN)
+    t_start = time.time()
+
+    df = pd.read_parquet(features_parquet)
     print(f"loaded: {len(df):,} wallets")
 
     X = df[FEAT_COLS].values
-    scaler = StandardScaler()
-    Xs = scaler.fit_transform(X)
-    print(f"standardized: mean ~0, std ~1 across {Xs.shape[1]} features")
 
     rng = np.random.RandomState(SEED)
-    silh_idx = rng.choice(len(Xs), size=min(SILH_SUBSAMPLE, len(Xs)), replace=False)
+    silh_idx = rng.choice(len(X), size=min(SILH_SUBSAMPLE, len(X)),
+                          replace=False)
 
-    print(f"\nsweeping K = 3..10, silhouette on {len(silh_idx):,} subsample:")
-    print(f"  {'K':>3}  {'silhouette':>11}  {'inertia':>12}  {'GMM BIC':>14}  cluster sizes (%)")
-    results = []
-    best_assignments_by_k = {}
-    for k in range(3, 11):
-        km = KMeans(n_clusters=k, n_init=10, random_state=SEED)
-        labels = km.fit_predict(Xs)
-        silh = silhouette_score(Xs[silh_idx], labels[silh_idx])
-        gmm = GaussianMixture(n_components=k, covariance_type="full",
-                              random_state=SEED, max_iter=200,
-                              n_init=1)
-        gmm.fit(Xs[silh_idx])
-        bic = gmm.bic(Xs[silh_idx])
+    # 5.1: compare scalers at K=5; use the higher-silhouette one.
+    scaler_results: dict[str, dict] = {}
+    for name, scaler in [
+        ("standard", StandardScaler()),
+        ("robust", RobustScaler()),
+    ]:
+        Xs = scaler.fit_transform(X)
+        _, _, silh = _fit_and_score(Xs, k=5, silh_idx=silh_idx, seed=SEED)
+        scaler_results[name] = {"scaler": scaler, "Xs": Xs, "k5_silh": silh}
+        print(f"  scaler={name:>8}  K=5 silhouette={silh:.4f}")
+
+    best_scaler_name = max(scaler_results, key=lambda n: scaler_results[n]["k5_silh"])
+    Xs = scaler_results[best_scaler_name]["Xs"]
+    scaler = scaler_results[best_scaler_name]["scaler"]
+    print(f"→ using scaler='{best_scaler_name}' for the K sweep\n")
+
+    print(f"sweeping K in {list(K_SWEEP)}; "
+          f"silhouette on {len(silh_idx):,}-sample, "
+          f"bootstrap Jaccard {BOOTSTRAP_ITERS}×{BOOTSTRAP_SUBSAMPLE:,}")
+    sweep: list[dict] = []
+    fits: dict[int, tuple[KMeans, np.ndarray]] = {}
+    for k in K_SWEEP:
+        t0 = time.time()
+        km, labels, silh = _fit_and_score(Xs, k=k, silh_idx=silh_idx, seed=SEED)
         sizes = pd.Series(labels).value_counts(normalize=True).sort_values(ascending=False)
-        sizes_str = " ".join(f"{p*100:>4.1f}" for p in sizes)
-        print(f"  {k:>3}  {silh:>11.4f}  {km.inertia_:>12.0f}  {bic:>14.0f}  {sizes_str}")
-        results.append({"k": k, "silhouette": float(silh), "inertia": float(km.inertia_),
-                        "bic": float(bic), "min_cluster_pct": float(sizes.min())})
-        best_assignments_by_k[k] = (labels, km, km.cluster_centers_)
+        min_pct = float(sizes.min())
+        j_per_cluster = _bootstrap_jaccard(
+            Xs, labels, k=k,
+            n_iters=BOOTSTRAP_ITERS, subsample=BOOTSTRAP_SUBSAMPLE,
+            seed=SEED,
+        )
+        med_jacc = float(np.median(j_per_cluster))
+        elapsed = time.time() - t0
+        sizes_str = " ".join(f"{p * 100:>4.1f}" for p in sizes)
+        print(f"  K={k}  silh={silh:.4f}  med_J={med_jacc:.3f}  "
+              f"min_pct={min_pct * 100:.2f}%  sizes(%)={sizes_str}  "
+              f"[{elapsed:.1f}s]")
+        sweep.append({
+            "k": k, "silhouette": silh, "min_cluster_pct": min_pct,
+            "median_jaccard": med_jacc,
+            "per_cluster_jaccard": [float(x) for x in j_per_cluster],
+            "cluster_sizes_pct": [float(p) for p in sizes.tolist()],
+        })
+        fits[k] = (km, labels)
 
-    # Pick K: maximize silhouette AND keep min_cluster_pct >= 0.03 (3%)
-    candidates = [r for r in results if r["min_cluster_pct"] >= 0.03]
-    if not candidates:
-        candidates = results
-    best = max(candidates, key=lambda r: r["silhouette"])
-    K = best["k"]
-    print(f"\n→ selected K = {K} (silhouette={best['silhouette']:.4f}, "
-          f"smallest cluster = {best['min_cluster_pct']*100:.1f}%)")
+    K, used_fallback = _select_k(sweep)
+    if used_fallback:
+        print(f"\nWARN: no K met all three criteria; falling back to K=2")
+    selected = next(r for r in sweep if r["k"] == K)
+    print(f"\n→ selected K={K} (silhouette={selected['silhouette']:.4f}, "
+          f"median Jaccard={selected['median_jaccard']:.3f}, "
+          f"min cluster={selected['min_cluster_pct'] * 100:.2f}%)")
 
-    # Save full assignment
-    labels, km, centroids_z = best_assignments_by_k[K]
+    km, labels = fits[K]
+    df = df.copy()
     df["cluster"] = labels
-    df[["wallet", "cluster"] + FEAT_COLS + PROMPT_COLS].to_parquet(
-        OUT_CLUSTERS, compression="zstd",
-    )
-    print(f"wrote {OUT_CLUSTERS}")
 
-    # Build cluster profile JSON: raw-feature centroid + percentile stats + size
-    centroids_raw = scaler.inverse_transform(centroids_z)
-    profiles = {"K": int(K), "seed": SEED, "feat_cols": FEAT_COLS, "clusters": {}}
-    print(f"\n--- cluster centroids (raw feature space) ---")
+    suffix = _extract_suffix(features_parquet)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_clusters = out_dir / f"wallet_clusters_{suffix}.parquet"
+    out_profiles = out_dir / f"cluster_profiles_{suffix}.json"
+    out_summary = out_dir / f"clustering_summary_{suffix}.json"
+
+    df[["wallet", "cluster"] + FEAT_COLS + PROMPT_COLS].to_parquet(
+        out_clusters, compression="zstd",
+    )
+    print(f"wrote {out_clusters}")
+
+    centroids_raw = scaler.inverse_transform(km.cluster_centers_)
+    profiles = {
+        "K": int(K), "seed": SEED, "feat_cols": FEAT_COLS,
+        "scaler": best_scaler_name,
+        "cutoff_iso_compact": suffix,
+        "fallback_used": used_fallback,
+        "clusters": {},
+    }
+    print("\n--- cluster centroids (raw feature space) ---")
     print(f"  {'cid':>3}  {'pct':>5}  " + "  ".join(f"{c[:9]:>10}" for c in FEAT_COLS))
     for cid in range(K):
-        mask = df["cluster"] == cid
-        sub = df[mask]
+        sub = df[df["cluster"] == cid]
         size = len(sub)
         pct = size / len(df) * 100
-        print(f"  {cid:>3}  {pct:>4.1f}%  " + "  ".join(f"{centroids_raw[cid][i]:>10.3f}" for i in range(len(FEAT_COLS))))
-
-        # Per-cluster percentile summary for every feature (clustering + prompt)
-        feat_summary = {}
+        print(f"  {cid:>3}  {pct:>4.1f}%  " + "  ".join(
+            f"{centroids_raw[cid][i]:>10.3f}" for i in range(len(FEAT_COLS))
+        ))
+        feat_summary: dict = {}
         for col in FEAT_COLS + PROMPT_COLS:
             if col == "past_accuracy":
                 v = sub[col].dropna()
@@ -137,21 +271,38 @@ def main():
             "centroid": {col: float(centroids_raw[cid][i]) for i, col in enumerate(FEAT_COLS)},
             "features": feat_summary,
         }
+    out_profiles.write_text(json.dumps(profiles, indent=2))
+    print(f"wrote {out_profiles}")
 
-    OUT_PROFILES.write_text(json.dumps(profiles, indent=2))
-    print(f"\nwrote {OUT_PROFILES}")
+    total_runtime = time.time() - t_start
+    summary = {
+        "K": int(K),
+        "fallback_used": used_fallback,
+        "scaler": best_scaler_name,
+        "scaler_comparison_k5": {n: scaler_results[n]["k5_silh"]
+                                  for n in scaler_results},
+        "sweep": sweep,
+        "selection_criteria": {
+            "min_silhouette": MIN_SILHOUETTE,
+            "min_median_jaccard": MIN_MEDIAN_JACCARD,
+            "min_cluster_pct": MIN_CLUSTER_PCT,
+        },
+        "cutoff_iso_compact": suffix,
+        "features_parquet": str(features_parquet),
+        "total_runtime_s": round(total_runtime, 2),
+    }
+    out_summary.write_text(json.dumps(summary, indent=2))
+    print(f"wrote {out_summary}")
+    print(f"\ntotal runtime: {total_runtime:.1f}s")
+    return summary
 
-    # Sample 5 wallets per cluster for sanity
-    print(f"\n--- 5 wallet examples per cluster ---")
-    for cid in range(K):
-        sub = df[df["cluster"] == cid].head(3)
-        print(f"\ncluster {cid} ({len(df[df['cluster']==cid]):,} wallets):")
-        for _, r in sub.iterrows():
-            acc = "-" if pd.isna(r["past_accuracy"]) else f"{r['past_accuracy']:.2f}"
-            print(f"  {r['wallet'][:10]}…  notional=${r['total_notional']:>10,.0f}  "
-                  f"tx={r['tx_count']:>4}  mkts={r['n_markets']:>3}  "
-                  f"top_share={r['top_market_share']:.2f}  mean_price={r['mean_price']:.2f}  "
-                  f"tail%={r['tail_trade_pct']*100:.0f}  acc={acc}")
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--features-parquet", required=True, type=Path)
+    p.add_argument("--out-dir", default="data/clustering", type=Path)
+    args = p.parse_args()
+    run(features_parquet=args.features_parquet, out_dir=args.out_dir)
 
 
 if __name__ == "__main__":
