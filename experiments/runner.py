@@ -203,11 +203,31 @@ def _decide_all_agents(
 # ============================================================
 
 
+def _parse_sensitivity_ticks(spec: str | None) -> list[int]:
+    """Parse `--sensitivity-ticks` CLI value (e.g. "0,5,10") into a
+    sorted, de-duplicated list of tick indices. Empty string / None
+    -> []."""
+    if not spec:
+        return []
+    out: list[int] = []
+    for piece in str(spec).split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        try:
+            out.append(int(piece))
+        except ValueError:
+            continue
+    return sorted(set(out))
+
+
 def run_experiment(
     config_path: str | Path,
     *,
     output_dir: str | Path = "output",
     dry_run: bool = False,
+    sensitivity_ticks: list[int] | None = None,
+    sensitivity_n_orders: int = 10,
 ) -> str:
     """Execute one experiment per `config_path`. Returns exp_id."""
     config = load_config(config_path)
@@ -328,6 +348,8 @@ def run_experiment(
     concurrency = _resolve_concurrency(config.llm.concurrency, len(pop))
     log.info("  per-tick LLM concurrency: %d (config=%s, n_agents=%d)",
              concurrency, config.llm.concurrency, len(pop))
+    sensitivity_ticks = list(sensitivity_ticks or [])
+    sensitivity_results: dict[int, dict] = {}
     for tick in range(n_ticks):
         tick_started = time.time()
         actions = _decide_all_agents(
@@ -341,10 +363,35 @@ def run_experiment(
             max_attempts=config.llm.retry.max_attempts,
             concurrency=concurrency, out_dir=out,
         )
+        # v13 (AGT-4): optionally probe within-tick ordering sensitivity
+        # BEFORE the real step (so the probe doesn't pollute the run).
+        if tick in sensitivity_ticks:
+            from environment.env import sensitivity_run
+            try:
+                sensitivity_results[tick] = sensitivity_run(
+                    env, actions, n_orders=sensitivity_n_orders,
+                )
+                log.info("  sensitivity@tick=%d yes_mid_std=%.4f fills_range=%d",
+                         tick,
+                         sensitivity_results[tick]["yes_mid_std"],
+                         sensitivity_results[tick]["n_fills_range"])
+            except Exception as exc:        # noqa: BLE001
+                log.warning("sensitivity_run failed at tick %d: %s", tick, exc)
         obs, info = env.step(actions)
         log.info("  tick=%d/%d fills=%d yes_mid=%.3f (%.1fs)",
                  tick + 1, n_ticks, info["n_fills"], sim.yes_mid,
                  time.time() - tick_started)
+
+    # v13: persist sensitivity results to analysis/ if any were captured.
+    if sensitivity_results:
+        analysis_dir = out / "analysis"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            str(t): res for t, res in sorted(sensitivity_results.items())
+        }
+        (analysis_dir / "within_tick_sensitivity.json").write_text(
+            json.dumps(payload, indent=2, default=str)
+        )
 
     pnl = env.settle()
     ended_at = dt.datetime.utcnow()
@@ -440,6 +487,16 @@ def main() -> None:
     parser.add_argument("config", help="path to experiments/configs/*.yaml")
     parser.add_argument("--output-dir", default="output")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--sensitivity-ticks", default="",
+        help=("Comma-separated tick indices at which to run a within-"
+              "tick ordering sensitivity probe (default off). "
+              "Writes output/<exp_id>/analysis/within_tick_sensitivity.json"),
+    )
+    parser.add_argument(
+        "--sensitivity-n-orders", type=int, default=10,
+        help="Number of random permutations per sensitivity probe.",
+    )
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,
@@ -447,6 +504,8 @@ def main() -> None:
     )
     exp_id = run_experiment(
         args.config, output_dir=args.output_dir, dry_run=args.dry_run,
+        sensitivity_ticks=_parse_sensitivity_ticks(args.sensitivity_ticks),
+        sensitivity_n_orders=args.sensitivity_n_orders,
     )
     print(f"\nexp_id: {exp_id}")
 
