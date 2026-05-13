@@ -25,11 +25,19 @@ class PersonaRecipe(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    population: Literal["calibrated", "hand_coded", "archetype", "no_signal"] = "calibrated"
+    population: Literal[
+        "calibrated", "hand_coded", "archetype", "no_signal",
+        "marginal_random", "uniform_random",
+    ] = "calibrated"
     features: list[str] = Field(default_factory=lambda: ["wallet", "market", "temporal"])
     persona_recipe: PersonaRecipe = Field(default_factory=PersonaRecipe)
     n_agents: Optional[int] = None        # None = all wallets with cached profile
     seed: int = 0
+    # v13 (B4): forward-compatible flag for the belief-update tool
+    # that AGT-4 is wiring. The runner will dispatch on this once the
+    # tool exists; configs already commit to a value so B4 runs can
+    # fire the day AGT-4 merges.
+    belief_update_enabled: bool = False
 
 
 class EnvironmentConfig(BaseModel):
@@ -59,6 +67,27 @@ class OutputConfig(BaseModel):
     output_dir: str = "output"
 
 
+class ShockPayload(BaseModel):
+    text: str
+
+
+class ShockConfig(BaseModel):
+    """v13 (B6) — synthetic news shock injected mid-run.
+
+    When set, the runner appends a synthetic memory entry of shape
+    ``{tick, action: 'EXTERNAL_NEWS', reasoning: payload.text}``
+    to every agent at tick ``tick``, so the NEXT tick's prompt's
+    "recent_decisions" block carries it."""
+    tick: int = Field(..., ge=0)
+    kind: Literal["rumor"] = "rumor"
+    payload: ShockPayload
+
+
+class ExperimentBlock(BaseModel):
+    """Optional v13 wrapper for experiment-level toggles."""
+    shock: Optional[ShockConfig] = None
+
+
 class ExperimentConfig(BaseModel):
     name: str = "baseline"
     description: str = ""
@@ -67,6 +96,8 @@ class ExperimentConfig(BaseModel):
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    # v13: optional experiment-level shock / extension hooks.
+    experiment: ExperimentBlock = Field(default_factory=ExperimentBlock)
 
 
 def parse_config(data: dict) -> ExperimentConfig:
