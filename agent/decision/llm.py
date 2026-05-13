@@ -115,21 +115,34 @@ def call_deepseek_with_tools(
     msg = resp.choices[0].message
     usage = resp.usage
 
-    tool_call_payload = None
+    # v13 (AGT-4): expose ALL tool calls (not just the first). The
+    # `update_belief` tool can be paired with a trade tool in the same
+    # response — the runtime composes them. `tool_call` continues to
+    # point at the first non-`update_belief` call (or the first call if
+    # all are belief updates) so legacy callers keep working.
+    tool_calls_payload: list[dict] = []
     if msg.tool_calls:
-        tc = msg.tool_calls[0]
-        try:
-            args = json.loads(tc.function.arguments or "{}")
-        except json.JSONDecodeError:
-            args = {}
-        tool_call_payload = {
-            "id": tc.id,
-            "name": tc.function.name,
-            "arguments": args,
-        }
+        for tc in msg.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls_payload.append({
+                "id": tc.id,
+                "name": tc.function.name,
+                "arguments": args,
+            })
+
+    tool_call_payload = None
+    if tool_calls_payload:
+        # Prefer a non-belief call as the "primary" (trade) action.
+        non_belief = [t for t in tool_calls_payload
+                      if t.get("name") != "update_belief"]
+        tool_call_payload = (non_belief or tool_calls_payload)[0]
 
     return {
         "tool_call": tool_call_payload,
+        "tool_calls": tool_calls_payload,
         "text": msg.content or "",
         "prompt_tokens": int(usage.prompt_tokens) if usage else 0,
         "completion_tokens": int(usage.completion_tokens) if usage else 0,

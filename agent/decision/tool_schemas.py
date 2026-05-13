@@ -122,6 +122,33 @@ _TOOL_SPLIT = {
     },
 }
 
+_TOOL_UPDATE_BELIEF = {
+    "type": "function",
+    "function": {
+        "name": "update_belief",
+        "description": (
+            "Record your current posterior over YES outcome before (or "
+            "in addition to) any trade. Use this each tick when your "
+            "view changes. Calling update_belief alone (without a trade "
+            "tool) counts as a HOLD with a belief update."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "yes_prob": {
+                    "type": "number", "minimum": 0.01, "maximum": 0.99,
+                },
+                "confidence": {
+                    "type": "number", "minimum": 0.0, "maximum": 1.0,
+                    "description": "0 = epistemic floor, 1 = certain",
+                },
+                "rationale": {"type": "string", "maxLength": 300},
+            },
+            "required": ["yes_prob", "confidence", "rationale"],
+        },
+    },
+}
+
 _TOOL_MERGE = {
     "type": "function",
     "function": {
@@ -150,14 +177,20 @@ TOOL_SCHEMAS = [
     _TOOL_CANCEL,
     _TOOL_SPLIT,
     _TOOL_MERGE,
+    _TOOL_UPDATE_BELIEF,
 ]
 
 
 # Map function name → engine `order_type`. Used by parser.parse_tool_call.
+# v13 (AGT-4): `update_belief` is dispatched specially — it sets the
+# agent's posterior on AgentRuntime and emits an UPDATE_BELIEF action
+# row but does NOT touch the orderbook (semantically a HOLD with side
+# effects).
 NAME_TO_ORDER_TYPE = {
     "place_limit_order":  "LIMIT",
     "place_market_order": "MARKET",
     "cancel_orders":      "CANCEL",
     "split_position":     "SPLIT",
     "merge_position":     "MERGE",
+    "update_belief":      "UPDATE_BELIEF",
 }

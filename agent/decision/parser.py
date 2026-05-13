@@ -13,7 +13,12 @@ import json
 from agent.decision.tool_schemas import NAME_TO_ORDER_TYPE
 
 
-VALID_ORDER_TYPES = {"LIMIT", "MARKET", "CANCEL", "HOLD", "SPLIT", "MERGE"}
+VALID_ORDER_TYPES = {
+    "LIMIT", "MARKET", "CANCEL", "HOLD", "SPLIT", "MERGE",
+    # v13 (AGT-4): explicit-belief tool. Engine treats it as a HOLD
+    # with side-effect (agent.belief mutation) and an action-log row.
+    "UPDATE_BELIEF",
+}
 VALID_OUTCOMES = {"YES", "NO"}
 VALID_SIDES = {"BUY", "SELL"}
 
@@ -92,6 +97,43 @@ def _hold_decision(reasoning: str = "") -> dict:
     }
 
 
+def _coerce_belief_args(args: dict) -> dict | None:
+    """Validate / clamp the arguments of an `update_belief` tool call.
+
+    Returns `{yes_prob, confidence, rationale}` on success, or None
+    if mandatory fields are unusable (NaN / non-numeric)."""
+    try:
+        yp = float(args.get("yes_prob"))
+        cf = float(args.get("confidence"))
+    except (TypeError, ValueError):
+        return None
+    # Clamp to schema range so a slightly out-of-bounds LLM number does
+    # not propagate downstream.
+    yp = max(0.01, min(0.99, yp))
+    cf = max(0.0, min(1.0, cf))
+    rat = str(args.get("rationale", "")).strip()[:300]
+    return {"yes_prob": yp, "confidence": cf, "rationale": rat}
+
+
+def parse_belief_tool_call(tool_call: dict | None) -> dict | None:
+    """Convert one `update_belief` tool call dict into the canonical
+    belief payload, or return None if it isn't an update_belief call.
+
+    Kept separate from `parse_tool_call` because update_belief composes
+    with trade tools rather than replacing them."""
+    if not tool_call:
+        return None
+    if str(tool_call.get("name", "")) != "update_belief":
+        return None
+    args = tool_call.get("arguments") or {}
+    if not isinstance(args, dict):
+        try:
+            args = json.loads(args)
+        except Exception:        # noqa: BLE001
+            args = {}
+    return _coerce_belief_args(args)
+
+
 def parse_tool_call(tool_call: dict | None, tick_size: float = 0.01) -> dict:
     """Convert one OpenAI `tool_call` dict (from
     `agent.decision.llm.call_deepseek_with_tools`) into the engine's
@@ -121,6 +163,22 @@ def parse_tool_call(tool_call: dict | None, tick_size: float = 0.01) -> dict:
     if order_type is None:
         # Unknown tool — treat as HOLD with a diagnostic reason.
         return _hold_decision(reasoning=f"unknown_tool:{name}")
+
+    # v13 (AGT-4): update_belief is structurally distinct — no
+    # outcome/side/size — and the rationale doubles as reasoning. The
+    # belief payload is exposed via the `belief_update` key so the
+    # runtime can attach it to the Decision dataclass.
+    if order_type == "UPDATE_BELIEF":
+        belief = _coerce_belief_args(args)
+        if belief is None:
+            return _hold_decision(reasoning="update_belief:bad_args")
+        return {
+            "order_type": "UPDATE_BELIEF", "outcome": "YES", "side": "BUY",
+            "price": float(belief["yes_prob"]),
+            "size_usd": 0.0,
+            "reasoning": belief["rationale"],
+            "belief_update": belief,
+        }
 
     reasoning = str(args.get("reasoning", "")).strip()
 
