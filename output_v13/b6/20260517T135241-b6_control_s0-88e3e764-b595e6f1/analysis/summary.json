@@ -1,0 +1,19 @@
+{
+  "sim_id": "16ba78d947b9415a",
+  "n_agents": 30,
+  "n_ticks": 20,
+  "pnl_mean": 13.235294070000183,
+  "pnl_min": -7658.868690399657,
+  "pnl_max": 7448.804284861951,
+  "priors": {
+    "signal_mu": 0.15,
+    "n_ticks": 20,
+    "tick_size": 0.01,
+    "taker_fee_bps": 0.0,
+    "bootstrap_source": "dataapi_trades_dispersion",
+    "pnl_summary": {
+      "n_agents": 30,
+      "mean_pnl": 13.235294070000183
+    }
+  }
+}

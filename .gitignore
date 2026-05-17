@@ -27,3 +27,9 @@ wheels/
 /tables/
 
 .claude/
+
+# v13 raw sim artifacts (parquet + llm jsonl) — too large; analysis kept separately
+output_v13/**/raw/
+output_v13/**/*.parquet
+output_v13/**/llm_calls.jsonl
+output_v13/suite_run.log

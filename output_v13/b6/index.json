@@ -1,0 +1,45 @@
+{
+  "suite": "b6",
+  "n_runs": 6,
+  "n_ok": 6,
+  "n_failed": 0,
+  "dry_run": false,
+  "runs": [
+    {
+      "config_path": "experiments/configs/b6_control_s0.yaml",
+      "name": "b6_control_s0",
+      "exp_id": "20260517T135241-b6_control_s0-88e3e764-b595e6f1",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b6_control_s1.yaml",
+      "name": "b6_control_s1",
+      "exp_id": "20260517T143300-b6_control_s1-88e3e764-d0fc8356",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b6_control_s2.yaml",
+      "name": "b6_control_s2",
+      "exp_id": "20260517T145150-b6_control_s2-88e3e764-ea6610bf",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b6_rumor_s0.yaml",
+      "name": "b6_rumor_s0",
+      "exp_id": "20260517T151110-b6_rumor_s0-88e3e764-1d37eb88",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b6_rumor_s1.yaml",
+      "name": "b6_rumor_s1",
+      "exp_id": "20260517T153149-b6_rumor_s1-88e3e764-1a50b733",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b6_rumor_s2.yaml",
+      "name": "b6_rumor_s2",
+      "exp_id": "20260517T155231-b6_rumor_s2-88e3e764-634e9abe",
+      "status": "ok"
+    }
+  ]
+}

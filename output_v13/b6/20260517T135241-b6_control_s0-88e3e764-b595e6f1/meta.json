@@ -1,0 +1,69 @@
+{
+  "exp_id": "20260517T135241-b6_control_s0-88e3e764-b595e6f1",
+  "started_at": "2026-05-17T13:52:41.600394Z",
+  "ended_at": "2026-05-17T14:32:59.125892Z",
+  "git_sha": "88e3e764ac96665fdae00481521fbdc467e22f56",
+  "config": {
+    "name": "b6_control_s0",
+    "description": "v13 B6 \u2014 Information cascade CONTROL (no shock). seed=0",
+    "market": {
+      "slug": "will-roman-roy-be-ceo-at-the-end-of-succession-s4",
+      "asof": "market_open"
+    },
+    "agent": {
+      "population": "archetype",
+      "features": [
+        "wallet",
+        "market",
+        "temporal"
+      ],
+      "persona_recipe": {
+        "use_bio": true,
+        "sanitize_labels": true,
+        "llm_temperature": 0.0,
+        "cache_path": "data/wallet_personas.json"
+      },
+      "n_agents": 30,
+      "seed": 0,
+      "signal_mu_source": "first_window_vwap",
+      "belief_update_enabled": false
+    },
+    "environment": {
+      "observer": "quote_only",
+      "seeder": "from_clob_history",
+      "fees_override_bps": null
+    },
+    "llm": {
+      "model": null,
+      "temperature": 0.0,
+      "timeout_s": 120.0,
+      "retry": {
+        "max_attempts": 3,
+        "backoff_base_s": 2.0
+      },
+      "concurrency": null
+    },
+    "output": {
+      "dual_write_clickhouse": false,
+      "parquet_compression": "zstd",
+      "output_dir": "output_v13/b6"
+    },
+    "experiment": {
+      "shock": null
+    }
+  },
+  "sim_id": "16ba78d947b9415a",
+  "n_agents": 30,
+  "n_ticks": 20,
+  "priors_summary": {
+    "signal_mu": 0.15,
+    "n_ticks": 20,
+    "tick_size": 0.01,
+    "taker_fee_bps": 0.0,
+    "bootstrap_source": "dataapi_trades_dispersion",
+    "pnl_summary": {
+      "n_agents": 30,
+      "mean_pnl": 13.235294070000183
+    }
+  }
+}

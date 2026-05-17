@@ -1,0 +1,69 @@
+{
+  "exp_id": "20260516T111013-b2_seed_variance_s2-88e3e764-087ea834",
+  "started_at": "2026-05-16T11:10:13.044781Z",
+  "ended_at": "2026-05-16T11:27:43.682920Z",
+  "git_sha": "88e3e764ac96665fdae00481521fbdc467e22f56",
+  "config": {
+    "name": "b2_seed_variance_s2",
+    "description": "v13 B2 \u2014 Seed-noise floor. archetype-30+memory on the Roman-Roy reference market across 3 seeds.",
+    "market": {
+      "slug": "will-roman-roy-be-ceo-at-the-end-of-succession-s4",
+      "asof": "market_open"
+    },
+    "agent": {
+      "population": "archetype",
+      "features": [
+        "wallet",
+        "market",
+        "temporal"
+      ],
+      "persona_recipe": {
+        "use_bio": true,
+        "sanitize_labels": true,
+        "llm_temperature": 0.0,
+        "cache_path": "data/wallet_personas.json"
+      },
+      "n_agents": 30,
+      "seed": 2,
+      "signal_mu_source": "first_window_vwap",
+      "belief_update_enabled": false
+    },
+    "environment": {
+      "observer": "quote_only",
+      "seeder": "from_clob_history",
+      "fees_override_bps": null
+    },
+    "llm": {
+      "model": null,
+      "temperature": 0.0,
+      "timeout_s": 120.0,
+      "retry": {
+        "max_attempts": 3,
+        "backoff_base_s": 2.0
+      },
+      "concurrency": null
+    },
+    "output": {
+      "dual_write_clickhouse": false,
+      "parquet_compression": "zstd",
+      "output_dir": "output_v13/b2"
+    },
+    "experiment": {
+      "shock": null
+    }
+  },
+  "sim_id": "6c50f70ae3e346c2",
+  "n_agents": 30,
+  "n_ticks": 20,
+  "priors_summary": {
+    "signal_mu": 0.15,
+    "n_ticks": 20,
+    "tick_size": 0.01,
+    "taker_fee_bps": 0.0,
+    "bootstrap_source": "dataapi_trades_dispersion",
+    "pnl_summary": {
+      "n_agents": 30,
+      "mean_pnl": 21.76470580399921
+    }
+  }
+}

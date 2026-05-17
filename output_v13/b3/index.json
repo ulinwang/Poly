@@ -1,0 +1,63 @@
+{
+  "suite": "b3",
+  "n_runs": 9,
+  "n_ok": 9,
+  "n_failed": 0,
+  "dry_run": false,
+  "runs": [
+    {
+      "config_path": "experiments/configs/b3_archetype_s0.yaml",
+      "name": "b3_archetype_s0",
+      "exp_id": "20260516T112745-b3_archetype_s0-88e3e764-47548985",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_archetype_s1.yaml",
+      "name": "b3_archetype_s1",
+      "exp_id": "20260516T114703-b3_archetype_s1-88e3e764-49b7409b",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_archetype_s2.yaml",
+      "name": "b3_archetype_s2",
+      "exp_id": "20260516T120540-b3_archetype_s2-88e3e764-684af060",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_marginal_s0.yaml",
+      "name": "b3_marginal_s0",
+      "exp_id": "20260516T122325-b3_marginal_s0-88e3e764-c5bfd22a",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_marginal_s1.yaml",
+      "name": "b3_marginal_s1",
+      "exp_id": "20260516T124441-b3_marginal_s1-88e3e764-7d1565bd",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_marginal_s2.yaml",
+      "name": "b3_marginal_s2",
+      "exp_id": "20260516T130416-b3_marginal_s2-88e3e764-5ecf4c7c",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_uniform_s0.yaml",
+      "name": "b3_uniform_s0",
+      "exp_id": "20260516T132541-b3_uniform_s0-88e3e764-d6ae9622",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_uniform_s1.yaml",
+      "name": "b3_uniform_s1",
+      "exp_id": "20260516T134456-b3_uniform_s1-88e3e764-12a373b4",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b3_uniform_s2.yaml",
+      "name": "b3_uniform_s2",
+      "exp_id": "20260516T140502-b3_uniform_s2-88e3e764-d8aaf0a1",
+      "status": "ok"
+    }
+  ]
+}
