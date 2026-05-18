@@ -70,13 +70,33 @@ def derive_signal_sigma(
 def draw_private_signal(
     mu: float, sigma: float, rng: random.Random,
 ) -> float:
-    """Truncated normal in (0.01, 0.99). Falls back to `mu` clamped if
-    64 draws keep escaping the truncation bounds."""
-    for _ in range(64):
-        s = rng.gauss(mu, sigma)
-        if 0.01 < s < 0.99:
-            return s
-    return max(0.01, min(0.99, mu))
+    """Draw a private prior in (0.01, 0.99) whose expected value equals
+    `mu`. Implemented as a Beta draw so the support is natively bounded
+    and the mean is preserved exactly.
+
+    The previous truncated-normal (reject-outside-(0.01,0.99)) systematically
+    inflated the realized mean whenever `mu` was near a bound: at mu=0.15
+    with sigma=0.32 the realized mean was ~0.32 (>2x intended), because the
+    left tail clipped at 0.01 while the right tail ran to 0.99. That handed
+    every agent a bullish prior on confident markets and produced a spurious
+    upward price drift. Beta(alpha, beta) with mean = mu and a variance
+    capped below the Beta-feasible ceiling mu*(1-mu) removes that bias.
+    """
+    m = min(0.99, max(0.01, float(mu)))
+    # Largest variance a Beta on (0,1) can have for this mean is m*(1-m);
+    # stay strictly below it so alpha, beta > 0. Map sigma -> variance,
+    # clamped to 90% of the feasible ceiling.
+    var_ceiling = m * (1.0 - m)
+    var = min(float(sigma) ** 2, 0.9 * var_ceiling)
+    if var <= 1e-9:
+        return m
+    kappa = var_ceiling / var - 1.0          # concentration alpha+beta
+    alpha = m * kappa
+    beta = (1.0 - m) * kappa
+    if alpha <= 0.0 or beta <= 0.0:
+        return m
+    s = rng.betavariate(alpha, beta)
+    return min(0.99, max(0.01, s))
 
 
 def load_priors(slug: str, data_dir: Path = Path("data")) -> dict:

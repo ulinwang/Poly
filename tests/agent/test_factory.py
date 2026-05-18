@@ -34,6 +34,28 @@ class DrawPrivateSignalTest(unittest.TestCase):
             self.assertGreater(s, 0.01)
             self.assertLess(s, 0.99)
 
+    def test_mean_preserved_at_extreme_mu(self):
+        """Regression: the old truncated-normal inflated the realized
+        mean to ~0.32 at mu=0.15, sigma=0.32 (handed every agent a
+        bullish prior -> spurious upward price drift). The Beta draw
+        must keep the realized mean within 0.02 of the intended mu
+        even when mu is near a bound."""
+        rng = random.Random(1)
+        for mu in (0.15, 0.85):
+            for sigma in (0.08, 0.20, 0.32, 0.38):
+                draws = [draw_private_signal(mu, sigma, rng)
+                         for _ in range(20000)]
+                realized = sum(draws) / len(draws)
+                self.assertAlmostEqual(
+                    realized, mu, delta=0.02,
+                    msg=f"mu={mu} sigma={sigma}: realized {realized:.3f}",
+                )
+
+    def test_zero_sigma_returns_mu(self):
+        rng = random.Random(2)
+        self.assertAlmostEqual(draw_private_signal(0.3, 0.0, rng), 0.3,
+                               delta=1e-6)
+
 
 class LoadPriorsTest(unittest.TestCase):
     def test_missing_file_raises(self):
