@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "will-yamand-orsi-win-the-2024-uruguay-presidential-election",
+  "condition_id": "0x24849f6151db4691a332ea8beaa12af9c290340062f664797e6034d0cf4ea61a",
+  "yes_token_id": "45515361481111007398679057233513292733142910046367917343052742800683472793006",
+  "no_token_id": "57895126042047199874475908159407316919301204825855685715290299231817635446235",
+  "winning_idx": 0,
+  "end_date_iso": "2024-10-27T00:00:00",
+  "market_open_ts": 1730018742,
+  "market_open_iso": "2024-10-27T08:45:42",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 48,
+  "signal_mu": 0.845,
+  "signal_mu_meta": {
+    "source": "clob_prices_history",
+    "n_obs": 1,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.7674900523849684,
+    "spread": 0.15,
+    "depth_per_level": 2.8169,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:13:17.647406"
+}

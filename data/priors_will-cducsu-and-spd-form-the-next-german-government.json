@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "will-cducsu-and-spd-form-the-next-german-government",
+  "condition_id": "0xff9fc7e6239b4d92f24d9100f3b1415dfcbb34ec15afcdcc4359692b0517e20e",
+  "yes_token_id": "105835469708599799582205784219962313784342858885895786719965115451276569568193",
+  "no_token_id": "87643712172379229167569678268940003723496505953835884324587121845598892188924",
+  "winning_idx": 0,
+  "end_date_iso": "2025-02-23T00:00:00",
+  "market_open_ts": 1743130584,
+  "market_open_iso": "2025-03-28T02:56:24",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 48,
+  "signal_mu": 0.9528869282709627,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 72,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.9531380783024829,
+    "spread": 0.01,
+    "depth_per_level": 17.0,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:19:44.797430"
+}

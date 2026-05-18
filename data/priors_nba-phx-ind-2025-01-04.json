@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "nba-phx-ind-2025-01-04",
+  "condition_id": "0x74a4f98027d0df96f393c4b5ec32b4a5ce3a67945450c5b8553cf26fc56555c8",
+  "yes_token_id": "65158336403553172314103403564630121027912935815899595351340867303797170607090",
+  "no_token_id": "68153044086763111278316977385948474275177322769489702941112390151831737861221",
+  "winning_idx": 1,
+  "end_date_iso": "2025-01-12T00:00:00",
+  "market_open_ts": 1735868787,
+  "market_open_iso": "2025-01-03T01:46:27",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 8,
+  "signal_mu": 0.4744723934418192,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 449,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.47008293140347224,
+    "spread": 0.01,
+    "depth_per_level": 8.458332,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:28:27.877408"
+}

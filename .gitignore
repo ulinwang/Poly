@@ -28,6 +28,9 @@ wheels/
 
 .claude/
 
+# v13 clustering feature intermediates — large, regenerable from ClickHouse
+data/clustering/wallet_features_*.parquet
+
 # v13 raw sim artifacts (parquet + llm jsonl) — too large; analysis kept separately
 output_v13/**/raw/
 output_v13/**/*.parquet

@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "nba-gsw-min-2025-01-15",
+  "condition_id": "0x62f6e845e4cb01e95a11d582b8580f27715aa4d34a9f2bd05abe94ba49d8a77b",
+  "yes_token_id": "72316299133514925437265825362338075035588979105887191410268455214446337556808",
+  "no_token_id": "70214356512491537900868566075332346677267493756366858423690479433087178448159",
+  "winning_idx": 0,
+  "end_date_iso": "2025-01-23T00:00:00",
+  "market_open_ts": 1736761425,
+  "market_open_iso": "2025-01-13T09:43:45",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 10,
+  "signal_mu": 0.3183425205153408,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 17,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.32710171143056455,
+    "spread": 0.04,
+    "depth_per_level": 4.34,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:16:38.635552"
+}

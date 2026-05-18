@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "nba-por-mia-2025-01-21",
+  "condition_id": "0x7f7a2f4257f0b500dc49c24f6c95c9c44ee8a82d9961d5727a3572682212c516",
+  "yes_token_id": "50438455640991228330001043024835296681627855683232157902276457928600936022272",
+  "no_token_id": "11949511369930476048630508539966202520102081327861991348398066829434758571428",
+  "winning_idx": 0,
+  "end_date_iso": "2025-01-29T00:00:00",
+  "market_open_ts": 1737379888,
+  "market_open_iso": "2025-01-20T13:31:28",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 8,
+  "signal_mu": 0.165,
+  "signal_mu_meta": {
+    "source": "clob_prices_history",
+    "n_obs": 1,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.21071751896189572,
+    "spread": 0.03,
+    "depth_per_level": 10.527195500000001,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:10:11.248443"
+}

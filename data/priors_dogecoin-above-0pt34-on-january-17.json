@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "dogecoin-above-0pt34-on-january-17",
+  "condition_id": "0x602f372beb47e4b43befa74114db87932a3d4566abb11f2d3cbfdc4dad7158d6",
+  "yes_token_id": "16733323413038720198164323993820747930839087945049172904860427155733410354187",
+  "no_token_id": "21617894644290149267554804506586394513794088641273588458113613254821113200229",
+  "winning_idx": 0,
+  "end_date_iso": "2025-01-17T00:00:00",
+  "market_open_ts": 1736945216,
+  "market_open_iso": "2025-01-15T12:46:56",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 8,
+  "signal_mu": 0.9394666543791418,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 2150,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.9631566225460468,
+    "spread": 0.04,
+    "depth_per_level": 1.606125,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:07:01.790608"
+}

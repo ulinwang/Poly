@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "will-elon-musk-buy-msnbc-before-april-2025",
+  "condition_id": "0xa93623e5dcd6a82ba77044a9d0f97e1afe97c2d7a15529076f9e2837b058b5ca",
+  "yes_token_id": "13331319148226359302150383556968756484222543919362683543507854260063586088159",
+  "no_token_id": "17487987302108717165552866415898250282065942747356985140115172108732987122725",
+  "winning_idx": 1,
+  "end_date_iso": "2025-03-31T00:00:00",
+  "market_open_ts": 1741831534,
+  "market_open_iso": "2025-03-13T02:05:34",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 48,
+  "signal_mu": 0.00821660291167449,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 198,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.008461858069864749,
+    "spread": 0.01,
+    "depth_per_level": 399.0,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:51:36.539247"
+}

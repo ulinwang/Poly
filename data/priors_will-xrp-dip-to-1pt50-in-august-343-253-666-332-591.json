@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "will-xrp-dip-to-1pt50-in-august-343-253-666-332-591",
+  "condition_id": "0x21c48b3fc19c56b9d3da77a9717fdc55b21e0f109d361bbb7b1b39b0948cf0cd",
+  "yes_token_id": "106397496127133174990767030654833779795237412125399451380917462746611567433559",
+  "no_token_id": "98825523416463080626476617378806131753601744289014522881112322189400216918787",
+  "winning_idx": 1,
+  "end_date_iso": "2025-09-01T00:00:00",
+  "market_open_ts": 1754037674,
+  "market_open_iso": "2025-08-01T08:41:14",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 48,
+  "signal_mu": 0.026,
+  "signal_mu_meta": {
+    "source": "clob_prices_history",
+    "n_obs": 1,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.04080468535443327,
+    "spread": 0.01,
+    "depth_per_level": 1000.0,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:23:29.772772"
+}

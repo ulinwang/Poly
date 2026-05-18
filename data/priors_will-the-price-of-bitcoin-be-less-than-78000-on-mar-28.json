@@ -1,0 +1,31 @@
+{
+  "schema_version": "v7-priors-1",
+  "slug": "will-the-price-of-bitcoin-be-less-than-78000-on-mar-28",
+  "condition_id": "0x97708953d0cd07f3484daf495563dbbff7326a118e5072a007c587a8d07c603d",
+  "yes_token_id": "83947131033888601203425238005424299411217097730606033593107713915815404191057",
+  "no_token_id": "94766553088203437667603562134218480292805777860517314209157707657538779127220",
+  "winning_idx": 1,
+  "end_date_iso": "2025-03-28T00:00:00",
+  "market_open_ts": 1742940959,
+  "market_open_iso": "2025-03-25T22:15:59",
+  "tick_size": 0.001,
+  "taker_fee_bps": 0.0,
+  "n_ticks": 10,
+  "signal_mu": 0.010174390195806009,
+  "signal_mu_meta": {
+    "source": "dataapi_trades",
+    "n_obs": 54,
+    "horizon_hours": 24
+  },
+  "bootstrap": {
+    "anchor_yes": 0.00798500332485591,
+    "spread": 0.01,
+    "depth_per_level": 64.0,
+    "depth_levels": 3,
+    "source": "dataapi_trades_dispersion"
+  },
+  "_eps": 1e-09,
+  "_price_floor": 0.01,
+  "_price_cap": 0.99,
+  "derived_at_iso": "2026-05-18T10:33:51.705662"
+}
