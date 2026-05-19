@@ -1,0 +1,27 @@
+{
+  "suite": "b2",
+  "n_runs": 3,
+  "n_ok": 3,
+  "n_failed": 0,
+  "dry_run": false,
+  "runs": [
+    {
+      "config_path": "experiments/configs/b2_s0.yaml",
+      "name": "b2_s0",
+      "exp_id": "20260519T140108-b2_seed_variance_s0-5ca4f013-b57d1645",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b2_s1.yaml",
+      "name": "b2_s1",
+      "exp_id": "20260519T144704-b2_seed_variance_s1-1a445b4d-b09614c7",
+      "status": "ok"
+    },
+    {
+      "config_path": "experiments/configs/b2_s2.yaml",
+      "name": "b2_s2",
+      "exp_id": "20260519T150932-b2_seed_variance_s2-1a445b4d-087ea834",
+      "status": "ok"
+    }
+  ]
+}
