@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PolyMetl 实验浏览器</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <span class="brand-name">PolyMetl</span>
+        <span class="brand-sub">实验浏览器 — 已完成仿真的轨迹与决策</span>
+      </div>
+      <div class="topbar-meta">
+        <a class="btn-tiny" href="/">← 回到实时仿真</a>
+        <span class="muted small">{{ total }} 个实验</span>
+      </div>
+    </header>
+
+    <main class="layout" style="grid-template-columns: 300px 1fr;">
+      <!-- 左侧：实验列表 -->
+      <aside class="rail rail-left">
+        <section class="panel">
+          <h2 class="panel-title">实验列表</h2>
+          <input class="input" v-model="filter" placeholder="按名称 / 市场过滤…" />
+          <div class="market-list" style="max-height: 70vh;">
+            <template v-for="(runs, suite) in filteredSuites" :key="suite">
+              <li class="suite-head">{{ suite }}（{{ runs.length }}）</li>
+              <li
+                v-for="r in runs"
+                :key="r.exp_id"
+                :class="['market-row', { selected: r.exp_id === selectedId }]"
+                @click="selectExperiment(r.exp_id)">
+                <div class="market-row-line1">
+                  <span class="dot" :class="r.status === 'ok' ? 'live' : 'closed'"></span>
+                  <span class="market-q">{{ r.name }}</span>
+                </div>
+                <div class="market-row-line2 muted">
+                  {{ r.n_agents }} 智能体 · {{ r.n_ticks }} 轮
+                </div>
+              </li>
+            </template>
+            <li v-if="total === 0" class="muted small empty-hint">未发现已完成实验</li>
+          </div>
+        </section>
+      </aside>
+
+      <!-- 右侧 -->
+      <section class="center">
+        <div v-if="!selectedId" class="panel">
+          <p class="muted">从左侧选择一个实验查看其参数、所有智能体的资金轨迹,并可点开单个智能体。</p>
+        </div>
+
+        <template v-else>
+          <!-- 参数 + 元数据 -->
+          <div class="panel" v-if="meta">
+            <header class="panel-header">
+              <h2 class="panel-title">{{ meta.name }}</h2>
+              <span class="muted small">{{ meta.suite }} · {{ meta.exp_id.slice(0,8) }}</span>
+            </header>
+            <div class="meta-grid">
+              <div class="kv"><span>市场</span><b>{{ meta.slug || '—' }}</b></div>
+              <div class="kv"><span>智能体数</span><b>{{ meta.n_agents }}</b></div>
+              <div class="kv"><span>仿真轮数</span><b>{{ meta.n_ticks }}</b></div>
+              <div class="kv"><span>群体来源</span><b>{{ cfgAgent.population || '—' }}</b></div>
+              <div class="kv"><span>随机种子</span><b>{{ cfgAgent.seed }}</b></div>
+              <div class="kv"><span>信念机制</span><b>{{ cfgAgent.belief_update_enabled === false ? '关闭' : '开启' }}</b></div>
+              <div class="kv"><span>初始判断来源</span><b>{{ cfgAgent.signal_mu_source || '默认' }}</b></div>
+              <div class="kv"><span>最终“是”侧价格</span><b>{{ fmt(meta.final_yes_mid, 3) }}</b></div>
+              <div class="kv"><span>群体共识初值</span><b>{{ fmt(meta.priors_summary.signal_mu, 3) }}</b></div>
+              <div class="kv"><span>开始 / 结束</span><b class="small">{{ shortTime(meta.started_at) }} → {{ shortTime(meta.ended_at) }}</b></div>
+            </div>
+          </div>
+
+          <!-- 所有智能体轨迹 -->
+          <div class="panel">
+            <header class="panel-header">
+              <h2 class="panel-title">全体智能体净资产轨迹</h2>
+              <div class="muted small">
+                <label><input type="radio" value="net_value" v-model="metric" @change="drawAll" /> 净资产</label>
+                <label style="margin-left:10px"><input type="radio" value="cash" v-model="metric" @change="drawAll" /> 现金</label>
+              </div>
+            </header>
+            <canvas ref="allChart" class="chart"></canvas>
+            <p class="muted small">细灰线为各智能体,粗青线为市场“是”侧价格(右轴)。点击下方表格中任一智能体查看其详细轨迹。</p>
+          </div>
+
+          <!-- 智能体表 -->
+          <div class="panel">
+            <header class="panel-header">
+              <h2 class="panel-title">智能体钱包余额</h2>
+              <span class="muted small">{{ agents.length }} 个</span>
+            </header>
+            <div class="agent-roster" style="max-height: 280px;">
+              <div class="roster-row roster-head">
+                <span>ID</span><span>原型</span><span>初始资金</span>
+                <span>现金</span><span>盈亏</span><span>操作</span>
+              </div>
+              <div
+                v-for="a in agents"
+                :key="a.agent_id"
+                :class="['roster-row', { selected: a.agent_id === selectedAgent }]"
+                @click="selectAgent(a.agent_id)">
+                <span class="agent-id">A{{ a.agent_id }}</span>
+                <span class="persona-tag">{{ a.persona_type }}</span>
+                <span class="cap-pill">${{ fmtNum(a.capital_initial) }}</span>
+                <span class="cap-pill">${{ fmtNum(a.final_cash) }}</span>
+                <span :class="a.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'">
+                  {{ a.pnl >= 0 ? '+' : '' }}${{ fmtNum(a.pnl) }}
+                </span>
+                <span class="muted small">{{ a.n_actions }}动/{{ a.n_cancel }}撤</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 单个智能体 -->
+          <div class="panel" v-if="agentDetail">
+            <header class="panel-header">
+              <h2 class="panel-title">
+                智能体 A{{ agentDetail.agent_id }} · {{ agentDetail.persona_type }}
+              </h2>
+              <button class="btn-tiny" @click="agentDetail=null;selectedAgent=null">收起</button>
+            </header>
+            <p class="muted small" style="margin-top:0">{{ agentDetail.profile_text.slice(0,260) }}</p>
+            <canvas ref="agentChart" class="chart" style="height:240px"></canvas>
+            <div class="tick-rows" style="max-height:300px;margin-top:10px">
+              <div
+                v-for="(d,i) in agentDetail.decisions"
+                :key="i"
+                :class="['decision-card','action-'+d.action.toLowerCase()]">
+                <div class="decision-head">
+                  <span class="tick-tag">第 {{ d.tick }} 轮</span>
+                  <b>{{ d.action }}</b>
+                  <span v-if="d.action!=='HOLD' && d.action!=='UPDATE_BELIEF'">
+                    {{ d.side }} {{ d.outcome }} @ {{ fmt(d.price,3) }} · ${{ fmtNum(d.size_usd) }}
+                  </span>
+                  <span class="muted small">成交{{ d.n_fills }} · 价{{ fmt(d.yes_mid_after,3) }}</span>
+                </div>
+                <p class="decision-reasoning">{{ d.reasoning || '(无)' }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+    </main>
+  </div>
+  <script src="/static/explore.js"></script>
+</body>
+</html>

@@ -109,11 +109,24 @@ if STATIC.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
+from webapp.explorer import router as explorer_router
+
+app.include_router(explorer_router)
+
+
 @app.get("/")
 def index():
     p = STATIC / "index.html"
     if not p.exists():
         return JSONResponse({"error": "index.html not yet built"}, status_code=500)
+    return FileResponse(str(p))
+
+
+@app.get("/explore")
+def explore_page():
+    p = STATIC / "explore.html"
+    if not p.exists():
+        return JSONResponse({"error": "explore.html not yet built"}, status_code=500)
     return FileResponse(str(p))
 
 

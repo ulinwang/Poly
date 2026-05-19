@@ -103,3 +103,24 @@ class RunLifecycleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExplorerTest(unittest.TestCase):
+    def test_list_experiments(self):
+        client = TestClient(server.app)
+        r = client.get("/api/experiments")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("suites", body)
+        self.assertIn("total", body)
+
+    def test_explore_page_served(self):
+        client = TestClient(server.app)
+        r = client.get("/explore")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("实验浏览器", r.text)
+
+    def test_unknown_experiment_404(self):
+        client = TestClient(server.app)
+        r = client.get("/api/experiments/does-not-exist")
+        self.assertEqual(r.status_code, 404)

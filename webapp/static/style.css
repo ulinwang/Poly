@@ -355,3 +355,37 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   .layout { grid-template-columns: 1fr; }
   .rail { order: 2; }
 }
+
+/* ---- experiment explorer ---- */
+.suite-head {
+  list-style: none;
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  background: var(--bg-panel-alt);
+  border-bottom: 1px solid var(--border);
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px 18px;
+}
+.roster-row.roster-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: default;
+}
+.roster-row {
+  grid-template-columns: 42px 1fr 70px 70px 78px 64px;
+  cursor: pointer;
+}
+.roster-row:hover { background: var(--bg-panel-alt); }
+.roster-row.selected { background: var(--accent-soft); }
+.pnl-pos { color: var(--live); font-family: var(--mono); font-size: 12px; }
+.pnl-neg { color: var(--err); font-family: var(--mono); font-size: 12px; }
