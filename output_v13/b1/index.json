@@ -1,79 +1,69 @@
 {
   "suite": "b1",
   "n_runs": 10,
-  "n_ok": 0,
-  "n_failed": 10,
+  "n_ok": 10,
+  "n_failed": 0,
   "dry_run": false,
   "runs": [
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_dogecoin-above-0pt34-on-january-17.yaml",
       "name": "b1_dogecoin-above-0pt34-on-january-17",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_dogecoin-above-0pt34-on-january-17.json; run `python -m agent.features.market --slug dogecoin-above-0pt34-on-january-17` first"
+      "exp_id": "20260518T105756-b1_replication_dogecoin-above-0pt34-on-january-17-a405026e-30861fbd",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_nba-por-mia-2025-01-21.yaml",
       "name": "b1_nba-por-mia-2025-01-21",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_nba-por-mia-2025-01-21.json; run `python -m agent.features.market --slug nba-por-mia-2025-01-21` first"
+      "exp_id": "20260518T110635-b1_replication_nba-por-mia-2025-01-21-a405026e-51a5a8ad",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-yamand-orsi-win-the-2024-uruguay-presidenti.yaml",
       "name": "b1_will-yamand-orsi-win-the-2024-uruguay-presidenti",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-yamand-orsi-win-the-2024-uruguay-presidential-election.json; run `python -m agent.features.market --slug will-yamand-orsi-win-the-2024-uruguay-presidential-election` first"
+      "exp_id": "20260518T111546-b1_replication_will-yamand-orsi-win-the-2024-uruguay-presidenti-a405026e-77262595",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_nba-gsw-min-2025-01-15.yaml",
       "name": "b1_nba-gsw-min-2025-01-15",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_nba-gsw-min-2025-01-15.json; run `python -m agent.features.market --slug nba-gsw-min-2025-01-15` first"
+      "exp_id": "20260518T121119-b1_replication_nba-gsw-min-2025-01-15-b8c4dc76-2501346d",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-cducsu-and-spd-form-the-next-german-governm.yaml",
       "name": "b1_will-cducsu-and-spd-form-the-next-german-governm",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-cducsu-and-spd-form-the-next-german-government.json; run `python -m agent.features.market --slug will-cducsu-and-spd-form-the-next-german-government` first"
+      "exp_id": "20260518T122530-b1_replication_will-cducsu-and-spd-form-the-next-german-governm-b8c4dc76-63a72cb5",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-xrp-dip-to-1pt50-in-august-343-253-666-332-.yaml",
       "name": "b1_will-xrp-dip-to-1pt50-in-august-343-253-666-332-",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-xrp-dip-to-1pt50-in-august-343-253-666-332-591.json; run `python -m agent.features.market --slug will-xrp-dip-to-1pt50-in-august-343-253-666-332-591` first"
+      "exp_id": "20260518T131653-b1_replication_will-xrp-dip-to-1pt50-in-august-343-253-666-332--b8c4dc76-ca650ec4",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_nba-phx-ind-2025-01-04.yaml",
       "name": "b1_nba-phx-ind-2025-01-04",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_nba-phx-ind-2025-01-04.json; run `python -m agent.features.market --slug nba-phx-ind-2025-01-04` first"
+      "exp_id": "20260518T141447-b1_replication_nba-phx-ind-2025-01-04-b8c4dc76-454f0bc1",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-the-price-of-bitcoin-be-less-than-78000-on-.yaml",
       "name": "b1_will-the-price-of-bitcoin-be-less-than-78000-on-",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-the-price-of-bitcoin-be-less-than-78000-on-mar-28.json; run `python -m agent.features.market --slug will-the-price-of-bitcoin-be-less-than-78000-on-mar-28` first"
+      "exp_id": "20260518T145652-b1_replication_will-the-price-of-bitcoin-be-less-than-78000-on--b8c4dc76-d8af1555",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-xrp-dip-to-1pt00-in-march.yaml",
       "name": "b1_will-xrp-dip-to-1pt00-in-march",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-xrp-dip-to-1pt00-in-march.json; run `python -m agent.features.market --slug will-xrp-dip-to-1pt00-in-march` first"
+      "exp_id": "20260518T151014-b1_replication_will-xrp-dip-to-1pt00-in-march-b8c4dc76-b935a38f",
+      "status": "ok"
     },
     {
       "config_path": "output_v13/b1/_expanded_configs/b1_will-elon-musk-buy-msnbc-before-april-2025.yaml",
       "name": "b1_will-elon-musk-buy-msnbc-before-april-2025",
-      "exp_id": null,
-      "status": "failed",
-      "error": "SystemExit: priors not found at data/priors_will-elon-musk-buy-msnbc-before-april-2025.json; run `python -m agent.features.market --slug will-elon-musk-buy-msnbc-before-april-2025` first"
+      "exp_id": "20260519T120136-b1_replication_will-elon-musk-buy-msnbc-before-april-2025-b8c4dc76-94a3401a",
+      "status": "ok"
     }
   ]
 }

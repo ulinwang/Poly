@@ -1,0 +1,16 @@
+{
+  "sim_id": "f498d003c3b24622",
+  "n_agents": 30,
+  "n_ticks": 10,
+  "pnl_mean": 0.0,
+  "pnl_min": 0.0,
+  "pnl_max": 0.0,
+  "priors": {
+    "signal_mu": 0.010174390195806009,
+    "n_ticks": 10,
+    "tick_size": 0.001,
+    "taker_fee_bps": 0.0,
+    "bootstrap_source": "dataapi_trades_dispersion",
+    "dry_run": true
+  }
+}

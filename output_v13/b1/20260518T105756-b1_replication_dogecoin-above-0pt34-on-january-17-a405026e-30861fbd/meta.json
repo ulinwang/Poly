@@ -1,0 +1,69 @@
+{
+  "exp_id": "20260518T105756-b1_replication_dogecoin-above-0pt34-on-january-17-a405026e-30861fbd",
+  "started_at": "2026-05-18T10:57:56.021513Z",
+  "ended_at": "2026-05-18T11:06:33.808092Z",
+  "git_sha": "a405026eb1662b2fef586811998069c55a91e236",
+  "config": {
+    "name": "b1_replication_dogecoin-above-0pt34-on-january-17",
+    "description": "v13 B1 \u2014 External-validity replication. Archetype-30 + memory across\na panel of 10 resolved binary markets. The {market.slug} placeholder\nis substituted per-market by scripts/run_experiment_suite.py, which\nreads experiments/configs/b1_markets.yaml.\n",
+    "market": {
+      "slug": "dogecoin-above-0pt34-on-january-17",
+      "asof": "market_open"
+    },
+    "agent": {
+      "population": "archetype",
+      "features": [
+        "wallet",
+        "market",
+        "temporal"
+      ],
+      "persona_recipe": {
+        "use_bio": true,
+        "sanitize_labels": true,
+        "llm_temperature": 0.0,
+        "cache_path": "data/wallet_personas.json"
+      },
+      "n_agents": 30,
+      "seed": 0,
+      "signal_mu_source": "first_window_vwap",
+      "belief_update_enabled": false
+    },
+    "environment": {
+      "observer": "quote_only",
+      "seeder": "from_clob_history",
+      "fees_override_bps": null
+    },
+    "llm": {
+      "model": null,
+      "temperature": 0.0,
+      "timeout_s": 120.0,
+      "retry": {
+        "max_attempts": 3,
+        "backoff_base_s": 2.0
+      },
+      "concurrency": null
+    },
+    "output": {
+      "dual_write_clickhouse": false,
+      "parquet_compression": "zstd",
+      "output_dir": "output_v13/b1"
+    },
+    "experiment": {
+      "shock": null
+    }
+  },
+  "sim_id": "e545252263cc403b",
+  "n_agents": 30,
+  "n_ticks": 8,
+  "priors_summary": {
+    "signal_mu": 0.9394666543791418,
+    "n_ticks": 8,
+    "tick_size": 0.001,
+    "taker_fee_bps": 0.0,
+    "bootstrap_source": "dataapi_trades_dispersion",
+    "pnl_summary": {
+      "n_agents": 30,
+      "mean_pnl": 0.13812675000004074
+    }
+  }
+}
