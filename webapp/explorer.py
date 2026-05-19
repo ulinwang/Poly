@@ -135,12 +135,45 @@ def experiment_meta(exp_id: str):
             summary = json.loads(sp.read_text())
         except Exception:        # noqa: BLE001
             summary = {}
-    # final market price from the action log
-    final_yes_mid = None
+    # final market price + initial price from the action log
+    final_yes_mid = start_yes_mid = None
+    action_mix: list[dict] = []
+    n_fills = 0
     try:
         acts = _raw(e["dir"], "agent_actions").sort_values("tick_idx")
         if len(acts):
             final_yes_mid = float(acts["yes_mid_after"].iloc[-1])
+            start_yes_mid = float(acts["yes_mid_before"].iloc[0])
+            n_fills = int(acts["n_fills"].sum())
+            vc = acts["action_type"].value_counts()
+            tot = int(vc.sum())
+            action_mix = [
+                {"action": str(k), "count": int(v),
+                 "pct": round(100.0 * v / tot, 1)}
+                for k, v in vc.items()
+            ]
+    except HTTPException:
+        pass
+    # P&L distribution across agents
+    pnl_stats = {}
+    try:
+        per = _raw(e["dir"], "agent_personas")[["agent_id", "capital_initial"]]
+        lastp = (_raw(e["dir"], "agent_positions")
+                 .sort_values("tick_idx").groupby("agent_id").last()
+                 .reset_index())
+        m = lastp.merge(per, on="agent_id", how="inner")
+        pnl = (m["cash"] + m["unrealized_pnl"] - m["capital_initial"])
+        if len(pnl):
+            pnl_stats = {
+                "mean": round(float(pnl.mean()), 2),
+                "median": round(float(pnl.median()), 2),
+                "min": round(float(pnl.min()), 2),
+                "max": round(float(pnl.max()), 2),
+                "std": round(float(pnl.std(ddof=1)) if len(pnl) > 1 else 0.0, 2),
+                "n_profit": int((pnl > 0).sum()),
+                "n_loss": int((pnl < 0).sum()),
+                "n_flat": int((pnl == 0).sum()),
+            }
     except HTTPException:
         pass
     return {
@@ -156,7 +189,11 @@ def experiment_meta(exp_id: str):
         "config": cfg,
         "priors_summary": meta.get("priors_summary", {}),
         "summary": summary,
+        "start_yes_mid": start_yes_mid,
         "final_yes_mid": final_yes_mid,
+        "n_fills": n_fills,
+        "action_mix": action_mix,
+        "pnl_stats": pnl_stats,
     }
 
 
