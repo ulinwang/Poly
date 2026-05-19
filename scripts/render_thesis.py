@@ -33,27 +33,107 @@ FIG_DIR = Path(__file__).resolve().parent.parent / "docs" / "v13" / "figures"
 # ----------------------------------------------------------------------
 
 
+# --- NJU 2026 thesis format spec (docs/v13/THESIS_FORMAT_SPEC.md) ---
+SONG = "宋体"          # 正文中文
+HEI = "黑体"           # 标题中文
+KAI = "楷体_GB2312"     # 摘要中文 / 封面信息行
+LATIN = "Times New Roman"  # 正文西文与数字
+PT_BODY = 12           # 小四
+PT_H1 = 16             # 三号(章/参考文献/致谢/附录)
+PT_H2 = 14             # 四号(节)
+PT_ABS_TITLE = 18      # 摘要页标题
+IND_FIRST = Cm(0.85)   # 正文首行缩进 ≈ 2 字符
+IND_HANG = Cm(0.76)    # 参考文献悬挂缩进
+
+
+def _set_run(run, *, ea=SONG, latin=LATIN, size=PT_BODY, bold=False):
+    """Apply Chinese + Western font, size, weight to a run, including
+    the w:eastAsia attribute python-docx does not set by default."""
+    run.font.size = Pt(size)
+    run.font.bold = bold
+    run.font.name = latin
+    rpr = run._element.get_or_add_rPr()
+    rf = rpr.find(qn("w:rFonts"))
+    if rf is None:
+        rf = OxmlElement("w:rFonts")
+        rpr.append(rf)
+    rf.set(qn("w:ascii"), latin)
+    rf.set(qn("w:hAnsi"), latin)
+    rf.set(qn("w:eastAsia"), ea)
+
+
+def _page_setup(doc):
+    for s in doc.sections:
+        s.page_width = Cm(21.0)
+        s.page_height = Cm(29.7)
+        s.top_margin = Cm(2.54)
+        s.bottom_margin = Cm(2.54)
+        s.left_margin = Cm(3.17)
+        s.right_margin = Cm(3.17)
+        s.header_distance = Cm(1.5)
+        s.footer_distance = Cm(1.75)
+
+
 def h1(doc, text):
-    doc.add_heading(text, level=1)
+    """一级标题。章/参考文献/致谢/附录:黑体三号居中;
+    摘要页标题:楷体_GB2312 18pt 居中。"""
+    is_abs = ("摘要" in text) or (text.strip().lower() == "abstract")
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(12)
+    p.paragraph_format.space_after = Pt(12)
+    r = p.add_run(text)
+    if is_abs:
+        _set_run(r, ea=KAI, size=PT_ABS_TITLE, bold=True)
+    else:
+        _set_run(r, ea=HEI, size=PT_H1, bold=True)
+    return p
 
 
 def h2(doc, text):
-    doc.add_heading(text, level=2)
+    """二级标题:黑体四号居左,段前约 0.28 cm。"""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p.paragraph_format.space_before = Cm(0.28)
+    p.paragraph_format.space_after = Pt(6)
+    r = p.add_run(text)
+    _set_run(r, ea=HEI, size=PT_H2, bold=True)
+    return p
 
 
 def para(doc, text, indent=True):
+    """正文:宋体/Times New Roman 小四,1.5 倍行距,两端对齐,
+    首行缩进 ≈2 字符。"""
     p = doc.add_paragraph()
+    pf = p.paragraph_format
     if indent:
-        p.paragraph_format.first_line_indent = Cm(0.74)
+        pf.first_line_indent = IND_FIRST
+    pf.line_spacing = 1.5
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    r = p.add_run(text)
+    _set_run(r, ea=SONG, size=PT_BODY)
+    return p
+
+
+def apara(doc, text, lead=None):
+    """摘要正文:楷体 12pt,1.5 倍行距。`lead` 为加粗引导词
+    (如“摘要：”“关键词：”)。"""
+    p = doc.add_paragraph()
     p.paragraph_format.line_spacing = 1.5
-    p.add_run(text)
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    if lead:
+        r0 = p.add_run(lead)
+        _set_run(r0, ea=KAI, size=PT_BODY, bold=True)
+    r = p.add_run(text)
+    _set_run(r, ea=KAI, size=PT_BODY)
     return p
 
 
 def bullet(doc, text):
     p = doc.add_paragraph(style="List Bullet")
     p.paragraph_format.line_spacing = 1.5
-    p.add_run(text)
+    r = p.add_run(text)
+    _set_run(r, ea=SONG, size=PT_BODY)
     return p
 
 
@@ -91,8 +171,7 @@ def three_line_table(doc, title, headers, rows, widths_cm=None):
     cap = doc.add_paragraph()
     cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cr = cap.add_run(f"表 {_TBL['n']}  {title}")
-    cr.bold = True
-    cr.font.size = Pt(10.5)
+    _set_run(cr, ea=SONG, size=10.5, bold=True)
 
     t = doc.add_table(rows=1 + len(rows), cols=len(headers))
     t.alignment = 1  # center
@@ -104,9 +183,9 @@ def three_line_table(doc, title, headers, rows, widths_cm=None):
         c.text = str(htext)
         for para_ in c.paragraphs:
             para_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            para_.paragraph_format.line_spacing = 1.25
             for rr in para_.runs:
-                rr.bold = True
-                rr.font.size = Pt(10)
+                _set_run(rr, ea=SONG, size=10, bold=True)
         _set_cell_border(c, top=thick, bottom=thin)
     for ri, row in enumerate(rows, 1):
         for ci, v in enumerate(row):
@@ -114,8 +193,9 @@ def three_line_table(doc, title, headers, rows, widths_cm=None):
             c.text = str(v)
             for para_ in c.paragraphs:
                 para_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                para_.paragraph_format.line_spacing = 1.25
                 for rr in para_.runs:
-                    rr.font.size = Pt(10)
+                    _set_run(rr, ea=SONG, size=10)
             bottom = thick if ri == n_rows - 1 else None
             _set_cell_border(c, bottom=bottom)
     if widths_cm:
@@ -135,8 +215,7 @@ def figure(doc, png_name, title, width_cm=13.5):
     cap = doc.add_paragraph()
     cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
     cr = cap.add_run(f"图 {_FIG['n']}  {title}")
-    cr.bold = True
-    cr.font.size = Pt(10.5)
+    _set_run(cr, ea=SONG, size=10.5, bold=True)
     doc.add_paragraph()
 
 
@@ -180,7 +259,7 @@ REFERENCES = [
 def build(doc: Document) -> None:
     # ---------- 摘要 ----------
     h1(doc, "中文摘要")
-    para(doc,
+    apara(doc,
         "本研究探讨一个核心问题:由大语言模型驱动的多智能体群体,在预测市场"
         "这一信息聚合机制中,会复现出怎样的交易行为动力学,以及这种仿真在多大"
         "程度上可被当作研究真实市场参与者行为的可靠工具。本文以 Polymarket "
@@ -189,8 +268,9 @@ def build(doc: Document) -> None:
         "多轮交易,并围绕四个研究问题展开受控实验:随机性带来的不可约方差有"
         "多大;基于行为聚类的群体结构相较于随机群体是否在市场层面产生可检验"
         "的差异;为智能体引入显式且可持久的信念状态能否系统性改变其交易结构;"
-        "以及一次外生信息冲击在群体中以何种形态传导。")
-    para(doc,
+        "以及一次外生信息冲击在群体中以何种形态传导。",
+        lead="摘要：")
+    apara(doc,
         "研究得到三项可辩护的结论。第一,在只使用事件发生前数据的前提下,"
         "把参与者按行为特征聚类得到的群体,相较于只复现各特征总体分布、"
         "但打乱类别结构的随机群体,在市场层面不产生可检出的差异;聚类应"
@@ -204,7 +284,8 @@ def build(doc: Document) -> None:
         "抬高其平均值,从而诱导群体一致地朝同一方向交易。修正后该偏差"
         "消除。本文据此明确界定:该仿真框架是研究交易行为规律的可控工具,"
         "而不是市场结果的预测器。")
-    para(doc, "关键词:大语言模型;多智能体仿真;预测市场;行为金融;信息聚合", indent=False)
+    apara(doc, "大语言模型;多智能体仿真;预测市场;行为金融;信息聚合",
+          lead="关键词：")
 
     pagebreak(doc)
     h1(doc, "Abstract")
@@ -596,8 +677,12 @@ def build(doc: Document) -> None:
     h1(doc, "参考文献")
     for r in REFERENCES:
         p = doc.add_paragraph()
-        p.paragraph_format.line_spacing = 1.5
-        p.add_run(r).font.size = Pt(10.5)
+        pf = p.paragraph_format
+        pf.line_spacing = 1.5
+        pf.left_indent = IND_HANG          # 悬挂缩进
+        pf.first_line_indent = -IND_HANG
+        run = p.add_run(r)
+        _set_run(run, ea=SONG, size=PT_BODY)
 
     # ---------- 致谢 ----------
     pagebreak(doc)
@@ -668,6 +753,7 @@ def main() -> None:
     else:
         doc = Document()
 
+    _page_setup(doc)
     build(doc)
     out = Path(args.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
