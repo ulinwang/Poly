@@ -20,8 +20,12 @@ import argparse
 from pathlib import Path
 
 from docx import Document
-from docx.shared import Pt, Cm
+from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+FIG_DIR = Path(__file__).resolve().parent.parent / "docs" / "v13" / "figures"
 
 
 # ----------------------------------------------------------------------
@@ -53,22 +57,87 @@ def bullet(doc, text):
     return p
 
 
-def table(doc, headers, rows):
+def _set_cell_border(cell, **edges):
+    """Set individual cell borders. edges like top={'sz':12,'val':'single'}."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcB = tcPr.find(qn("w:tcBorders"))
+    if tcB is None:
+        tcB = OxmlElement("w:tcBorders")
+        tcPr.append(tcB)
+    for edge in ("top", "left", "bottom", "right"):
+        spec = edges.get(edge)
+        el = tcB.find(qn(f"w:{edge}"))
+        if el is None:
+            el = OxmlElement(f"w:{edge}")
+            tcB.append(el)
+        if spec is None:
+            el.set(qn("w:val"), "nil")
+        else:
+            el.set(qn("w:val"), spec.get("val", "single"))
+            el.set(qn("w:sz"), str(spec.get("sz", 8)))
+            el.set(qn("w:color"), spec.get("color", "000000"))
+
+
+# table number is auto-incremented; caption goes ABOVE (academic style)
+_TBL = {"n": 0}
+_FIG = {"n": 0}
+
+
+def three_line_table(doc, title, headers, rows, widths_cm=None):
+    """Academic three-line (三线表) table. Caption above; only the
+    table top rule, header-bottom rule, and table bottom rule are
+    drawn — no vertical or inner horizontal lines."""
+    _TBL["n"] += 1
+    cap = doc.add_paragraph()
+    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cr = cap.add_run(f"表 {_TBL['n']}  {title}")
+    cr.bold = True
+    cr.font.size = Pt(10.5)
+
     t = doc.add_table(rows=1 + len(rows), cols=len(headers))
-    try:
-        t.style = "Light Grid Accent 1"
-    except KeyError:
-        t.style = "Table Grid"
-    for i, htext in enumerate(headers):
-        c = t.rows[0].cells[i]
-        c.text = htext
-        for r in c.paragraphs:
-            for rr in r.runs:
+    t.alignment = 1  # center
+    thick = {"sz": 14, "val": "single"}
+    thin = {"sz": 6, "val": "single"}
+    n_rows = 1 + len(rows)
+    for ci, htext in enumerate(headers):
+        c = t.rows[0].cells[ci]
+        c.text = str(htext)
+        for para_ in c.paragraphs:
+            para_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for rr in para_.runs:
                 rr.bold = True
+                rr.font.size = Pt(10)
+        _set_cell_border(c, top=thick, bottom=thin)
     for ri, row in enumerate(rows, 1):
         for ci, v in enumerate(row):
-            t.rows[ri].cells[ci].text = str(v)
+            c = t.rows[ri].cells[ci]
+            c.text = str(v)
+            for para_ in c.paragraphs:
+                para_.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for rr in para_.runs:
+                    rr.font.size = Pt(10)
+            bottom = thick if ri == n_rows - 1 else None
+            _set_cell_border(c, bottom=bottom)
+    if widths_cm:
+        for r in t.rows:
+            for ci, w in enumerate(widths_cm):
+                r.cells[ci].width = Cm(w)
+    doc.add_paragraph()
     return t
+
+
+def figure(doc, png_name, title, width_cm=13.5):
+    """Embed a figure centered with a Chinese caption BELOW it."""
+    _FIG["n"] += 1
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.add_run().add_picture(str(FIG_DIR / png_name), width=Cm(width_cm))
+    cap = doc.add_paragraph()
+    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cr = cap.add_run(f"图 {_FIG['n']}  {title}")
+    cr.bold = True
+    cr.font.size = Pt(10.5)
+    doc.add_paragraph()
 
 
 def caption(doc, text):
@@ -235,7 +304,9 @@ def build(doc: Document) -> None:
         "交互;环境按“价格优先、时间优先”撮合,并即时更新买卖报价。"
         "所有可调参数均由真实数据以确定的方式导出;语言模型有一个控制"
         "其输出随机性的参数(此处称“决策温度”),本文将其设为零,使其"
-        "尽量给出确定、可重复的回答,以最大化实验的可复现性。")
+        "尽量给出确定、可重复的回答,以最大化实验的可复现性。仿真的"
+        "总体流程如图 1 所示。")
+    figure(doc, "fig1_loop.png", "仿真总体流程", width_cm=15)
 
     h2(doc, "二、参与者画像的构造")
     para(doc,
@@ -339,16 +410,16 @@ def build(doc: Document) -> None:
     para(doc,
         "围绕四个研究问题设计四组受控对照,均以同一真实结算市场为基底,"
         "每组以三个不同随机种子重复,以便将处理效应与随机性区分开。")
-    table(doc,
+    three_line_table(doc, "四组受控对照实验设计",
         ["实验", "操纵的变量", "对照方式", "回应的研究问题"],
         [
             ["随机性基线", "仅随机种子", "三次重复", "问题一"],
-            ["群体结构", "行为原型 / 边际匹配随机 / 均匀随机",
+            ["群体结构", "行为原型/边际随机/均匀随机",
              "三向对比,各三种子", "问题二"],
-            ["信念机制", "显式信念机制 开 / 关", "配对,各三种子", "问题三"],
-            ["信息冲击", "中途注入传闻 / 无冲击", "配对,各三种子", "问题四"],
-        ])
-    caption(doc, "表 5-1  四组受控对照实验设计")
+            ["信念机制", "显式信念机制 开/关", "配对,各三种子", "问题三"],
+            ["信息冲击", "中途注入传闻/无冲击", "配对,各三种子", "问题四"],
+        ],
+        widths_cm=[2.4, 5.0, 4.2, 2.8])
     para(doc,
         "在四组对照之外,另以一个十市场面板检验外部效度:每个市场以相同"
         "的群体规模独立仿真,统计仿真终价落在正确一侧的比例,以及仿真"
@@ -369,7 +440,20 @@ def build(doc: Document) -> None:
         "YES 中间价呈 0.222 ± 0.045 的波动。这表明语言模型后端在零温度"
         "下仍非完全确定,随机性经由群体抽样与轮内处理顺序进入。0.045 "
         "因此构成本研究一切组间比较的可检出下限,亦是一项必须声明的"
-        "可复现性限制:任何小于该量级的差异不能与随机噪声区分。")
+        "可复现性限制:任何小于该量级的差异不能与随机噪声区分。"
+        "三个随机种子下的价格轨迹见图 2。")
+    figure(doc, "fig2_seed.png", "仅随机种子变化时的价格轨迹(随机性基线)")
+    three_line_table(doc, "四组实验核心指标汇总(基底市场,真实结果为“否”)",
+        ["实验组", "终态价格(均值±标准差)", "撤单占比", "向真值移动"],
+        [
+            ["随机性基线", "0.222 ± 0.045", "约 12%", "0 / 3"],
+            ["行为原型群体", "0.243 ± 0.044", "约 14%", "0 / 3"],
+            ["边际随机群体", "0.308 ± 0.028", "约 14%", "0 / 3"],
+            ["均匀随机群体", "0.225 ± 0.056", "约 15%", "0 / 3"],
+            ["信念机制关", "0.255(均值)", "12.4%", "0 / 3"],
+            ["信念机制开", "0.233(均值)", "7.1%", "0 / 3"],
+        ],
+        widths_cm=[3.4, 5.0, 2.6, 2.6])
 
     h2(doc, "二、群体结构的因果作用")
     para(doc,
@@ -384,7 +468,10 @@ def build(doc: Document) -> None:
         "行为原型相较于朴素的随机抽样,在市场层面不产生可检出差异,"
         "应被重新定位为对参与者总体的一种描述性分类,而不是决定仿真结果的关键因素。"
         "其方法学含义是:在此类仿真中,群体异质性的恰当来源比聚类的"
-        "粒度更值得关注。")
+        "粒度更值得关注。三种群体的终态价格对比见图 3。")
+    figure(doc, "fig3_population.png",
+           "三种群体的终态价格对比(误差棒为种子标准差,散点为单次仿真)",
+           width_cm=11)
 
     h2(doc, "三、信念机制的作用")
     para(doc,
@@ -394,7 +481,10 @@ def build(doc: Document) -> None:
         "陈述对结果的后验信念,而非反复挂单又撤单。这是四组对照中唯一具有"
         "显著且可解释效应的处理,说明无意义挂撤这一行为噪声主要源于"
         "“缺乏对自身信念的可见性”这一建模选择,而非语言模型推理能力"
-        "的固有缺陷——仅赋予其显式、可持久的信念表征即可大幅消解。")
+        "的固有缺陷——仅赋予其显式、可持久的信念表征即可大幅消解。"
+        "信念机制开关下的动作结构对比见图 4。")
+    figure(doc, "fig4_belief.png",
+           "信念机制开关下的动作结构对比", width_cm=12)
 
     h2(doc, "四、信息冲击的传导形态")
     para(doc,
@@ -402,7 +492,10 @@ def build(doc: Document) -> None:
         "参与者间资金流动网络的连接的集中—分散程度(以信息熵衡量,熵越大越分散)几乎不变(由 3.37 降至 3.33),"
         "但网络总资金流增加约 26%。这提示冲击的传导形态是“在既有流动"
         "路径上放大交易量”,而非“重构网络拓扑”。受限于每组三次重复,"
-        "此为初步结果,其方向需以更多重复确认,列为后续工作。")
+        "此为初步结果,其方向需以更多重复确认,列为后续工作。"
+        "资金流与网络结构的对比见图 5。")
+    figure(doc, "fig5_shock.png",
+           "信息冲击下的资金流与网络结构对比", width_cm=13)
 
     h2(doc, "五、一处方法缺陷的定位与修正")
     para(doc,
@@ -411,7 +504,25 @@ def build(doc: Document) -> None:
         "十分之七,但二项检验不显著(p ≈ 0.17),且这一表面正确率几乎"
         "完全来自市场开始时的初始价格本身已含信息,而非智能体的价格发现;真正"
         "衡量价格发现的指标——价格朝真实方向移动者——仅为十分之三,"
-        "显著差于随机。")
+        "显著差于随机。十个市场的明细见表 3,价格移动方向的可视化见图 6。")
+    three_line_table(doc, "十市场外部效度明细(真实结果:1=是,0=否)",
+        ["市场", "真实结果", "起始价格", "终态价格", "向真值移动", "终态正确侧"],
+        [
+            ['狗狗币>0.34', 1, 0.950, 0.905, '否', '是'],
+            ['NBA POR-MIA', 1, 0.215, 0.240, '是', '否'],
+            ['乌拉圭大选', 1, 0.500, 0.735, '是', '是'],
+            ['NBA GSW-MIN', 1, 0.330, 0.355, '是', '否'],
+            ['德国组阁', 1, 0.950, 0.880, '否', '是'],
+            ['XRP<1.50', 0, 0.055, 0.080, '否', '是'],
+            ['NBA PHX-IND', 0, 0.475, 0.540, '否', '否'],
+            ['BTC<78000', 0, 0.055, 0.130, '否', '是'],
+            ['XRP<1.00', 0, 0.060, 0.160, '否', '是'],
+            ['马斯克买MSNBC', 0, 0.055, 0.055, '否', '是'],
+        ],
+        widths_cm=[3.0, 1.8, 2.0, 2.0, 2.2, 2.2])
+    figure(doc, "fig6_external.png",
+           "十个市场仿真过程中价格的移动方向(深色=朝真实结果移动)",
+           width_cm=12)
     para(doc,
         "对该现象的机制分析定位到初始主观判断的生成方式。当共识先验"
         "接近 0(即市场较确信结果为否)时,以“取值落在允许范围外就丢弃、重新抽取”的方式生成的"
@@ -431,7 +542,19 @@ def build(doc: Document) -> None:
         "框架并不因此具备方向预测能力。这一发现的意义在于:此前观察"
         "到的方向性失败,有相当部分并非框架不可逾越的局限,而是一处"
         "可定位、可修正的方法缺陷;但修正它并不改变“框架是行为动力学"
-        "研究仪器而非预测器”这一基本界定。")
+        "研究仪器而非预测器”这一基本界定。修正前后的价格偏移对比见"
+        "图 7,关键指标见表 4。")
+    figure(doc, "fig7_fix.png",
+           "修正前后价格偏移对比(误差棒为种子标准差)", width_cm=10)
+    three_line_table(doc, "初始判断生成方式修正前后对比",
+        ["指标", "修正前", "修正后"],
+        [
+            ["终态价格(均值±标准差)", "0.222 ± 0.045", "0.160 ± 0.035"],
+            ["相对起始价的平均偏移", "+0.067", "+0.005"],
+            ["向真值移动的仿真数", "0 / 3", "1 / 3"],
+            ["撤单占比", "约 12%", "约 15%"],
+        ],
+        widths_cm=[5.4, 4.0, 4.0])
 
     # ---------- 第七章 实验结论 ----------
     pagebreak(doc)
@@ -493,8 +616,24 @@ def build(doc: Document) -> None:
         "分类,在市场层面不起决定性作用,此处仅供刻画参与者总体的"
         "异质性结构之用。", )
     para(doc,
-        "(各原型在七个行为特征上的中心与分位数刻画,依据只含事件前数据的"
-        "参与者池统计得到,具体数值见随附数据制品。)")
+        "四类原型在七个行为特征上的中心坐标见表 5(特征均经标准化前的"
+        "原始量纲呈现;占比为该原型在事件前参与者池中的人数比例)。")
+    three_line_table(doc, "四类行为原型的中心特征(基底市场,事件前参与者池)",
+        ["原型", "占比", "累计名义额", "市场集中度",
+         "单位资金市场广度", "平均成交价", "尾部交易占比", "成交价波动"],
+        [
+            ["原型一", "27.7%", "2.61", "0.39", "6.31", "0.51", "0.22", "0.24"],
+            ["原型二", "35.2%", "2.50", "0.88", "0.98", "0.50", "0.02", "0.10"],
+            ["原型三", "9.7%",  "2.84", "0.62", "1.45", "0.89", "0.70", "0.10"],
+            ["原型四", "27.4%", "2.21", "0.84", "1.44", "0.35", "0.48", "0.24"],
+        ],
+        widths_cm=[1.6, 1.5, 2.0, 2.0, 2.6, 2.0, 2.0, 2.0])
+    para(doc,
+        "可见原型一对应“单位资金覆盖市场最广”的高活跃分散型参与者,"
+        "原型二为“高度集中于单一市场、活跃时长极短”的一次性参与者,"
+        "原型三为“平均成交价偏高、尾部极端价格交易多”的追逐小概率"
+        "高赔率型,原型四为“成交价偏低、波动较大”的逆向型。再次强调,"
+        "该分类为描述性,正文第六章已证其在市场层面不起决定性作用。")
 
     h1(doc, "附录 B  实验复现说明")
     para(doc,
