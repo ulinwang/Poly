@@ -26,6 +26,58 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 FIG_DIR = Path(__file__).resolve().parent.parent / "docs" / "v13" / "figures"
+TBL_DIR = Path(__file__).resolve().parent.parent / "docs" / "v13" / "tables"
+
+
+def _load_csv_rows(name, fmt=None):
+    """Read a CSV from docs/v13/tables/ and return rows ready for
+    three_line_table; optionally format numeric cells via `fmt` dict
+    mapping column-name → format string."""
+    import csv
+    p = TBL_DIR / name
+    rows = []
+    with p.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            out = []
+            for k, v in row.items():
+                if fmt and k in fmt:
+                    try:
+                        v = fmt[k] % float(v)
+                    except (TypeError, ValueError):
+                        pass
+                out.append(v)
+            rows.append(out)
+    return rows
+
+
+def _load_action_mix_rows():
+    return _load_csv_rows("table6_action_mix.csv",
+        fmt={a: "%.1f" for a in ["限价单", "市价单", "撤单", "不操作",
+                                  "拆分", "合并", "声明信念"]})
+
+
+def _load_b1_markets_rows():
+    rows = _load_csv_rows("table7_b1_markets.csv")
+    # shorten the slug for display
+    short = {
+        "dogecoin-above-0pt34-on-january-17": "狗狗币>0.34",
+        "nba-por-mia-2025-01-21": "NBA POR-MIA",
+        "will-yamand-orsi-win-the-2024-uruguay-presidential-election": "乌拉圭大选",
+        "nba-gsw-min-2025-01-15": "NBA GSW-MIN",
+        "will-cducsu-and-spd-form-the-next-german-government": "德国组阁",
+        "will-xrp-dip-to-1pt50-in-august-343-253-666-332-591": "XRP<1.50",
+        "nba-phx-ind-2025-01-04": "NBA PHX-IND",
+        "will-the-price-of-bitcoin-be-less-than-78000-on-mar-28": "BTC<78000",
+        "will-xrp-dip-to-1pt00-in-march": "XRP<1.00",
+        "will-elon-musk-buy-msnbc-before-april-2025": "马斯克买MSNBC",
+    }
+    for r in rows:
+        r[0] = short.get(r[0], r[0][:14])
+    return rows
+
+
+def _load_archetype_pnl_rows():
+    return _load_csv_rows("table8_b3_archetype_pnl.csv")
 
 
 # ----------------------------------------------------------------------
@@ -256,7 +308,43 @@ REFERENCES = [
 # ----------------------------------------------------------------------
 
 
+def _cover_line(doc, label, value, label_w=4.5, value_w=8.5):
+    """A 封面 info line: label aligned right, value left, both 16pt 楷体_GB2312."""
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(8)
+    r1 = p.add_run(f"{label:>4}".replace(" ", "　") + "   ")
+    _set_run(r1, ea=KAI, size=16, bold=True)
+    r2 = p.add_run(str(value))
+    _set_run(r2, ea=KAI, size=16, bold=False)
+
+
+def cover_page(doc):
+    """南京大学本科毕业论文封面。"""
+    # 顶部空白
+    for _ in range(3):
+        doc.add_paragraph()
+    # 大标题
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(36)
+    r = p.add_run("本 科 毕 业 论 文")
+    _set_run(r, ea=SONG, size=26, bold=True)
+    # 信息行
+    _cover_line(doc, "学    院", "信息管理学院")
+    _cover_line(doc, "专    业", "信息管理与信息系统")
+    _cover_line(doc, "题    目",
+                "大语言模型驱动智能体的行为模拟研究——以 Polymarket 预测市场为例")
+    _cover_line(doc, "年    级", "2022     学    号   221820328")
+    _cover_line(doc, "学生姓名", "王 友 林")
+    _cover_line(doc, "指导教师", "颜 嘉 麒     职    称   教  授")
+    _cover_line(doc, "提交日期", "2026 年 6 月")
+    pagebreak(doc)
+
+
 def build(doc: Document) -> None:
+    # ---------- 封面 ----------
+    cover_page(doc)
     # ---------- 摘要 ----------
     h1(doc, "中文摘要")
     apara(doc,
@@ -524,6 +612,20 @@ def build(doc: Document) -> None:
         "可复现性限制:任何小于该量级的差异不能与随机噪声区分。"
         "三个随机种子下的价格轨迹见图 2。")
     figure(doc, "fig2_seed.png", "仅随机种子变化时的价格轨迹(随机性基线)")
+    para(doc,
+        "为便于后续讨论先行给出全局视角,图 3 与表 2 并置了全部八组对照"
+        "的动作类型分布(占该组所有决策的百分比)。除“信念开”组将约"
+        "四成动作用于显式声明信念外,其余七组的动作结构在视觉上几乎"
+        "不可分辨——这与后文随机性基线之上各组的零效应或弱效应观察"
+        "一致,并提示了第六章三所讨论的信念机制是本研究最强且最稳健"
+        "的处理。")
+    figure(doc, "fig12_action_mix_groups.png",
+           "八组实验的动作类型分布对比")
+    three_line_table(doc, "八组实验的动作类型分布(占全部动作百分比)",
+        ["实验组", "限价单", "市价单", "撤单", "不操作",
+         "拆分", "合并", "声明信念"],
+        _load_action_mix_rows(),
+        widths_cm=[2.2, 1.5, 1.5, 1.4, 1.6, 1.4, 1.4, 1.8])
     three_line_table(doc, "四组实验核心指标汇总(基底市场,真实结果为“否”)",
         ["实验组", "终态价格(均值±标准差)", "撤单占比", "向真值移动"],
         [
@@ -549,10 +651,23 @@ def build(doc: Document) -> None:
         "行为原型相较于朴素的随机抽样,在市场层面不产生可检出差异,"
         "应被重新定位为对参与者总体的一种描述性分类,而不是决定仿真结果的关键因素。"
         "其方法学含义是:在此类仿真中,群体异质性的恰当来源比聚类的"
-        "粒度更值得关注。三种群体的终态价格对比见图 3。")
+        "粒度更值得关注。三种群体的终态价格对比见图 4。")
     figure(doc, "fig3_population.png",
            "三种群体的终态价格对比(误差棒为种子标准差,散点为单次仿真)",
            width_cm=11)
+    para(doc,
+        "将行为原型群体的智能体按其所属原型分层后(表 4),四类原型在"
+        "三种子合并的样本下表现出量级相当但方向一致的盈亏轮廓:盈亏"
+        "均值均为小幅正值,标准差远大于均值,且每类内部都同时存在显著"
+        "盈利与显著亏损的个体。这与原型间在市场层面无可检出差异(图 4)"
+        "的事实并行——原型在群体行为分化上是可识别的,但这种分化未传导"
+        "到市场总体动力学。")
+    three_line_table(doc,
+        "行为原型群体内,各原型智能体的盈亏分布(三种子合并)",
+        ["原型", "智能体数", "盈亏均值", "盈亏标准差",
+         "盈亏中位", "盈亏最小", "盈亏最大"],
+        _load_archetype_pnl_rows(),
+        widths_cm=[2.6, 1.8, 2.2, 2.4, 2.0, 2.0, 2.0])
 
     h2(doc, "三、信念机制的作用")
     para(doc,
@@ -563,9 +678,16 @@ def build(doc: Document) -> None:
         "显著且可解释效应的处理,说明无意义挂撤这一行为噪声主要源于"
         "“缺乏对自身信念的可见性”这一建模选择,而非语言模型推理能力"
         "的固有缺陷——仅赋予其显式、可持久的信念表征即可大幅消解。"
-        "信念机制开关下的动作结构对比见图 4。")
+        "信念机制开关下的动作结构对比见图 5。")
     figure(doc, "fig4_belief.png",
            "信念机制开关下的动作结构对比", width_cm=12)
+    para(doc,
+        "图 6 进一步将信念机制开关下的个体盈亏分布并置。两侧分布形态相似,"
+        "意味着信念机制并未明显放大或压缩智能体之间的盈亏分散——它的"
+        "作用集中在动作结构层面,而不是显著改变群体内部的损益异质性。")
+    figure(doc, "fig11_b4_pnl_kde.png",
+           "信念机制开关下,个体智能体盈亏分布的对比(每组三种子合并)",
+           width_cm=12)
 
     h2(doc, "四、信息冲击的传导形态")
     para(doc,
@@ -574,9 +696,16 @@ def build(doc: Document) -> None:
         "但网络总资金流增加约 26%。这提示冲击的传导形态是“在既有流动"
         "路径上放大交易量”,而非“重构网络拓扑”。受限于每组三次重复,"
         "此为初步结果,其方向需以更多重复确认,列为后续工作。"
-        "资金流与网络结构的对比见图 5。")
+        "资金流与网络结构的对比见图 7;参与者间资金流动网络的拓扑对比见图 8。")
     figure(doc, "fig5_shock.png",
            "信息冲击下的资金流与网络结构对比", width_cm=13)
+    figure(doc, "fig9_network_b6.png",
+           "无冲击与注入传闻下的资金流动网络拓扑", width_cm=14)
+    para(doc,
+        "网络拓扑层面,两幅图的核心节点群与连接结构高度一致;注入传闻"
+        "后未出现新的核心节点或新的连边模式,只是既有边的权重整体放大。"
+        "这一可视化与图 7 中“熵几乎不变、资金流增 26%”的统计指标相互"
+        "印证。")
 
     h2(doc, "五、一处方法缺陷的定位与修正")
     para(doc,
@@ -585,7 +714,15 @@ def build(doc: Document) -> None:
         "十分之七,但二项检验不显著(p ≈ 0.17),且这一表面正确率几乎"
         "完全来自市场开始时的初始价格本身已含信息,而非智能体的价格发现;真正"
         "衡量价格发现的指标——价格朝真实方向移动者——仅为十分之三,"
-        "显著差于随机。十个市场的明细见表 3,价格移动方向的可视化见图 6。")
+        "显著差于随机。十个市场的导出参数见表 5;价格相对起点的归一化"
+        "轨迹见图 9;价格移动方向的可视化见图 10;每个市场的明细见表 6。")
+    three_line_table(doc, "十市场的导出参数与事件前钱包池规模",
+        ["市场", "结果", "开盘日期", "群体先验", "轮数", "tick", "钱包数", "簇数"],
+        _load_b1_markets_rows(),
+        widths_cm=[2.8, 1.4, 2.4, 1.8, 1.4, 1.6, 2.0, 1.4])
+    figure(doc, "fig10_b1_normalized.png",
+           "十市场仿真期内价格相对起点的归一化轨迹(每条线对应一个市场)",
+           width_cm=13)
     three_line_table(doc, "十市场外部效度明细(真实结果:1=是,0=否)",
         ["市场", "真实结果", "起始价格", "终态价格", "向真值移动", "终态正确侧"],
         [
@@ -624,7 +761,7 @@ def build(doc: Document) -> None:
         "到的方向性失败,有相当部分并非框架不可逾越的局限,而是一处"
         "可定位、可修正的方法缺陷;但修正它并不改变“框架是行为动力学"
         "研究仪器而非预测器”这一基本界定。修正前后的价格偏移对比见"
-        "图 7,关键指标见表 4。")
+        "图 11,关键指标见表 7。")
     figure(doc, "fig7_fix.png",
            "修正前后价格偏移对比(误差棒为种子标准差)", width_cm=10)
     three_line_table(doc, "初始判断生成方式修正前后对比",
@@ -701,8 +838,13 @@ def build(doc: Document) -> None:
         "分类,在市场层面不起决定性作用,此处仅供刻画参与者总体的"
         "异质性结构之用。", )
     para(doc,
-        "四类原型在七个行为特征上的中心坐标见表 5(特征均经标准化前的"
-        "原始量纲呈现;占比为该原型在事件前参与者池中的人数比例)。")
+        "四类原型在七个行为特征上的中心坐标见表(七维雷达图可视化"
+        "见图)。特征均以标准化前的原始量纲呈现;占比为该原型在事件前"
+        "参与者池中的人数比例。雷达图中,各特征经跨原型 min–max 归一化"
+        "以便在同一坐标下并置比较。")
+    figure(doc, "fig8_archetype_radar.png",
+           "四类行为原型在七个行为特征上的中心轮廓(各特征经跨原型归一化)",
+           width_cm=12)
     three_line_table(doc, "四类行为原型的中心特征(基底市场,事件前参与者池)",
         ["原型", "占比", "累计名义额", "市场集中度",
          "单位资金市场广度", "平均成交价", "尾部交易占比", "成交价波动"],
