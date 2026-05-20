@@ -36,3 +36,6 @@ output_v13/**/raw/
 output_v13/**/*.parquet
 output_v13/**/llm_calls.jsonl
 output_v13/suite_run.log
+
+# Large publication TIFFs — regenerable from scripts/thesis_*.py
+docs/v13/figures/*.tiff
