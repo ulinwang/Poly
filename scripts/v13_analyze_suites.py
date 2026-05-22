@@ -6,11 +6,11 @@ import numpy as np
 # "direction correct" = yes_mid moved toward 0 (down from seed ~0.155).
 ROWS=[]
 for suite in ['b2','b3','b4','b6']:
-    idx=json.load(open(f'output_v13/{suite}/index.json'))
+    idx=json.load(open(f'output/v13/{suite}/index.json'))
     for r in idx['runs']:
         eid=r.get('exp_id')
         if not eid: continue
-        base=f'output_v13/{suite}/{eid}'
+        base=f'output/v13/{suite}/{eid}'
         act=pd.read_parquet(f'{base}/raw/agent_actions.parquet')
         # action mix
         n=len(act)
@@ -35,7 +35,7 @@ for suite in ['b2','b3','b4','b6']:
 df=pd.DataFrame(ROWS)
 pd.set_option('display.width',200); pd.set_option('display.max_rows',40)
 print(df.to_string(index=False))
-df.to_csv('output_v13/v13_metrics.csv',index=False)
+df.to_csv('output/v13/v13_metrics.csv',index=False)
 print("\n--- B2 seed variance (yes_mid_final) ---")
 b2=df[df.suite=='b2']['yes_mid_final']
 print(f"mean={b2.mean():.4f} std={b2.std():.4f} range=[{b2.min():.4f},{b2.max():.4f}]")

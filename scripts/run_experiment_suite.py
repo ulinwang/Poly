@@ -1,11 +1,11 @@
-"""v13 — Multi-run driver for the B1..B6 experiment ladder.
+"""v13 — Multi-run driver for named experiment suites.
 
 CLI
 ---
-Run all configs in a suite (filename glob ``b1_*.yaml`` etc.):
+Run all configs in a suite (filename glob ``b1_*.yaml``, ``c1_*.yaml`` etc.):
 
     python scripts/run_experiment_suite.py --suite b1 \
-        --output-dir output_v13/b1 \
+        --output-dir output/v13/b1 \
         [--dry-run] [--max-parallel 1] [--config-dir experiments/configs]
 
 Behavior
@@ -146,7 +146,7 @@ def _run_one(
 def run_suite(
     suite: str, *,
     config_dir: Path = Path("experiments/configs"),
-    output_dir: Path = Path("output_v13"),
+    output_dir: Path = Path("output/v13"),
     dry_run: bool = False,
     max_parallel: int = 1,
     runner_fn=None,
@@ -200,9 +200,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--suite", required=True,
-                        help="suite prefix (b1, b2, b3, b4, b5, b6)")
+                        help="suite prefix (for example b1, b4, c1, c2)")
     parser.add_argument("--output-dir", type=Path,
-                        default=Path("output_v13"))
+                        default=Path("output/v13"))
     parser.add_argument("--config-dir", type=Path,
                         default=Path("experiments/configs"))
     parser.add_argument("--dry-run", action="store_true")

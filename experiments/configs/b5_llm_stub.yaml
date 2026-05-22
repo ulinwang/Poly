@@ -23,5 +23,5 @@ llm:
 output:
   dual_write_clickhouse: false
   parquet_compression: zstd
-  output_dir: output_v13/b5
+  output_dir: output/v13/b5
 _stub_todo: requires Anthropic key + decision.llm provider dispatch; not yet wired

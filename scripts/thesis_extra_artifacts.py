@@ -62,7 +62,7 @@ ACTION_COLOR = {
 
 
 def _eid(suite, name):
-    idx = json.loads((ROOT / f"output_v13/{suite}/index.json").read_text())
+    idx = json.loads((ROOT / f"output/v13/{suite}/index.json").read_text())
     for r in idx["runs"]:
         if r["name"] == name:
             return r["exp_id"]
@@ -71,20 +71,20 @@ def _eid(suite, name):
 
 def _acts(suite, name):
     return pd.read_parquet(
-        ROOT / f"output_v13/{suite}/{_eid(suite, name)}/raw/agent_actions.parquet"
+        ROOT / f"output/v13/{suite}/{_eid(suite, name)}/raw/agent_actions.parquet"
     )
 
 
 def _fills(suite, name):
     return pd.read_parquet(
-        ROOT / f"output_v13/{suite}/{_eid(suite, name)}/raw/agent_fills.parquet"
+        ROOT / f"output/v13/{suite}/{_eid(suite, name)}/raw/agent_fills.parquet"
     )
 
 
 def _positions_pnl(suite, name):
     eid = _eid(suite, name)
-    per = pd.read_parquet(ROOT / f"output_v13/{suite}/{eid}/raw/agent_personas.parquet")
-    pos = pd.read_parquet(ROOT / f"output_v13/{suite}/{eid}/raw/agent_positions.parquet")
+    per = pd.read_parquet(ROOT / f"output/v13/{suite}/{eid}/raw/agent_personas.parquet")
+    pos = pd.read_parquet(ROOT / f"output/v13/{suite}/{eid}/raw/agent_positions.parquet")
     last = pos.sort_values("tick_idx").groupby("agent_id").last().reset_index()
     m = last.merge(per[["agent_id", "capital_initial", "persona_type"]],
                    on="agent_id")
@@ -174,12 +174,12 @@ def fig_network_b6():
 # ----------------------------------------------------------------------
 
 def fig_b1_normalized():
-    idx = json.loads((ROOT / "output_v13/b1/index.json").read_text())
+    idx = json.loads((ROOT / "output/v13/b1/index.json").read_text())
     rows = []
     fig, ax = plt.subplots(figsize=fig_size(COL_SINGLE_MM + 20, 65))
     for r in idx["runs"]:
         a = pd.read_parquet(
-            ROOT / f"output_v13/b1/{r['exp_id']}/raw/agent_actions.parquet"
+            ROOT / f"output/v13/b1/{r['exp_id']}/raw/agent_actions.parquet"
         ).sort_values("tick_idx")
         s = a.groupby("tick_idx")["yes_mid_after"].last()
         y = s.values - float(a["yes_mid_before"].iloc[0])

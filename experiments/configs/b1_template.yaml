@@ -29,4 +29,4 @@ llm:
 output:
   dual_write_clickhouse: false
   parquet_compression: zstd
-  output_dir: output_v13/b1
+  output_dir: output/v13/b1

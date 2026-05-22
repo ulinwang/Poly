@@ -31,7 +31,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 
 def _eid(suite, name):
-    idx = json.loads((ROOT / f"output_v13/{suite}/index.json").read_text())
+    idx = json.loads((ROOT / f"output/v13/{suite}/index.json").read_text())
     for r in idx["runs"]:
         if r["name"] == name:
             return r["exp_id"]
@@ -40,7 +40,7 @@ def _eid(suite, name):
 
 def _acts(suite, name):
     return pd.read_parquet(
-        ROOT / f"output_v13/{suite}/{_eid(suite, name)}/raw/agent_actions.parquet"
+        ROOT / f"output/v13/{suite}/{_eid(suite, name)}/raw/agent_actions.parquet"
     ).sort_values("tick_idx")
 
 
@@ -184,7 +184,7 @@ def fig5_shock():
     def stat(name):
         eid = _eid("b6", name)
         f = pd.read_parquet(
-            ROOT / f"output_v13/b6/{eid}/raw/agent_fills.parquet")
+            ROOT / f"output/v13/b6/{eid}/raw/agent_fills.parquet")
         g = build_network(f, exclude_env_maker=True)
         w = np.array([d["weight"] for *_, d in g.edges(data=True)], float)
         p = w / w.sum() if w.sum() else w
@@ -226,7 +226,7 @@ def fig5_shock():
 # ----------------------------------------------------------------------
 
 def fig6_external():
-    m = pd.read_csv(ROOT / "output_v13/b1_metrics.csv")
+    m = pd.read_csv(ROOT / "output/v13/b1_metrics.csv")
     fig, ax = plt.subplots(figsize=fig_size(COL_SINGLE_MM + 10, 60))
     for i, r in m.iterrows():
         c = GREEN_DEEP if bool(r["toward"]) else RED
@@ -257,10 +257,10 @@ def fig6_external():
 def fig7_fix():
     def drifts(suite):
         out = []
-        idx = json.loads((ROOT / f"output_v13/{suite}/index.json").read_text())
+        idx = json.loads((ROOT / f"output/v13/{suite}/index.json").read_text())
         for r in idx["runs"]:
             a = pd.read_parquet(
-                ROOT / f"output_v13/{suite}/{r['exp_id']}/raw/agent_actions.parquet"
+                ROOT / f"output/v13/{suite}/{r['exp_id']}/raw/agent_actions.parquet"
             ).sort_values("tick_idx")
             out.append(float(a["yes_mid_after"].iloc[-1])
                        - float(a["yes_mid_before"].iloc[0]))

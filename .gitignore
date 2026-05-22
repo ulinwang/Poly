@@ -18,9 +18,15 @@ wheels/
 /data/personas_*.json
 /data/runs/
 
-# v8 per-experiment artifacts (track the dir + .gitkeep, ignore subtrees)
-/output/*
-!/output/.gitkeep
+# Experiment result trees — not committed; regenerable by re-running
+# the experiment suites. Includes per-run parquet, llm_calls.jsonl,
+# per-run figures, summaries, comparison outputs and run logs.
+/output/
+/output_v13/
+/output_concurrent/
+/comparison/
+/comparison_final/
+/comparison_v101/
 
 # v7-era artifact directories (kept for backwards compat)
 /figures/
@@ -30,12 +36,6 @@ wheels/
 
 # v13 clustering feature intermediates — large, regenerable from ClickHouse
 data/clustering/wallet_features_*.parquet
-
-# v13 raw sim artifacts (parquet + llm jsonl) — too large; analysis kept separately
-output_v13/**/raw/
-output_v13/**/*.parquet
-output_v13/**/llm_calls.jsonl
-output_v13/suite_run.log
 
 # Large publication TIFFs — regenerable from scripts/thesis_*.py
 docs/v13/figures/*.tiff

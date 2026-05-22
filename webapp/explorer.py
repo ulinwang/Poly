@@ -1,6 +1,6 @@
 """Read-only experiment browser API.
 
-Serves the completed simulation artifacts under output_v13/<suite>/ and
+Serves the completed simulation artifacts under output/v13/<suite>/ and
 output/ so the frontend can:
   - list experiments (left sidebar)
   - show one experiment's parameters + metadata
@@ -23,7 +23,8 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 ROOT = Path(__file__).resolve().parent.parent
-SEARCH_DIRS = [ROOT / "output_v13", ROOT / "output"]
+SEARCH_DIRS = [ROOT / "output" / "v13", ROOT / "output" / "v12",
+               ROOT / "output" / "v10", ROOT / "output" / "v9"]
 
 router = APIRouter(prefix="/api/experiments", tags=["explorer"])
 

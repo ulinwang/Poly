@@ -90,6 +90,10 @@ class ShockConfig(BaseModel):
 class ExperimentBlock(BaseModel):
     """Optional v13 wrapper for experiment-level toggles."""
     shock: Optional[ShockConfig] = None
+    # Override the empirically derived simulation horizon (priors["n_ticks"]).
+    # Used by the tick-horizon experiment to hold every other parameter
+    # fixed while sweeping only the number of decision rounds.
+    n_ticks_override: Optional[int] = Field(default=None, ge=1)
 
 
 class ExperimentConfig(BaseModel):

@@ -23,7 +23,7 @@ llm:
 output:
   dual_write_clickhouse: false
   parquet_compression: zstd
-  output_dir: output_v13/b6
+  output_dir: output/v13/b6
 experiment:
   shock:
     tick: 12

@@ -301,6 +301,10 @@ def run_experiment(
         )
 
     n_ticks = priors["n_ticks"]
+    if config.experiment.n_ticks_override is not None:
+        log.info("  n_ticks override: %d -> %d (priors value ignored)",
+                 n_ticks, config.experiment.n_ticks_override)
+        n_ticks = config.experiment.n_ticks_override
     fee_bps = (config.environment.fees_override_bps
                if config.environment.fees_override_bps is not None
                else priors["taker_fee_bps"])
