@@ -1,0 +1,28 @@
+name: c4_profile_mix_natural_s0
+description: |
+  Profile-distribution experiment. Roman Roy resolved market, fixed
+  20 agents, seed 0. Holds population size and every other parameter
+  fixed while sweeping only the mix of market-user behaviour profiles.
+  Variant natural: 按事件前参与者池的真实占比抽样四类画像(对照组)。
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 0
+  belief_update_enabled: true
+  archetype_weights: [0.2773, 0.3517, 0.0969, 0.2741]
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v13/c4

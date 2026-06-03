@@ -1,0 +1,28 @@
+name: c5_ethereum_on_s0
+description: |
+  Thinking-mode experiment (ethereum base), thinking on, seed 0.
+market:
+  slug: will-ethereum-reach-5000-in-august-614-348-169-974-494
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 0
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: 0
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: 32
+  thinking: true
+experiment:
+  n_ticks_override: 20
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v14/c5_ethereum

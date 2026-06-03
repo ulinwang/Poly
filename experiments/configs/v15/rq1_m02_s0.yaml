@@ -1,0 +1,28 @@
+name: rq1_m02_s0
+description: |
+  v15 cross-market panel, market m02, seed 0.
+market:
+  slug: will-trump-deploy-national-guard-in-dc-by-monday
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 0
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: 0
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: 20
+  thinking: false
+experiment:
+  n_ticks_override: 20
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v15/rq1_panel

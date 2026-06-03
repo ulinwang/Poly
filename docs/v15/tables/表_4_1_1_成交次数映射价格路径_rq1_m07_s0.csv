@@ -1,0 +1,102 @@
+series,config,market_title,cum_trades,trade_progress,yes_price,truth,tick,ts,volume,slug,real_cum_trades
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,0.0,0.0,0.86,0.0,0.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,1.0,0.02127659574468085,0.86,0.0,0.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,1.0,0.02127659574468085,0.8300000000000001,0.0,1.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,7.0,0.14893617021276595,0.845,0.0,2.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,9.0,0.19148936170212766,0.845,0.0,3.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,11.0,0.23404255319148937,0.845,0.0,4.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,15.0,0.3191489361702128,0.8500000000000001,0.0,5.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,16.0,0.3404255319148936,0.85,0.0,6.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,19.0,0.40425531914893614,0.835,0.0,7.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,21.0,0.44680851063829785,0.835,0.0,8.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,24.0,0.5106382978723404,0.835,0.0,9.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,25.0,0.5319148936170213,0.835,0.0,10.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,28.0,0.5957446808510638,0.835,0.0,11.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,29.0,0.6170212765957447,0.835,0.0,12.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,34.0,0.723404255319149,0.8150000000000001,0.0,13.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,34.0,0.723404255319149,0.8150000000000001,0.0,14.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,35.0,0.7446808510638298,0.805,0.0,15.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,43.0,0.9148936170212766,0.78,0.0,16.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,45.0,0.9574468085106383,0.76,0.0,17.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,47.0,1.0,0.76,0.0,18.0,,,,
+模拟市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,47.0,1.0,0.76,0.0,19.0,,,,
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,0.0,0.0,0.7110055458872129,0.0,,2025-08-26 17:17:23+00:00,108.050133,will-microstrategy-purchase-bitcoin-august-26-september-1,6.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,0.5949367088607594,0.012658227848101266,0.788,0.0,,2025-08-26 22:56:33+00:00,539.95,will-microstrategy-purchase-bitcoin-august-26-september-1,11.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,1.1898734177215189,0.02531645569620253,0.7554892264217591,0.0,,2025-08-27 06:00:37+00:00,8898.8022,will-microstrategy-purchase-bitcoin-august-26-september-1,17.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,1.7848101265822784,0.0379746835443038,0.7520000315680163,0.0,,2025-08-27 11:15:37+00:00,481.711473,will-microstrategy-purchase-bitcoin-august-26-september-1,22.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,2.3797468354430378,0.05063291139240506,0.6933333333333334,0.0,,2025-08-27 15:45:09+00:00,74.68299999999999,will-microstrategy-purchase-bitcoin-august-26-september-1,28.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,2.9746835443037978,0.06329113924050633,0.6879999985999998,0.0,,2025-08-27 20:11:39+00:00,106.183998,will-microstrategy-purchase-bitcoin-august-26-september-1,33.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,3.569620253164557,0.0759493670886076,0.711125997067623,0.0,,2025-08-28 01:42:39+00:00,592.07547,will-microstrategy-purchase-bitcoin-august-26-september-1,39.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,4.1645569620253164,0.08860759493670886,0.7163229578007253,0.0,,2025-08-28 10:24:05+00:00,917.964016,will-microstrategy-purchase-bitcoin-august-26-september-1,44.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,4.7594936708860756,0.10126582278481013,0.6851202102554721,0.0,,2025-08-28 15:52:53+00:00,173.96629699999997,will-microstrategy-purchase-bitcoin-august-26-september-1,50.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,5.3544303797468356,0.11392405063291139,0.6464626380743155,0.0,,2025-08-28 16:53:13+00:00,898.134858,will-microstrategy-purchase-bitcoin-august-26-september-1,55.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,5.9493670886075956,0.12658227848101267,0.5352084712659633,0.0,,2025-08-28 18:25:03+00:00,3368.2237990000003,will-microstrategy-purchase-bitcoin-august-26-september-1,61.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,6.544303797468354,0.13924050632911392,0.4634243279633493,0.0,,2025-08-28 20:33:41+00:00,70.520771,will-microstrategy-purchase-bitcoin-august-26-september-1,66.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,7.139240506329114,0.1518987341772152,0.36172090778919275,0.0,,2025-08-28 21:26:35+00:00,295.748703,will-microstrategy-purchase-bitcoin-august-26-september-1,72.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,7.734177215189873,0.16455696202531644,0.36395839553689313,0.0,,2025-08-29 05:07:41+00:00,272.08209999999997,will-microstrategy-purchase-bitcoin-august-26-september-1,77.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,8.329113924050633,0.17721518987341772,0.4188600477736326,0.0,,2025-08-29 11:37:23+00:00,486.557006,will-microstrategy-purchase-bitcoin-august-26-september-1,83.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,8.924050632911394,0.189873417721519,0.43465790962760853,0.0,,2025-08-29 17:03:09+00:00,48.192774,will-microstrategy-purchase-bitcoin-august-26-september-1,88.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,9.518987341772151,0.20253164556962025,0.4059285698091366,0.0,,2025-08-29 20:42:37+00:00,417.35254000000003,will-microstrategy-purchase-bitcoin-august-26-september-1,94.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,10.113924050632912,0.21518987341772153,0.40150846173961235,0.0,,2025-08-30 06:35:31+00:00,329.42225399999995,will-microstrategy-purchase-bitcoin-august-26-september-1,99.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,10.708860759493671,0.22784810126582278,0.33488315137064967,0.0,,2025-08-30 15:01:53+00:00,381.56960100000003,will-microstrategy-purchase-bitcoin-august-26-september-1,105.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,11.30379746835443,0.24050632911392406,0.36289076043732554,0.0,,2025-08-31 04:31:12+00:00,261.502798,will-microstrategy-purchase-bitcoin-august-26-september-1,110.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,11.898734177215191,0.25316455696202533,0.375869251785555,0.0,,2025-08-31 09:26:36+00:00,498.719899,will-microstrategy-purchase-bitcoin-august-26-september-1,116.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,12.493670886075948,0.26582278481012656,0.2852864752101757,0.0,,2025-08-31 10:51:22+00:00,595.2162430000001,will-microstrategy-purchase-bitcoin-august-26-september-1,121.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,13.088607594936708,0.27848101265822783,0.213363063087461,0.0,,2025-08-31 11:42:40+00:00,4212.650199999999,will-microstrategy-purchase-bitcoin-august-26-september-1,127.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,13.683544303797468,0.2911392405063291,0.2969497311271826,0.0,,2025-08-31 11:53:20+00:00,191.888799,will-microstrategy-purchase-bitcoin-august-26-september-1,132.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,14.278481012658228,0.3037974683544304,0.35776655431868587,0.0,,2025-08-31 12:43:30+00:00,78.81897599999999,will-microstrategy-purchase-bitcoin-august-26-september-1,138.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,14.873417721518988,0.31645569620253167,0.33857490496716786,0.0,,2025-08-31 14:40:28+00:00,779.8751990000001,will-microstrategy-purchase-bitcoin-august-26-september-1,143.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,15.468354430379746,0.3291139240506329,0.30169193867819916,0.0,,2025-08-31 15:04:20+00:00,265.0365,will-microstrategy-purchase-bitcoin-august-26-september-1,149.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,16.063291139240505,0.34177215189873417,0.283995911813055,0.0,,2025-08-31 15:42:26+00:00,178.239999,will-microstrategy-purchase-bitcoin-august-26-september-1,154.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,16.658227848101266,0.35443037974683544,0.3296982949912785,0.0,,2025-08-31 17:52:26+00:00,340.733595,will-microstrategy-purchase-bitcoin-august-26-september-1,160.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,17.253164556962027,0.3670886075949367,0.2460000256000036,0.0,,2025-08-31 18:35:44+00:00,36.97170200000001,will-microstrategy-purchase-bitcoin-august-26-september-1,165.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,17.848101265822788,0.379746835443038,0.21406317750691692,0.0,,2025-08-31 18:44:16+00:00,226.952094,will-microstrategy-purchase-bitcoin-august-26-september-1,171.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,18.443037974683545,0.3924050632911392,0.17034594791349197,0.0,,2025-08-31 18:47:30+00:00,344.277644,will-microstrategy-purchase-bitcoin-august-26-september-1,176.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,19.037974683544302,0.4050632911392405,0.13607277287107913,0.0,,2025-08-31 19:18:46+00:00,16.817751,will-microstrategy-purchase-bitcoin-august-26-september-1,182.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,19.632911392405063,0.4177215189873418,0.13468525075124962,0.0,,2025-08-31 19:48:46+00:00,138.898575,will-microstrategy-purchase-bitcoin-august-26-september-1,187.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,20.227848101265824,0.43037974683544306,0.13295050292063768,0.0,,2025-08-31 19:53:04+00:00,614.2686000000001,will-microstrategy-purchase-bitcoin-august-26-september-1,193.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,20.82278481012658,0.4430379746835443,0.1250506369619832,0.0,,2025-08-31 20:05:32+00:00,80.267144,will-microstrategy-purchase-bitcoin-august-26-september-1,198.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,21.417721518987342,0.45569620253164556,0.14754493446077746,0.0,,2025-08-31 20:16:00+00:00,150.37727799999993,will-microstrategy-purchase-bitcoin-august-26-september-1,204.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,22.0126582278481,0.46835443037974683,0.13422511659506092,0.0,,2025-08-31 20:55:24+00:00,52.897902,will-microstrategy-purchase-bitcoin-august-26-september-1,209.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,22.60759493670886,0.4810126582278481,0.10632616980989736,0.0,,2025-08-31 21:53:34+00:00,808.0685309999997,will-microstrategy-purchase-bitcoin-august-26-september-1,215.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,23.20253164556962,0.4936708860759494,0.08486019606258582,0.0,,2025-08-31 22:36:00+00:00,526.1550879999999,will-microstrategy-purchase-bitcoin-august-26-september-1,220.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,23.797468354430382,0.5063291139240507,0.08078026437396464,0.0,,2025-08-31 23:09:26+00:00,44.079685,will-microstrategy-purchase-bitcoin-august-26-september-1,225.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,24.39240506329114,0.5189873417721519,0.06495243170101644,0.0,,2025-09-01 01:18:06+00:00,114.86205799999999,will-microstrategy-purchase-bitcoin-august-26-september-1,231.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,24.987341772151897,0.5316455696202531,0.06000000000000002,0.0,,2025-09-01 02:03:50+00:00,18.792800000000007,will-microstrategy-purchase-bitcoin-august-26-september-1,236.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,25.582278481012658,0.5443037974683544,0.04666666666666668,0.0,,2025-09-01 03:01:38+00:00,804.4096660000004,will-microstrategy-purchase-bitcoin-august-26-september-1,242.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,26.177215189873415,0.5569620253164557,0.06498061716240032,0.0,,2025-09-01 04:58:28+00:00,9.995573000000004,will-microstrategy-purchase-bitcoin-august-26-september-1,247.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,26.77215189873418,0.569620253164557,0.17220225989856272,0.0,,2025-09-01 06:49:56+00:00,1742.948766,will-microstrategy-purchase-bitcoin-august-26-september-1,253.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,27.367088607594937,0.5822784810126582,0.23399999999999999,0.0,,2025-09-01 07:38:26+00:00,108.23899999999999,will-microstrategy-purchase-bitcoin-august-26-september-1,258.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,27.962025316455694,0.5949367088607594,0.09398701059069887,0.0,,2025-09-01 08:20:00+00:00,1377.4889210000003,will-microstrategy-purchase-bitcoin-august-26-september-1,264.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,28.556962025316455,0.6075949367088608,0.06638323300493415,0.0,,2025-09-01 08:36:20+00:00,221.25299900000016,will-microstrategy-purchase-bitcoin-august-26-september-1,269.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,29.151898734177212,0.620253164556962,0.0683333818552041,0.0,,2025-09-01 09:16:16+00:00,131.90259,will-microstrategy-purchase-bitcoin-august-26-september-1,275.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,29.746835443037977,0.6329113924050633,0.08996816394226348,0.0,,2025-09-01 09:35:40+00:00,154.029148,will-microstrategy-purchase-bitcoin-august-26-september-1,280.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,30.341772151898734,0.6455696202531646,0.10000000000000002,0.0,,2025-09-01 09:48:40+00:00,158.22000000000003,will-microstrategy-purchase-bitcoin-august-26-september-1,286.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,30.93670886075949,0.6582278481012658,0.09599999908896167,0.0,,2025-09-01 09:53:58+00:00,187.739998,will-microstrategy-purchase-bitcoin-august-26-september-1,291.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,31.531645569620252,0.6708860759493671,0.13582873695752326,0.0,,2025-09-01 10:10:54+00:00,118.31999800000001,will-microstrategy-purchase-bitcoin-august-26-september-1,297.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,32.12658227848101,0.6835443037974683,0.07079939342512978,0.0,,2025-09-01 11:08:42+00:00,280.68612500000006,will-microstrategy-purchase-bitcoin-august-26-september-1,302.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,32.721518987341774,0.6962025316455697,0.10963734152903591,0.0,,2025-09-01 11:50:22+00:00,884.606505,will-microstrategy-purchase-bitcoin-august-26-september-1,308.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,33.31645569620253,0.7088607594936709,0.08635377062826138,0.0,,2025-09-01 12:01:34+00:00,213.567297,will-microstrategy-purchase-bitcoin-august-26-september-1,313.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,33.91139240506329,0.7215189873417721,0.04631098040607016,0.0,,2025-09-01 12:04:08+00:00,85.096,will-microstrategy-purchase-bitcoin-august-26-september-1,319.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,34.50632911392405,0.7341772151898734,0.05451663189455569,0.0,,2025-09-01 12:08:58+00:00,150.684,will-microstrategy-purchase-bitcoin-august-26-september-1,324.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,35.10126582278481,0.7468354430379747,0.05597780385254717,0.0,,2025-09-01 12:14:36+00:00,1299.9854999999995,will-microstrategy-purchase-bitcoin-august-26-september-1,330.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,35.696202531645575,0.759493670886076,0.05000000000000001,0.0,,2025-09-01 12:16:50+00:00,40.789500000000004,will-microstrategy-purchase-bitcoin-august-26-september-1,335.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,36.29113924050633,0.7721518987341772,0.06114841529908719,0.0,,2025-09-01 12:37:10+00:00,246.52990000000014,will-microstrategy-purchase-bitcoin-august-26-september-1,341.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,36.88607594936709,0.7848101265822784,0.049999999999999975,0.0,,2025-09-01 12:46:00+00:00,306.1957999999998,will-microstrategy-purchase-bitcoin-august-26-september-1,346.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,37.48101265822785,0.7974683544303798,0.05833333379191342,0.0,,2025-09-01 13:14:46+00:00,69.65763400000003,will-microstrategy-purchase-bitcoin-august-26-september-1,352.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,38.075949367088604,0.810126582278481,0.03597265245605478,0.0,,2025-09-01 13:27:50+00:00,545.4705999999996,will-microstrategy-purchase-bitcoin-august-26-september-1,357.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,38.67088607594937,0.8227848101265823,0.04312958419645324,0.0,,2025-09-01 13:49:08+00:00,109.782319,will-microstrategy-purchase-bitcoin-august-26-september-1,363.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,39.265822784810126,0.8354430379746836,0.045325725900351124,0.0,,2025-09-01 14:25:16+00:00,784.91753,will-microstrategy-purchase-bitcoin-august-26-september-1,368.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,39.860759493670884,0.8481012658227848,0.038519664724582174,0.0,,2025-09-01 15:01:10+00:00,527.4063229999999,will-microstrategy-purchase-bitcoin-august-26-september-1,374.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,40.45569620253165,0.8607594936708861,0.033655774557796655,0.0,,2025-09-01 15:32:56+00:00,54.227840999999984,will-microstrategy-purchase-bitcoin-august-26-september-1,379.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,41.050632911392405,0.8734177215189873,0.029622050339806527,0.0,,2025-09-01 16:06:52+00:00,40.627025,will-microstrategy-purchase-bitcoin-august-26-september-1,385.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,41.64556962025316,0.8860759493670886,0.02155082910248668,0.0,,2025-09-01 16:54:02+00:00,119.68986300000003,will-microstrategy-purchase-bitcoin-august-26-september-1,390.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,42.24050632911393,0.8987341772151899,0.011318546860844247,0.0,,2025-09-01 17:28:02+00:00,16.403874999999964,will-microstrategy-purchase-bitcoin-august-26-september-1,396.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,42.835443037974684,0.9113924050632911,0.0029661209376733626,0.0,,2025-09-01 17:32:58+00:00,5.319050000000001,will-microstrategy-purchase-bitcoin-august-26-september-1,401.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,43.43037974683544,0.9240506329113924,0.010320121146087652,0.0,,2025-09-01 18:43:26+00:00,60.14569100000007,will-microstrategy-purchase-bitcoin-august-26-september-1,407.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,44.0253164556962,0.9367088607594937,0.014000000000000012,0.0,,2025-09-01 19:17:40+00:00,0.08579300000000008,will-microstrategy-purchase-bitcoin-august-26-september-1,412.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,44.62025316455696,0.9493670886075949,0.010612428706062072,0.0,,2025-09-01 19:56:34+00:00,334.1444690000004,will-microstrategy-purchase-bitcoin-august-26-september-1,418.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,45.21518987341772,0.9620253164556962,0.016683495461791084,0.0,,2025-09-01 20:21:31+00:00,3.688229999999999,will-microstrategy-purchase-bitcoin-august-26-september-1,423.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,45.81012658227848,0.9746835443037974,0.02020339345877561,0.0,,2025-09-01 21:12:35+00:00,111.657873,will-microstrategy-purchase-bitcoin-august-26-september-1,429.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,46.40506329113924,0.9873417721518988,0.020091643238144496,0.0,,2025-09-01 22:21:23+00:00,68.28086,will-microstrategy-purchase-bitcoin-august-26-september-1,434.0
+真实市场价格,rq1_m07_s0,MicroStrategy继续购买比特币,47.0,1.0,0.011323234588793646,0.0,,2025-09-01 23:35:47+00:00,89.6364539999996,will-microstrategy-purchase-bitcoin-august-26-september-1,440.0

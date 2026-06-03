@@ -1,0 +1,102 @@
+series,config,market_title,cum_trades,trade_progress,yes_price,truth,tick,ts,volume,slug
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,0.0,0.0,0.7,0.0,0.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,6.0,0.08571428571428572,0.7,0.0,0.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,7.0,0.1,0.7,0.0,1.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,7.0,0.1,0.7,0.0,2.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,10.0,0.14285714285714285,0.7000000000000001,0.0,3.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,14.0,0.2,0.7000000000000001,0.0,4.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,14.0,0.2,0.7000000000000001,0.0,5.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,15.0,0.21428571428571427,0.72,0.0,6.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,18.0,0.2571428571428571,0.75,0.0,7.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,24.0,0.34285714285714286,0.765,0.0,8.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,28.0,0.4,0.765,0.0,9.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,34.0,0.4857142857142857,0.8,0.0,10.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,41.0,0.5857142857142857,0.8,0.0,11.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,46.0,0.6571428571428571,0.8,0.0,12.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,49.0,0.7,0.675,0.0,13.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,51.0,0.7285714285714285,0.65,0.0,14.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,54.0,0.7714285714285715,0.6900000000000001,0.0,15.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,57.0,0.8142857142857143,0.685,0.0,16.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,62.0,0.8857142857142857,0.66,0.0,17.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,64.0,0.9142857142857143,0.65,0.0,18.0,,,
+模拟市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,70.0,1.0,0.635,0.0,19.0,,,
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,0.0,0.0,0.4226710167586065,0.0,,2025-09-10 04:27:24+00:00,26.749998999999995,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,0.8860759493670886,0.012658227848101266,0.64,0.0,,2025-09-10 07:10:51+00:00,3.2,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,1.7721518987341771,0.02531645569620253,0.303190646806809,0.0,,2025-09-11 12:40:07+00:00,105.671428,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,2.6582278481012658,0.0379746835443038,0.290000001988,0.0,,2025-09-11 12:40:11+00:00,40.84507,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,3.5443037974683542,0.05063291139240506,0.305,0.0,,2025-09-11 12:49:01+00:00,9.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,4.4303797468354436,0.06329113924050633,0.3,0.0,,2025-09-11 14:56:17+00:00,15.299999999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,5.3164556962025316,0.0759493670886076,0.3,0.0,,2025-09-11 14:58:23+00:00,12.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,6.2025316455696204,0.08860759493670886,0.3,0.0,,2025-09-11 15:05:53+00:00,32.699999999999996,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,7.0886075949367084,0.10126582278481013,0.3,0.0,,2025-09-11 16:46:01+00:00,19.5,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,7.974683544303797,0.11392405063291139,0.3,0.0,,2025-09-11 17:54:53+00:00,31.5,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,8.860759493670887,0.12658227848101267,0.3,0.0,,2025-09-11 18:03:09+00:00,27.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,9.746835443037973,0.13924050632911392,0.3,0.0,,2025-09-11 18:28:21+00:00,20.4,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,10.632911392405063,0.1518987341772152,0.30945255474452554,0.0,,2025-09-11 18:30:49+00:00,48.52,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,11.518987341772151,0.16455696202531644,0.316,0.0,,2025-09-11 18:31:41+00:00,6.32,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,12.405063291139241,0.17721518987341772,0.32,0.0,,2025-09-11 19:16:13+00:00,48.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,13.29113924050633,0.189873417721519,0.33,0.0,,2025-09-11 20:56:45+00:00,33.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,14.177215189873417,0.20253164556962025,0.335,0.0,,2025-09-11 20:58:51+00:00,26.770000000000003,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,15.063291139240507,0.21518987341772153,0.339999829999915,0.0,,2025-09-12 06:25:33+00:00,0.999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,15.949367088607595,0.22784810126582278,0.31000000000000005,0.0,,2025-09-12 11:15:19+00:00,12.090000000000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,16.835443037974684,0.24050632911392406,0.29600000000000004,0.0,,2025-09-12 11:16:45+00:00,35.92000000000001,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,17.721518987341774,0.25316455696202533,0.29000000000000004,0.0,,2025-09-12 11:18:03+00:00,14.500000000000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,18.60759493670886,0.26582278481012656,0.275,0.0,,2025-09-12 11:23:17+00:00,48.784600000000005,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,19.493670886075947,0.27848101265822783,0.24,0.0,,2025-09-12 11:26:13+00:00,2.2416,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,20.379746835443036,0.2911392405063291,0.24397377309755608,0.0,,2025-09-12 11:26:13+00:00,24.558399999999995,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,21.265822784810126,0.3037974683544304,0.22499999999999998,0.0,,2025-09-12 11:28:05+00:00,118.47839999999998,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,22.151898734177216,0.31645569620253167,0.14,0.0,,2025-09-12 11:29:21+00:00,14.000000000000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,23.037974683544302,0.3291139240506329,0.185,0.0,,2025-09-12 11:49:47+00:00,7.4,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,23.924050632911392,0.34177215189873417,0.06999999999999995,0.0,,2025-09-12 11:51:49+00:00,1.408399999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,24.810126582278482,0.35443037974683544,0.22,0.0,,2025-09-13 09:13:13+00:00,9.165199999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,25.69620253164557,0.3670886075949367,0.2393103405915576,0.0,,2025-09-13 13:13:47+00:00,23.299999000000003,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,26.58227848101266,0.379746835443038,0.22,0.0,,2025-09-13 13:26:17+00:00,0.88,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,27.468354430379744,0.3924050632911392,0.27,0.0,,2025-09-14 13:43:42+00:00,5.263332999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,28.354430379746834,0.4050632911392405,0.24065069650433668,0.0,,2025-09-14 20:53:40+00:00,128.18499999999997,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,29.240506329113924,0.4177215189873418,0.2249999137499784,0.0,,2025-09-16 13:30:20+00:00,1.954799,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,30.126582278481013,0.43037974683544306,0.18217391304347827,0.0,,2025-09-17 11:55:40+00:00,4.19,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,31.0126582278481,0.4430379746835443,0.19,0.0,,2025-09-17 11:56:12+00:00,0.95,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,31.89873417721519,0.45569620253164556,0.21464914331807405,0.0,,2025-09-17 16:35:10+00:00,71.27201199999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,32.78481012658228,0.46835443037974683,0.24905359633393107,0.0,,2025-09-17 23:46:58+00:00,50.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,33.67088607594937,0.4810126582278481,0.1299999430499812,0.0,,2025-09-19 12:09:26+00:00,2.7999989999999997,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,34.55696202531646,0.4936708860759494,0.07000002601409439,0.0,,2025-09-20 07:21:50+00:00,0.10763399999999992,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,35.44303797468355,0.5063291139240507,0.07000004227310963,0.0,,2025-09-20 10:35:40+00:00,0.09935399999999996,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,36.32911392405063,0.5189873417721519,0.1,0.0,,2025-09-21 15:05:12+00:00,17.02,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,37.21518987341772,0.5316455696202531,0.1299999627333316,0.0,,2025-09-21 22:32:42+00:00,2.999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,38.10126582278481,0.5443037974683544,0.0812703534825945,0.0,,2025-09-23 12:07:00+00:00,23.91432899999998,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,38.98734177215189,0.5569620253164557,0.1,0.0,,2025-09-23 12:07:32+00:00,1.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,39.87341772151899,0.569620253164557,0.08999999999999997,0.0,,2025-09-23 19:04:57+00:00,0.2294999999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,40.75949367088607,0.5822784810126582,0.065,0.0,,2025-09-24 10:07:31+00:00,3.9625000000000004,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,41.64556962025316,0.5949367088607594,0.03,0.0,,2025-09-24 20:28:03+00:00,0.6920999999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,42.53164556962025,0.6075949367088608,0.044999968149997134,0.0,,2025-09-25 07:13:02+00:00,1.248999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,43.41772151898734,0.620253164556962,0.020000000000000018,0.0,,2025-09-25 14:03:17+00:00,0.1020400000000001,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,44.30379746835443,0.6329113924050633,0.07179957712453666,0.0,,2025-09-27 20:28:01+00:00,35.35919900000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,45.18987341772152,0.6455696202531646,0.1,0.0,,2025-09-27 23:12:05+00:00,9.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,46.075949367088604,0.6582278481012658,0.07,0.0,,2025-09-28 01:56:09+00:00,6.300000000000001,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,46.962025316455694,0.6708860759493671,0.06999999999999998,0.0,,2025-09-28 20:43:35+00:00,18.62699999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,47.848101265822784,0.6835443037974683,0.04856548856548859,0.0,,2025-09-29 22:55:27+00:00,23.360000000000014,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,48.734177215189874,0.6962025316455697,0.040000000000000036,0.0,,2025-09-29 23:26:25+00:00,8.000000000000007,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,49.620253164556964,0.7088607594936709,0.04,0.0,,2025-09-30 01:12:43+00:00,4.04,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,50.506329113924046,0.7215189873417721,0.018,0.0,,2025-10-01 02:34:01+00:00,4.5,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,51.39240506329114,0.7341772151898734,0.021976829227545798,0.0,,2025-10-01 21:19:05+00:00,25.734790000000004,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,52.278481012658226,0.7468354430379747,0.010978583771819117,0.0,,2025-10-01 21:22:23+00:00,5.6543,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,53.16455696202532,0.759493670886076,0.015000042377060976,0.0,,2025-10-04 06:53:45+00:00,1.0554549999999998,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,54.050632911392405,0.7721518987341772,0.02420717101299042,0.0,,2025-10-08 09:19:38+00:00,9.999998999999999,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,54.93670886075949,0.7848101265822784,0.010352514956791459,0.0,,2025-10-10 20:38:04+00:00,9.344179999999971,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,55.822784810126585,0.7974683544303798,0.011228128419134628,0.0,,2025-10-11 01:45:50+00:00,5.297809,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,56.70886075949367,0.810126582278481,0.0140000000056,0.0,,2025-10-11 02:05:44+00:00,5.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,57.594936708860764,0.8227848101265823,0.011673502360262798,0.0,,2025-10-11 18:29:40+00:00,2.0999890000000003,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,58.48101265822785,0.8354430379746836,0.02683896624546953,0.0,,2025-10-11 21:28:21+00:00,5.0,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,59.36708860759494,0.8481012658227848,0.009615355027309813,0.0,,2025-10-12 07:22:35+00:00,1.7906000000000046,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,60.25316455696203,0.8607594936708861,0.02200000000000002,0.0,,2025-10-12 07:45:51+00:00,0.03366000000000003,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,61.139240506329116,0.8734177215189873,0.024809378962810286,0.0,,2025-10-13 02:42:35+00:00,3.94,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,62.0253164556962,0.8860759493670886,0.021007310578552423,0.0,,2025-10-13 11:32:37+00:00,3.4186199999999998,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,62.91139240506329,0.8987341772151899,0.008,0.0,,2025-10-13 14:18:17+00:00,1.27048,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,63.79746835443038,0.9113924050632911,0.020734360073160575,0.0,,2025-10-13 17:06:55+00:00,4.99,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,64.68354430379748,0.9240506329113924,0.009000000000000008,0.0,,2025-10-13 17:55:57+00:00,0.04500000000000004,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,65.56962025316456,0.9367088607594937,0.009000000000000008,0.0,,2025-10-13 19:14:35+00:00,0.9735300000000009,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,66.45569620253164,0.9493670886075949,0.01595617535554992,0.0,,2025-10-13 21:32:07+00:00,7.150000000000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,67.34177215189874,0.9620253164556962,0.009,0.0,,2025-10-13 22:50:25+00:00,0.05436,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,68.22784810126582,0.9746835443037974,0.0010900270638430354,0.0,,2025-10-13 23:24:13+00:00,25.325530000001102,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,69.11392405063292,0.9873417721518988,0.0010000000000000009,0.0,,2025-10-13 23:24:21+00:00,0.02400000000000002,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster
+真实市场价格,rq5_spacex_s0,SpaceX星舰第11次试飞助推器回收,70.0,1.0,0.0010000000000000005,0.0,,2025-10-14 00:13:17+00:00,2.196760000000001,will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster

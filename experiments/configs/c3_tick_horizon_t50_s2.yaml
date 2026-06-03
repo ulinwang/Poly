@@ -1,0 +1,28 @@
+name: c3_tick_horizon_t50_s2
+description: |
+  Tick-horizon experiment. Roman Roy resolved market, fixed 20 agents,
+  50 decision rounds, seed 2. Holds population size and every other
+  parameter fixed while sweeping only the number of decision rounds.
+market:
+  slug: will-roman-roy-be-ceo-at-the-end-of-succession-s4
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 2
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: null
+experiment:
+  n_ticks_override: 50
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v13/c3

@@ -1,0 +1,28 @@
+name: c3_robotaxi_t100_s0
+description: |
+  v15 tick-horizon experiment (robotaxi), 100 rounds, seed 0.
+market:
+  slug: will-tesla-launch-a-driverless-robotaxi-service-by-october-31
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 0
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: 0
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: 20
+  thinking: false
+experiment:
+  n_ticks_override: 100
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v15/c3_robotaxi

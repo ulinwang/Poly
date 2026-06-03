@@ -1,0 +1,68 @@
+{%- if signal_block -%}
+{{ signal_block }}
+
+{% endif -%}
+当前订单簿：
+  YES book — bid {{ yes_bid }}, ask {{ yes_ask }}, mid {{ "%.3f"|format(yes_mid) }}
+  NO book  — bid {{ no_bid }}, ask {{ no_ask }}, mid {{ "%.3f"|format(no_mid) }}
+  YES mid 最近 3 个 tick：{{ hist_str }}
+  YES bid 深度：{{ yes_bid_depth }}
+  YES ask 深度：{{ yes_ask_depth }}
+  NO bid 深度：{{ no_bid_depth }}
+  NO ask 深度：{{ no_ask_depth }}
+  订单失衡（bid depth 减 ask depth 后归一化）：YES {{ yes_order_imbalance }}，NO {{ no_order_imbalance }}
+  剩余时间：市场生命周期的 {{ "%.0f"|format(time_remaining_pct * 100) }}%
+{%- if recent_fills %}
+
+近期公开成交：
+{%- for f in recent_fills %}
+  {{ f }}
+{%- endfor %}
+{%- endif %}
+
+你的组合：
+  现金：${{ "%.2f"|format(cash) }}
+  YES 份额：{{ "%.2f"|format(yes_shares) }}
+  NO 份额：{{ "%.2f"|format(no_shares) }}
+  当前未成交挂单数：{{ n_resting_orders }}
+{%- if resting_orders %}
+
+你的未成交挂单：
+{%- for o in resting_orders %}
+  {{ o }}
+{%- endfor %}
+{%- endif %}
+{%- if recent_own_fills %}
+
+你近期自己的成交：
+{%- for f in recent_own_fills %}
+  {{ f }}
+{%- endfor %}
+{%- endif %}
+{%- if belief_snapshot %}
+
+你当前已陈述的信念（tick {{ belief_snapshot.set_at_tick }} 设置，距今 {{ ticks_ago }} ticks）：
+  P(YES) = {{ belief_snapshot.yes_prob | round(3) }}
+  Confidence = {{ belief_snapshot.confidence | round(2) }}
+  Rationale: "{{ belief_snapshot.rationale }}"
+
+本 tick 你会先更新这个信念，然后再决定是否交易。
+{%- else %}
+
+你尚未在这个市场中陈述信念。本 tick 请先陈述信念，再决定是否交易。
+{%- endif %}
+{%- if recent_decisions %}
+
+你最近一次陈述的观点（上一 tick）："{{ recent_decisions[-1].reasoning }}"
+
+你的近期动作（越靠后越新；引擎已经执行完毕）：
+{%- for d in recent_decisions %}
+  tick {{ d.tick }}: {{ d.action }} {{ d.outcome }}/{{ d.side }}{% if d.price > 0 %} @{{ "%.2f"|format(d.price) }}{% endif %}{% if d.size_usd > 0 %} ${{ "%.0f"|format(d.size_usd) }}{% endif %} → {{ d.fills }} 笔成交，yes_mid {{ "%.3f"|format(d.yes_mid_after) }}
+{%- endfor %}
+
+行为提示：
+- 把“最近一次陈述的观点”当作先验；只有出现新信息时才修正它，例如价格变化、时间衰减、仓位变化、盘口深度变化、长期未成交等。
+- 不要为了“清空状态”重复撤销自己已经确认过的挂单；只有当你的观点或风险暴露发生实质变化时才撤单。
+{%- endif %}
+
+请使用当前决策阶段允许的工具。

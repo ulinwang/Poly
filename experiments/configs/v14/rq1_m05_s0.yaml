@@ -1,0 +1,27 @@
+name: rq1_m05_s0
+description: |
+  Cross-market panel, market m05, seed 0.
+market:
+  slug: will-bitcoin-reach-125k-in-july-846-114
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 0
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: 0
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: 32
+experiment:
+  n_ticks_override: 20
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v14/rq1_panel

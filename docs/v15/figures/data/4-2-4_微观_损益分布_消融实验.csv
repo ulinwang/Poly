@@ -1,0 +1,281 @@
+experiment,series,config,market,market_title,agent_id,wallet_percentile,final_pnl
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,13,0.0,0.0
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,1,5.2631578947368425,0.0
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,9,10.526315789473685,0.0
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,7,15.789473684210527,3.0198066269804257e-15
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,12,21.05263157894737,6.0396132539608514e-15
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,15,26.315789473684212,0.003773584905660599
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,4,31.578947368421055,8.5
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,17,36.8421052631579,10.08023292383323
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,0,42.10526315789474,11.666666666666668
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,10,47.36842105263158,12.75
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,19,52.631578947368425,23.12236987841541
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,2,57.89473684210527,29.142857142857142
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,3,63.15789473684211,38.88888888888889
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,5,68.42105263157896,56.111111111111114
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,11,73.6842105263158,56.58508158508158
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,6,78.94736842105263,60.0
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,8,84.21052631578948,82.8325
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,14,89.47368421052633,90.45154845154845
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,16,94.73684210526316,687.6551956815115
+ablation_c4,经验自然分布,c4_ethereum_natural_s0,ethereum,以太坊 5000 美元,18,100.0,2547.716282051282
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,5,0.0,0.0
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,12,5.2631578947368425,0.0012636517241371246
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,14,10.526315789473685,0.059523809523809756
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,18,15.789473684210527,3.018939393939394
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,15,21.05263157894737,5.5274822695035475
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,8,26.315789473684212,6.097560975609756
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,19,31.578947368421055,6.245341614906833
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,10,36.8421052631579,6.521739130434782
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,1,42.10526315789474,7.779075128618724
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,6,47.36842105263158,10.0
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,2,52.631578947368425,10.171638416909735
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,0,57.89473684210527,14.412966432474628
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,7,63.15789473684211,15.732240756147004
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,9,68.42105263157896,23.61550557391603
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,3,73.6842105263158,60.65407539210565
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,13,78.94736842105263,61.711407269214995
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,11,84.21052631578948,89.68742832047752
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,16,89.47368421052633,107.05502443286443
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,4,94.73684210526316,115.85302099334359
+ablation_c4,集中分布,c4_ethereum_concentrated_s0,ethereum,以太坊 5000 美元,17,100.0,182.05241666666663
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,16,0.0,0.0
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,5,5.2631578947368425,0.0
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,2,10.526315789473685,0.0
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,18,15.789473684210527,0.21566437480012726
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,10,21.05263157894737,4.583333333333334
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,15,26.315789473684212,5.300000000000001
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,17,31.578947368421055,9.322033898305087
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,0,36.8421052631579,9.322033898305087
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,7,42.10526315789474,11.062146892655369
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,14,47.36842105263158,18.33794871794872
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,4,52.631578947368425,20.85447354064375
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,13,57.89473684210527,23.07203389830509
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,12,63.15789473684211,30.132169714651685
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,8,68.42105263157896,38.44420289855073
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,11,73.6842105263158,65.18692037096258
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,9,78.94736842105263,78.46153846153847
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,19,84.21052631578948,100.0
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,6,89.47368421052633,104.6485
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,3,94.73684210526316,144.09750000000003
+ablation_c4,均匀分布,c4_ethereum_uniform_s0,ethereum,以太坊 5000 美元,1,100.0,5194.7075
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,6,0.0,0.0
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,13,5.2631578947368425,0.0
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,15,10.526315789473685,0.0
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,8,15.789473684210527,0.0
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,11,21.05263157894737,0.8880579924489785
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,7,26.315789473684212,8.796825396825398
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,10,31.578947368421055,11.72101212509161
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,4,36.8421052631579,14.537931034482758
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,5,42.10526315789474,21.924137931034483
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,1,47.36842105263158,33.10536677800117
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,3,52.631578947368425,46.10169491525424
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,14,57.89473684210527,49.73867526073556
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,9,63.15789473684211,50.60508166969148
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,16,68.42105263157896,53.5
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,18,73.6842105263158,58.62068965517242
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,2,78.94736842105263,60.535294117647055
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,19,84.21052631578948,97.46666666666665
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,17,89.47368421052633,120.60000000000001
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,0,94.73684210526316,125.6029411764706
+ablation_c4,经验自然分布,c4_robotaxi_natural_s0,robotaxi,特斯拉 Robotaxi,12,100.0,132.37894599
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,17,0.0,0.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,15,5.2631578947368425,0.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,6,10.526315789473685,0.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,0,15.789473684210527,0.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,13,21.05263157894737,3.5676348216597122
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,8,26.315789473684212,5.300000000000001
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,11,31.578947368421055,5.45994423
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,12,36.8421052631579,6.395293495505025
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,7,42.10526315789474,8.449710720363017
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,5,47.36842105263158,8.818707257293163
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,16,52.631578947368425,10.307692307692307
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,10,57.89473684210527,11.075136612021858
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,9,63.15789473684211,11.887526166102639
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,14,68.42105263157896,20.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,4,73.6842105263158,39.549180327868854
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,19,78.94736842105263,41.230769230769226
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,18,84.21052631578948,65.43850806451614
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,1,89.47368421052633,106.0
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,3,94.73684210526316,107.33047742971753
+ablation_c4,集中分布,c4_robotaxi_concentrated_s0,robotaxi,特斯拉 Robotaxi,2,100.0,122.11290322580645
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,11,0.0,0.0
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,6,5.2631578947368425,0.002045454545458014
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,3,10.526315789473685,3.650860344137659
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,18,15.789473684210527,5.0
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,8,21.05263157894737,6.866363636363637
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,9,26.315789473684212,11.11764705882353
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,12,31.578947368421055,13.507352941176471
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,13,36.8421052631579,13.749999999999979
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,14,42.10526315789474,14.505765279917822
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,7,47.36842105263158,17.75000000000001
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,10,52.631578947368425,25.785975407111998
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,5,57.89473684210527,26.13029878787879
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,1,63.15789473684211,28.75
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,4,68.42105263157896,29.999999999999996
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,17,73.6842105263158,44.85674678569265
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,0,78.94736842105263,71.87597402597403
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,2,84.21052631578948,77.62432370826915
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,19,89.47368421052633,81.04069626861839
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,16,94.73684210526316,105.5
+ablation_c4,均匀分布,c4_robotaxi_uniform_s0,robotaxi,特斯拉 Robotaxi,15,100.0,264.9112952745417
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,16,0.0,-2.374982074535693
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,13,5.2631578947368425,0.0
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,15,10.526315789473685,0.0
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,0,15.789473684210527,0.0023459895654150743
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,2,21.05263157894737,3.5000000000000004
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,7,26.315789473684212,5.250000000000001
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,1,31.578947368421055,10.163636363636364
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,10,36.8421052631579,11.8828125
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,4,42.10526315789474,15.675999999999998
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,5,47.36842105263158,25.161290322580648
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,11,52.631578947368425,27.329545454545446
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,6,57.89473684210527,30.46875
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,18,63.15789473684211,35.0
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,3,68.42105263157896,44.66666666666667
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,17,73.6842105263158,45.88205645161291
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,14,78.94736842105263,49.894
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,9,84.21052631578948,50.61875
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,8,89.47368421052633,168.92159030784035
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,19,94.73684210526316,188.734311440678
+ablation_c5,开启思考,c5_ethereum_on_s0,ethereum,以太坊 5000 美元,12,100.0,201.10072657741
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,9,0.0,0.0
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,4,5.2631578947368425,3.7919226638023678
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,15,10.526315789473685,6.071428571428571
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,10,15.789473684210527,10.938280126545871
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,19,21.05263157894737,11.103411202778995
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,1,26.315789473684212,11.899999999999999
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,17,31.578947368421055,14.186104479527657
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,14,36.8421052631579,15.41590909090909
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,2,42.10526315789474,15.866666666666667
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,0,47.36842105263158,22.09806537242138
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,6,52.631578947368425,25.21186440677966
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,7,57.89473684210527,26.440677966101696
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,5,63.15789473684211,31.192350676382784
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,11,68.42105263157896,36.42021276595745
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,3,73.6842105263158,46.678075136612016
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,13,78.94736842105263,60.50575435203097
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,12,84.21052631578948,81.16460038986355
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,16,89.47368421052633,117.20971729439265
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,8,94.73684210526316,149.9642857142857
+ablation_c5,关闭思考,c5_ethereum_off_s0,ethereum,以太坊 5000 美元,18,100.0,3172.019442406456
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,13,0.0,0.0
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,8,5.2631578947368425,0.0
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,10,10.526315789473685,4.625906862745097
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,7,15.789473684210527,5.252278216164514
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,9,21.05263157894737,6.507680084745758
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,19,26.315789473684212,9.375
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,5,31.578947368421055,10.058559322033897
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,18,36.8421052631579,11.794414733050829
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,4,42.10526315789474,14.2
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,12,47.36842105263158,21.1982762125035
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,3,52.631578947368425,22.265625
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,16,57.89473684210527,22.4
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,11,63.15789473684211,33.323687762042816
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,2,68.42105263157896,46.85175824175824
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,1,73.6842105263158,49.76218220338983
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,0,78.94736842105263,135.53876317135246
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,17,84.21052631578948,137.104025738327
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,6,89.47368421052633,156.3723746223917
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,15,94.73684210526316,309.375
+ablation_c5,开启思考,c5_robotaxi_on_s0,robotaxi,特斯拉 Robotaxi,14,100.0,560.515625
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,7,0.0,0.0
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,13,5.2631578947368425,5.861977570020827e-16
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,14,10.526315789473685,0.004662480376767917
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,5,15.789473684210527,0.00471248246844425
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,8,21.05263157894737,5.454545454545454
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,11,26.315789473684212,7.656793043478256
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,15,31.578947368421055,14.852070832393455
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,10,36.8421052631579,16.35364173913044
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,4,42.10526315789474,29.506928229665075
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,3,47.36842105263158,30.857142857142854
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,2,52.631578947368425,46.165317782733894
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,9,57.89473684210527,54.80725865880619
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,6,63.15789473684211,64.25157566156194
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,16,68.42105263157896,78.80825350036845
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,1,73.6842105263158,82.24736889
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,0,78.94736842105263,82.33090909090909
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,19,84.21052631578948,90.72
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,17,89.47368421052633,109.20612244897958
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,18,94.73684210526316,546.5793531646153
+ablation_c5,关闭思考,c5_robotaxi_off_s0,robotaxi,特斯拉 Robotaxi,12,100.0,1132.5562870309413
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,19,0.0,0.0
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,2,5.2631578947368425,0.0
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,14,10.526315789473685,2.916666666666665
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,15,15.789473684210527,4.495000000000002
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,17,21.05263157894737,7.433613573310834
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,1,26.315789473684212,12.354545454545459
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,5,31.578947368421055,13.999999999999998
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,0,36.8421052631579,16.974152251082252
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,13,42.10526315789474,22.020021336082895
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,4,47.36842105263158,23.78312629399586
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,10,52.631578947368425,25.079552737674234
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,3,57.89473684210527,26.75
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,7,63.15789473684211,48.64262405722077
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,16,68.42105263157896,93.6658686026374
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,11,73.6842105263158,97.24696969696971
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,6,78.94736842105263,102.66857738095239
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,9,84.21052631578948,105.00000000000001
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,8,89.47368421052633,160.44818181818184
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,18,94.73684210526316,268.19310259373395
+ablation_c6,开启信念更新,c6_ethereum_belief_on_s0,ethereum,以太坊 5000 美元,12,100.0,356.1834975369458
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,11,0.0,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,0,5.2631578947368425,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,1,10.526315789473685,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,2,15.789473684210527,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,3,21.05263157894737,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,5,26.315789473684212,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,6,31.578947368421055,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,7,36.8421052631579,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,8,42.10526315789474,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,4,47.36842105263158,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,14,52.631578947368425,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,10,57.89473684210527,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,16,63.15789473684211,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,15,68.42105263157896,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,17,73.6842105263158,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,13,78.94736842105263,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,12,84.21052631578948,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,9,89.47368421052633,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,19,94.73684210526316,0.0
+ablation_c6,关闭信念更新,c6_ethereum_belief_off_s0,ethereum,以太坊 5000 美元,18,100.0,45.31425
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,4,0.0,0.0
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,10,5.2631578947368425,8.129163068212357
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,8,10.526315789473685,8.545375597047329
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,16,15.789473684210527,9.002621648460782
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,7,21.05263157894737,10.953966925135525
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,1,26.315789473684212,12.755983717774761
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,11,31.578947368421055,14.695878751391465
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,13,36.8421052631579,16.15715501907114
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,2,42.10526315789474,18.000319432120666
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,5,47.36842105263158,23.759999999999998
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,9,52.631578947368425,43.199999999999996
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,15,57.89473684210527,43.199999999999996
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,19,63.15789473684211,61.016949152542374
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,14,68.42105263157896,125.86025354935377
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,6,73.6842105263158,191.37091628026332
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,17,78.94736842105263,221.10410430892958
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,3,84.21052631578948,267.0177249575552
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,0,89.47368421052633,386.03872227151726
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,12,94.73684210526316,503.3675394142667
+ablation_c6,开启信念更新,c6_robotaxi_belief_on_s0,robotaxi,特斯拉 Robotaxi,18,100.0,673.5476203336808
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,11,0.0,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,18,5.2631578947368425,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,1,10.526315789473685,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,2,15.789473684210527,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,5,21.05263157894737,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,6,26.315789473684212,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,7,31.578947368421055,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,9,36.8421052631579,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,4,42.10526315789474,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,10,47.36842105263158,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,16,52.631578947368425,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,15,57.89473684210527,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,17,63.15789473684211,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,13,68.42105263157896,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,12,73.6842105263158,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,14,78.94736842105263,0.0
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,3,84.21052631578948,1.6666666666666752
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,8,89.47368421052633,4.901960784313726
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,0,94.73684210526316,48.94736754
+ablation_c6,关闭信念更新,c6_robotaxi_belief_off_s0,robotaxi,特斯拉 Robotaxi,19,100.0,96.22806841333332

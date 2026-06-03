@@ -1,0 +1,27 @@
+name: c1_ethereum_n20_s1
+description: |
+  Scale experiment (ethereum base market), 20 agents, seed 1.
+market:
+  slug: will-ethereum-reach-5000-in-august-614-348-169-974-494
+  asof: market_open
+agent:
+  population: archetype
+  n_agents: 20
+  seed: 1
+  belief_update_enabled: true
+environment:
+  observer: quote_only
+  seeder: from_clob_history
+  fees_override_bps: 0
+llm:
+  model: null
+  temperature: 1.0
+  timeout_s: 120.0
+  retry: {max_attempts: 3, backoff_base_s: 2.0}
+  concurrency: 32
+experiment:
+  n_ticks_override: 20
+output:
+  dual_write_clickhouse: false
+  parquet_compression: zstd
+  output_dir: output/v14/c1_ethereum
