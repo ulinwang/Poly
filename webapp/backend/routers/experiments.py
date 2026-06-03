@@ -13,7 +13,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 
-from database import get_experiments, get_experiment, save_experiment
+from database import (
+    get_experiments, get_experiment, save_experiment,
+    get_experiments_filtered, search_experiments as search_experiments_db,
+    get_experiment_stats,
+)
 from models.experiment import (
     ExperimentConfig, CreateExperimentResponse,
     CancelExperimentResponse,
@@ -37,6 +41,9 @@ class RunHandle:
     started_at: float = field(default_factory=time.time)
     finished: bool = False
     history: list[tuple[str, dict]] = field(default_factory=list)
+    final_metrics: dict = field(default_factory=dict)
+    tick_elapsed_s_total: float = 0.0
+    tick_count: int = 0
 
 _RUNS: dict[str, RunHandle] = {}
 _RUNS_LOCK = threading.Lock()
@@ -48,6 +55,11 @@ def _make_emitter(handle: RunHandle):
         handle.queue.put((kind, data))
         if len(handle.history) < _HISTORY_CAP:
             handle.history.append((kind, data))
+        if kind == "settled":
+            handle.final_metrics = data
+        elif kind == "tick_finished":
+            handle.tick_elapsed_s_total += data.get("elapsed_s", 0)
+            handle.tick_count += 1
     return emit
 
 
@@ -55,6 +67,7 @@ def _spawn_run(handle: RunHandle) -> None:
     emit = _make_emitter(handle)
 
     def _worker():
+        crashed = False
         try:
             # Import runner here to avoid startup cost
             from webapp.runner_stream import run_stream
@@ -67,12 +80,30 @@ def _spawn_run(handle: RunHandle) -> None:
                 cancel=handle.cancel,
             )
         except Exception as exc:
+            crashed = True
             logging = __import__("logging")
             logging.getLogger(__name__).exception("run %s crashed", handle.run_id)
             emit("error", {"where": "worker", "message": str(exc)})
         finally:
             handle.finished = True
             emit("__end__", {})
+            metrics = handle.final_metrics
+            payload: dict = {
+                "id": handle.run_id,
+                "finished_at": time.time(),
+                "result_summary": json.dumps(metrics) if metrics else None,
+                "final_yes_mid": metrics.get("yes_mid_final"),
+                "total_fills": metrics.get("n_fills"),
+                "total_actions": metrics.get("n_actions"),
+                "avg_tick_time_ms": round(
+                    handle.tick_elapsed_s_total / handle.tick_count * 1000, 2
+                ) if handle.tick_count else None,
+            }
+            if crashed:
+                payload["status"] = "error"
+            elif not handle.cancel.is_set():
+                payload["status"] = "completed"
+            save_experiment(payload)
 
     threading.Thread(target=_worker, name=f"run-{handle.run_id[:8]}",
                      daemon=True).start()
@@ -83,9 +114,27 @@ def _spawn_run(handle: RunHandle) -> None:
 # -------------------------------------------------------------------
 
 @router.get("")
-def list_experiments(limit: int = 100):
-    exps = get_experiments(limit)
+def list_experiments(
+    status: str | None = None,
+    slug: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    exps, total = get_experiments_filtered(status=status, slug=slug, limit=limit, offset=offset)
+    return {"experiments": exps, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/search")
+def search_experiments(q: str = "", limit: int = 20):
+    if not q:
+        return {"experiments": []}
+    exps = search_experiments_db(q=q, limit=limit)
     return {"experiments": exps}
+
+
+@router.get("/stats")
+def experiments_stats():
+    return get_experiment_stats()
 
 
 @router.get("/{exp_id}")
