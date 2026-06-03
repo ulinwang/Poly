@@ -46,3 +46,23 @@ webapp/frontend/dist/
 
 # __pycache__ everywhere
 __pycache__/
+
+# Thesis / research artifacts — decoupled from code repo
+# See THESIS_DECOUPLING.md for details
+docs/
+data/clustering/
+*.parquet
+*.pdf
+*.png
+*.tiff
+*.svg
+
+# Backend TS build artifacts
+backend/dist/
+backend/node_modules/
+backend/package-lock.json
+backend/data/
+
+# Local dev artifacts
+.mplconfig/
+tmp/
