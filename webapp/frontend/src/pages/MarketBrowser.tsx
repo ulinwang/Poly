@@ -70,11 +70,28 @@ export default function MarketBrowser() {
 
       {/* Market Grid */}
       {loading ? (
-        <div className="text-center py-20 text-surface-400">Loading markets...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-20 text-surface-400">No markets found</div>
-      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="card p-4 space-y-3 animate-pulse">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-surface-200 dark:bg-surface-700 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-surface-200 dark:bg-surface-700 rounded w-3/4" />
+                  <div className="h-3 bg-surface-200 dark:bg-surface-700 rounded w-1/2" />
+                </div>
+              </div>
+              <div className="h-8 bg-surface-200 dark:bg-surface-700 rounded" />
+              <div className="h-3 bg-surface-200 dark:bg-surface-700 rounded w-1/3" />
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-20 text-surface-400">
+          <p className="text-lg mb-1">No markets found</p>
+          <p className="text-sm">Try adjusting your search or category filter.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((market) => (
             <MarketCard key={market.slug} market={market} />
           ))}

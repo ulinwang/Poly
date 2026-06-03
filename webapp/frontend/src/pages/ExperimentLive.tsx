@@ -112,13 +112,13 @@ export default function ExperimentLive() {
       </div>
 
       {/* Two columns: decisions + tick log */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Agent Decisions */}
         <div className="card p-4">
           <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
             Agent Decisions ({decisions.length})
           </h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-80 xl:max-h-96 overflow-y-auto">
             {decisions.length === 0 ? (
               <div className="text-center py-8 text-surface-400 text-sm">
                 Waiting for agent decisions...
@@ -129,7 +129,7 @@ export default function ExperimentLive() {
                   key={d.id}
                   className="p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50 text-sm"
                 >
-                  <div className="flex items-center gap-2 text-xs text-surface-500">
+                  <div className="flex items-center gap-2 text-xs text-surface-500 flex-wrap">
                     <span className="font-mono">A{d.agent_id}</span>
                     <span className="badge bg-surface-200 text-surface-600">{d.persona_type}</span>
                     <span>t{d.tick + 1}</span>
@@ -158,7 +158,7 @@ export default function ExperimentLive() {
           <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
             Tick Log
           </h3>
-          <div className="space-y-1 max-h-96 overflow-y-auto font-mono text-xs">
+          <div className="space-y-1 max-h-80 xl:max-h-96 overflow-y-auto font-mono text-xs">
             {tickLog.length === 0 ? (
               <div className="text-center py-8 text-surface-400">
                 Simulation events will appear here...

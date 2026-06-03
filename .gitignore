@@ -39,3 +39,10 @@ data/clustering/wallet_features_*.parquet
 
 # Large publication TIFFs — regenerable from scripts/thesis_*.py
 docs/v13/figures/*.tiff
+
+# Frontend node_modules + dist (build artifacts)
+webapp/frontend/node_modules/
+webapp/frontend/dist/
+
+# __pycache__ everywhere
+__pycache__/

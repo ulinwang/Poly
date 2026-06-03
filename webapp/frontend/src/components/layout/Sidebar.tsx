@@ -10,7 +10,11 @@ const statusColors: Record<string, string> = {
   queued: 'bg-surface-200 text-surface-600',
 };
 
-export default function Sidebar() {
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
+export default function Sidebar({ onNavigate }: SidebarProps) {
   const [experimentsOpen, setExperimentsOpen] = useState(true);
   const experiments = useExperimentStore((s) => s.experiments);
   const activeId = useExperimentStore((s) => s.activeId);
@@ -65,6 +69,7 @@ export default function Sidebar() {
                 <a
                   key={exp.id}
                   href={`#/experiments/${exp.id}`}
+                  onClick={onNavigate}
                   className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                     activeId === exp.id
                       ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
@@ -96,6 +101,7 @@ export default function Sidebar() {
       <div className="border-t border-surface-200 dark:border-surface-700 p-3">
         <a
           href="#/settings/api"
+          onClick={onNavigate}
           className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-50 dark:hover:bg-surface-700/50 text-sm text-surface-600 dark:text-surface-400"
         >
           <Key className="w-4 h-4" />
@@ -103,6 +109,7 @@ export default function Sidebar() {
         </a>
         <a
           href="#/settings/general"
+          onClick={onNavigate}
           className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-50 dark:hover:bg-surface-700/50 text-sm text-surface-600 dark:text-surface-400"
         >
           <Settings className="w-4 h-4" />

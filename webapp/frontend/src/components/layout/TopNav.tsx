@@ -1,23 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Settings, Menu, Zap } from 'lucide-react';
 import { useMarketStore, useSettingsStore } from '../../stores';
 import { useDebounce } from '../../hooks';
 
-export default function TopNav() {
+export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const [searchInput, setSearchInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
   const setSearchQuery = useMarketStore((s) => s.setSearchQuery);
-  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const darkMode = useSettingsStore((s) => s.darkMode);
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
   const debouncedSearch = useDebounce(searchInput, 300);
 
   // Update store when debounced value changes
-  useState(() => {
+  useEffect(() => {
     setSearchQuery(debouncedSearch);
-  });
+  }, [debouncedSearch, setSearchQuery]);
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-surface-900/80 backdrop-blur-md border-b border-surface-200 dark:border-surface-700">
@@ -25,10 +24,10 @@ export default function TopNav() {
         {/* Left: Logo + brand */}
         <div className="flex items-center gap-3">
           <button
-            onClick={toggleSidebar}
-            className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 lg:hidden"
+            onClick={onMenuClick}
+            className="p-2 rounded-lg hover:bg-surface-100 lg:hidden"
           >
-            <Menu className="w-5 h-5 text-surface-600 dark:text-surface-400" />
+            <Menu className="w-5 h-5 text-surface-600" />
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center">

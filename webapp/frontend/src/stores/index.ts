@@ -131,6 +131,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateApiSettings: (partial) => set((s) => ({
     apiSettings: { ...s.apiSettings, ...partial },
   })),
-  toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+  toggleDarkMode: () => set((s) => {
+    const next = !s.darkMode;
+    if (typeof document !== 'undefined') {
+      if (next) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+    return { darkMode: next };
+  }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 }));
