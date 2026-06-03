@@ -47,7 +47,12 @@ trade_stats AS (
         avg(price) AS mean_price,
         stddevPop(price) AS price_std,
         countIf(price < 0.1 OR price > 0.9) / count() AS tail_trade_pct,
-        toUInt32(toUnixTimestamp(max(trade_time)) - toUnixTimestamp(min(trade_time))) AS span_secs
+        toUInt32(toUnixTimestamp(max(trade_time)) - toUnixTimestamp(min(trade_time))) AS span_secs,
+        -- per-trade notional dispersion: std/mean of |price*size|
+        stddevPop(price * size) / greatest(avg(price * size), 1e-9) AS trade_size_cv,
+        -- inter-trade gap stats for burstiness
+        arrayReduce('avg', arrayDifference(arraySort(groupArray(toUnixTimestamp(trade_time))))) AS gap_mean,
+        arrayReduce('stddevPop', arrayDifference(arraySort(groupArray(toUnixTimestamp(trade_time))))) AS gap_std
     FROM polymetl.dataapi_trades
     WHERE toUnixTimestamp(trade_time) < %(cutoff_ts)s
     GROUP BY pw
@@ -79,6 +84,12 @@ SELECT
     ts.tail_trade_pct AS tail_trade_pct,
     log10(greatest(ts.span_secs / 86400.0, 0.01)) AS log_active_days,
     ts.price_std AS price_std,
+    -- 3 behavioural-style features (v14): trade frequency, size irregularity,
+    -- temporal burstiness. All describe *style*, never trade direction.
+    ts.tx_count / greatest(ts.span_secs / 86400.0, 0.01) AS trades_per_day,
+    ts.trade_size_cv AS trade_size_cv,
+    (ts.gap_std - ts.gap_mean) / greatest(ts.gap_std + ts.gap_mean, 1e-9)
+        AS burstiness,
     -- supplementary (NOT in clustering, used only in prompt)
     apw.n_markets AS n_markets,
     ts.tx_count AS tx_count,
@@ -98,6 +109,7 @@ WHERE
 COLS = [
     "wallet", "log_notional", "top_market_share", "n_markets_per_log_dollar",
     "mean_price", "tail_trade_pct", "log_active_days", "price_std",
+    "trades_per_day", "trade_size_cv", "burstiness",
     "n_markets", "tx_count", "total_notional",
     "past_accuracy", "n_resolved_prior",
 ]
@@ -105,6 +117,7 @@ COLS = [
 CLUSTER_FEAT_COLS = [
     "log_notional", "top_market_share", "n_markets_per_log_dollar",
     "mean_price", "tail_trade_pct", "log_active_days", "price_std",
+    "trades_per_day", "trade_size_cv", "burstiness",
 ]
 
 

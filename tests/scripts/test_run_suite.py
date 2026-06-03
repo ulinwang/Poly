@@ -38,12 +38,12 @@ class DiscoverConfigsTest(unittest.TestCase):
     def test_skips_markets_and_template_meta_files(self):
         with tempfile.TemporaryDirectory() as d:
             cd = Path(d)
-            _write_cfg(cd / "b6_rumor_s0.yaml", "b6")
-            (cd / "b6_markets.yaml").write_text("markets: []")
-            (cd / "b6_template.yaml").write_text("name: t\nmarket:\n  slug: x")
-            paths = discover_configs("b6", cd)
+            _write_cfg(cd / "b3_seed_s0.yaml", "b3")
+            (cd / "b3_markets.yaml").write_text("markets: []")
+            (cd / "b3_template.yaml").write_text("name: t\nmarket:\n  slug: x")
+            paths = discover_configs("b3", cd)
             self.assertEqual([p.name for p in paths],
-                             ["b6_rumor_s0.yaml"])
+                             ["b3_seed_s0.yaml"])
 
 
 class B1ExpansionTest(unittest.TestCase):

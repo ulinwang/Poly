@@ -174,54 +174,6 @@ def fig4_belief():
 
 
 # ----------------------------------------------------------------------
-# Fig 5 — information shock: flow + entropy (B6) — two panels
-# ----------------------------------------------------------------------
-
-def fig5_shock():
-    import sys
-    sys.path.insert(0, str(ROOT))
-    from experiments.analysis.network import build_network
-    def stat(name):
-        eid = _eid("b6", name)
-        f = pd.read_parquet(
-            ROOT / f"output/v13/b6/{eid}/raw/agent_fills.parquet")
-        g = build_network(f, exclude_env_maker=True)
-        w = np.array([d["weight"] for *_, d in g.edges(data=True)], float)
-        p = w / w.sum() if w.sum() else w
-        H = float(-(p * np.log(p)).sum()) if len(p) else 0.0
-        return float(w.sum()), H
-    ctrl = [stat(f"b6_control_s{s}") for s in (0, 1, 2)]
-    rumor = [stat(f"b6_rumor_s{s}") for s in (0, 1, 2)]
-    ctrl_f = np.array([c[0] for c in ctrl]); ctrl_h = np.array([c[1] for c in ctrl])
-    rum_f = np.array([c[0] for c in rumor]); rum_h = np.array([c[1] for c in rumor])
-    fig, axes = plt.subplots(1, 2, figsize=fig_size(COL_DOUBLE_MM - 30, 60))
-    for ax, c_vals, r_vals, ylabel in [
-        (axes[0], ctrl_f, rum_f, "total capital flow (USD)"),
-        (axes[1], ctrl_h, rum_h, "structural entropy")
-    ]:
-        means = [c_vals.mean(), r_vals.mean()]
-        sds = [c_vals.std(ddof=1), r_vals.std(ddof=1)]
-        ax.bar([0, 1], means, yerr=sds, width=0.5,
-               color=[NEUTRAL_LIGHT, BLUE],
-               edgecolor=NEUTRAL_BLACK, linewidth=0.7,
-               error_kw=dict(elinewidth=0.7, capthick=0.7, capsize=3))
-        ax.scatter([0] * 3, c_vals, color=NEUTRAL_BLACK, s=7, zorder=3,
-                   edgecolor="white", linewidth=0.4)
-        ax.scatter([1] * 3, r_vals, color=NEUTRAL_BLACK, s=7, zorder=3,
-                   edgecolor="white", linewidth=0.4)
-        ax.set_xticks([0, 1]); ax.set_xticklabels(["control", "rumor"])
-        ax.set_ylabel(ylabel)
-    panel_label(axes[0], "a")
-    panel_label(axes[1], "b")
-    df = pd.DataFrame({
-        "metric": ["flow"] * 6 + ["entropy"] * 6,
-        "condition": (["control"] * 3 + ["rumor"] * 3) * 2,
-        "value": np.concatenate([ctrl_f, rum_f, ctrl_h, rum_h]),
-    })
-    finalize(fig, OUT / "fig5_shock", source_data=df)
-
-
-# ----------------------------------------------------------------------
 # Fig 6 — B1 external validity (price moved toward truth?)
 # ----------------------------------------------------------------------
 
@@ -290,10 +242,9 @@ def main():
     fig2_seed()
     fig3_population()
     fig4_belief()
-    fig5_shock()
     fig6_external()
     fig7_fix()
-    print("wrote figures 1-7 to", OUT)
+    print("wrote figures to", OUT)
 
 
 if __name__ == "__main__":

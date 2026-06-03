@@ -6,8 +6,9 @@ conventions, and a `finalize` helper that exports SVG + PDF + TIFF
 alongside the embedded PNG and writes a sibling source-data CSV.
 
 Conventions:
-  - Arial sans-serif; editable text in SVG (`svg.fonttype='none'`) and
-    TrueType in PDF (`pdf.fonttype=42`).
+  - Times New Roman first for Latin text, then Songti SC / STSong for Chinese;
+    editable text in SVG (`svg.fonttype='none'`) and TrueType in PDF
+    (`pdf.fonttype=42`).
   - Only the left and bottom spines drawn; no grid.
   - 7.5 pt body text, 0.8 pt axis lines — sized for the thesis A4 page
     after embedding at ~12–15 cm wide.
@@ -21,10 +22,12 @@ Conventions:
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.text import Text
 import pandas as pd
 
 
@@ -45,13 +48,20 @@ GOLD = "#D4A93B"
 
 DEFAULT_COLORS = [BLUE, GREEN, RED, TEAL, VIOLET, NEUTRAL_LIGHT]
 
+# macOS ships Songti SC / STSong. With Times New Roman first, Latin text uses
+# Times while Chinese glyphs fall back to Songti in mixed labels.
+LATIN_FONTS = ["Times New Roman", "DejaVu Serif"]
+CJK_FONTS = ["Songti SC", "Arial Unicode MS"]
+CJK_RE = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+
 
 def apply_style(font_size: float = 7.5, axes_lw: float = 0.8) -> None:
     """Apply Nature-style rcParams. Call once at module import time."""
     plt.rcParams.update({
         # MANDATORY: editable text in vector exports
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.family": "serif",
+        "font.serif": LATIN_FONTS,
+        "axes.unicode_minus": False,
         "svg.fonttype": "none",
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
@@ -86,6 +96,17 @@ def apply_style(font_size: float = 7.5, axes_lw: float = 0.8) -> None:
     })
 
 
+def apply_text_fonts(fig) -> None:
+    """Use Songti for Chinese text and Times New Roman for Latin-only text."""
+    for text in fig.findobj(match=Text):
+        props = text.get_fontproperties().copy()
+        if CJK_RE.search(text.get_text() or ""):
+            props.set_family(CJK_FONTS)
+        else:
+            props.set_family(LATIN_FONTS)
+        text.set_fontproperties(props)
+
+
 # --- Sizing helpers -----------------------------------------------------------
 MM_PER_INCH = 25.4
 
@@ -100,6 +121,13 @@ def fig_size(width_mm: float, height_mm: float) -> tuple[float, float]:
 
 COL_SINGLE_MM = 89.0      # Nature single column
 COL_DOUBLE_MM = 183.0     # Nature double column
+STACK_PANEL_MM = 58.0     # height per stacked panel (top-bottom layout)
+
+
+def fig_size_vstack(n_panels: int, width_mm: float = COL_DOUBLE_MM,
+                    panel_mm: float = STACK_PANEL_MM) -> tuple[float, float]:
+    """Figure size for vertically stacked panels (same width, taller)."""
+    return fig_size(width_mm, panel_mm * n_panels)
 
 
 # --- Panel label --------------------------------------------------------------
@@ -120,6 +148,7 @@ def finalize(fig, base_path: Path, source_data: pd.DataFrame | None = None,
     out: dict[str, str] = {}
     base_path = Path(base_path)
     base_path.parent.mkdir(parents=True, exist_ok=True)
+    apply_text_fonts(fig)
     fig.tight_layout(pad=pad)
     for fmt in formats:
         dpi = 600 if fmt == "tiff" else None

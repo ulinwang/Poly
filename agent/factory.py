@@ -145,6 +145,7 @@ def init_agents(
     cache_path: Path = CACHE_PATH,
     data_dir: Path = Path("data"),
     ch: Optional[ClickHouse] = None,
+    archetype_weights: Optional[list[float]] = None,
 ) -> tuple[list[AgentInit], dict]:
     """Build the agent population for `slug`. Returns
     `(agents, priors_dict)`.
@@ -161,7 +162,7 @@ def init_agents(
     if persona_set == "archetype":
         return _init_agents_archetype(
             slug=slug, n_agents=n_agents or 30, seed=seed,
-            data_dir=data_dir, ch=ch,
+            data_dir=data_dir, ch=ch, archetype_weights=archetype_weights,
         )
     if persona_set in ("marginal_random", "uniform_random"):
         return _init_agents_random_baseline(
@@ -263,6 +264,7 @@ def init_agents(
 def _init_agents_archetype(
     *, slug: str, n_agents: int, seed: int,
     data_dir: Path, ch: Optional[ClickHouse],
+    archetype_weights: Optional[list[float]] = None,
 ) -> tuple[list[AgentInit], dict]:
     """v10: build a population by sampling K-means archetypes from the
     1.19M-wallet empirical distribution. No live LLM persona call:
@@ -279,6 +281,16 @@ def _init_agents_archetype(
     # paths via environment variables so existing callers keep
     # working (env-var override is module-level).
     _maybe_wire_archetype_paths(priors)
+    # Profile-distribution experiment: override the empirical cluster
+    # mix when archetype_weights is given (consumed by the archetype
+    # sampler via this env var).
+    if archetype_weights is not None:
+        os.environ["POLYMETL_ARCHETYPE_WEIGHTS"] = ",".join(
+            str(w) for w in archetype_weights
+        )
+        log.info("archetype: profile-mix override %s", archetype_weights)
+    else:
+        os.environ.pop("POLYMETL_ARCHETYPE_WEIGHTS", None)
     _archetype.reset_caches()
     build_archetype_population = _archetype.build_archetype_population
     # v10.1: archetype path NO LONGER clamps capital to the target market's

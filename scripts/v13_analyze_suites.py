@@ -5,7 +5,7 @@ import numpy as np
 # Roman Roy resolved NO -> winning_idx=1 -> YES pays 0. signal_mu prior=0.15.
 # "direction correct" = yes_mid moved toward 0 (down from seed ~0.155).
 ROWS=[]
-for suite in ['b2','b3','b4','b6']:
+for suite in ['b2','b3','b4']:
     idx=json.load(open(f'output/v13/{suite}/index.json'))
     for r in idx['runs']:
         eid=r.get('exp_id')
@@ -47,7 +47,3 @@ print("\n--- B4 belief ablation ---")
 for grp in ['belief_off','belief_on']:
     g=df[df.name.str.contains(grp)]
     print(f"{grp:11s} cancel%={g.cancel_pct.mean():.1f}  belief%={g.belief_pct.mean():.1f}  yes_mid={g.yes_mid_final.mean():.4f}  dir_correct={g.dir_correct.sum()}/{len(g)}")
-print("\n--- B6 rumor cascade ---")
-for grp in ['control','rumor']:
-    g=df[df.name.str.contains(grp)]
-    print(f"{grp:8s} yes_mid={g.yes_mid_final.mean():.4f}±{g.yes_mid_final.std():.4f}  cancel%={g.cancel_pct.mean():.1f}")

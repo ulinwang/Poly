@@ -14,7 +14,7 @@ agent:
   persona_recipe:
     use_bio: false
     sanitize_labels: true
-    llm_temperature: 0.0
+    llm_temperature: 1.0
   n_agents: 9
   seed: 42
 
@@ -25,7 +25,7 @@ environment:
 
 llm:
   model: null
-  temperature: 0.0
+  temperature: 1.0
   timeout_s: 120.0
   retry:
     max_attempts: 3

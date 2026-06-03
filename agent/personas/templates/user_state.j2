@@ -6,13 +6,39 @@ Order books right now:
   YES book — bid {{ yes_bid }}, ask {{ yes_ask }}, mid {{ "%.3f"|format(yes_mid) }}
   NO book  — bid {{ no_bid }}, ask {{ no_ask }}, mid {{ "%.3f"|format(no_mid) }}
   YES mid history (last 3 ticks): {{ hist_str }}
+  YES bid depth: {{ yes_bid_depth }}
+  YES ask depth: {{ yes_ask_depth }}
+  NO bid depth: {{ no_bid_depth }}
+  NO ask depth: {{ no_ask_depth }}
+  Order imbalance (bid depth minus ask depth, normalized): YES {{ yes_order_imbalance }}, NO {{ no_order_imbalance }}
   Time remaining: {{ "%.0f"|format(time_remaining_pct * 100) }}% of market lifetime
+{%- if recent_fills %}
+
+Recent public fills:
+{%- for f in recent_fills %}
+  {{ f }}
+{%- endfor %}
+{%- endif %}
 
 Your portfolio:
   Cash: ${{ "%.2f"|format(cash) }}
   YES shares: {{ "%.2f"|format(yes_shares) }}
   NO shares:  {{ "%.2f"|format(no_shares) }}
   Resting orders open: {{ n_resting_orders }}
+{%- if resting_orders %}
+
+Your resting orders:
+{%- for o in resting_orders %}
+  {{ o }}
+{%- endfor %}
+{%- endif %}
+{%- if recent_own_fills %}
+
+Your recent fills:
+{%- for f in recent_own_fills %}
+  {{ f }}
+{%- endfor %}
+{%- endif %}
 {%- if belief_snapshot %}
 
 Your current stated belief (set at tick {{ belief_snapshot.set_at_tick }}, {{ ticks_ago }} ticks ago):
@@ -20,12 +46,12 @@ Your current stated belief (set at tick {{ belief_snapshot.set_at_tick }}, {{ ti
   Confidence = {{ belief_snapshot.confidence | round(2) }}
   Rationale: "{{ belief_snapshot.rationale }}"
 
-If your view has changed, you SHOULD call update_belief again. If not, you may
-omit update_belief and just trade (or HOLD).
+You will update this belief first in the current tick, then decide whether
+to trade.
 {%- else %}
 
-You have not yet stated a belief in this market. Consider calling update_belief
-to anchor your view before trading.
+You have not yet stated a belief in this market. You will first state one
+in the current tick, then decide whether to trade.
 {%- endif %}
 {%- if recent_decisions %}
 
@@ -41,4 +67,4 @@ Guidance:
 - Do NOT cancel a resting order just to "clean the slate" — re-cancelling work you already approved wastes capacity. Only cancel if your view has materially changed.
 {%- endif %}
 
-What is your action this tick? Reply with the JSON action object.
+Use the available tools for the current decision stage.

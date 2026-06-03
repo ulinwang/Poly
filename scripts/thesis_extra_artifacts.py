@@ -5,10 +5,9 @@ shared scripts/_thesis_style.py preamble.
 
 Figures (saved as PNG + SVG + PDF + 600dpi TIFF + sibling CSV):
   fig8_archetype_radar    — K=4 archetype centroid radar (7 features)
-  fig9_network_b6         — B6 maker–taker network, control vs rumor
   fig10_b1_normalized     — B1 ten markets normalized price trajectories
   fig11_b4_pnl_kde        — B4 per-agent P&L histograms, on vs off
-  fig12_action_mix_groups — action-mix stacked bar across 8 groups
+  fig12_action_mix_groups — action-mix stacked bar across ablation groups
 
 Tables (CSV under docs/v13/tables/):
   table6_action_mix.csv
@@ -134,42 +133,6 @@ def fig_archetype_radar():
 
 
 # ----------------------------------------------------------------------
-# Fig 9 — B6 maker-taker network — control vs rumor
-# ----------------------------------------------------------------------
-
-def fig_network_b6():
-    import sys
-    sys.path.insert(0, str(ROOT))
-    from experiments.analysis.network import build_network
-    fig, axes = plt.subplots(1, 2, figsize=fig_size(COL_DOUBLE_MM, 95))
-    for ax, name, lbl in [(axes[0], "b6_control_s0", "a"),
-                          (axes[1], "b6_rumor_s0", "b")]:
-        f = _fills("b6", name)
-        g = build_network(f, exclude_env_maker=True)
-        if g.number_of_edges() == 0:
-            ax.text(0.5, 0.5, "no flow", ha="center", va="center")
-            continue
-        pos = nx.spring_layout(g, seed=0,
-            k=1.5 / np.sqrt(max(1, g.number_of_nodes())))
-        weights = np.array([d["weight"] for *_, d in g.edges(data=True)])
-        wnorm = 0.3 + 1.6 * (weights / weights.max())
-        node_size = [40 + 0.03 * g.degree(n, weight="weight") for n in g.nodes()]
-        nx.draw_networkx_edges(g, pos, ax=ax, alpha=0.45,
-                               width=wnorm, edge_color=NEUTRAL_MID,
-                               arrows=True, arrowsize=4,
-                               connectionstyle="arc3,rad=0.06")
-        nx.draw_networkx_nodes(g, pos, ax=ax, node_size=node_size,
-                               node_color=BLUE if name.endswith("rumor_s0") else NEUTRAL_LIGHT,
-                               edgecolors=NEUTRAL_BLACK, linewidths=0.5,
-                               alpha=0.9)
-        ax.set_title("control" if lbl == "a" else "rumor",
-                     fontsize=7, color=NEUTRAL_DARK)
-        panel_label(ax, lbl, x=0.0, y=1.02)
-        ax.axis("off")
-    finalize(fig, FIG / "fig9_network_b6", source_data=None)
-
-
-# ----------------------------------------------------------------------
 # Fig 10 — B1 ten markets normalized trajectories
 # ----------------------------------------------------------------------
 
@@ -237,8 +200,6 @@ GROUPS = [
     ("uniform", [("b3", f"b3_uniform_s{s}") for s in (0, 1, 2)]),
     ("belief off", [("b4", f"b4_belief_off_s{s}") for s in (0, 1, 2)]),
     ("belief on", [("b4", f"b4_belief_on_s{s}") for s in (0, 1, 2)]),
-    ("control", [("b6", f"b6_control_s{s}") for s in (0, 1, 2)]),
-    ("rumor", [("b6", f"b6_rumor_s{s}") for s in (0, 1, 2)]),
 ]
 
 
@@ -278,10 +239,9 @@ def fig_action_mix_groups():
     zh_label = {"LIMIT": "限价单", "MARKET": "市价单", "CANCEL": "撤单",
                 "HOLD": "不操作", "SPLIT": "拆分", "MERGE": "合并",
                 "UPDATE_BELIEF": "声明信念"}
-    zh_group = {"baseline": "基线", "archetype": "行为原型",
+    zh_group = {"baseline": "基线", "archetype": "行为画像群体",
                 "marginal": "边际随机", "uniform": "均匀随机",
-                "belief off": "信念关", "belief on": "信念开",
-                "control": "冲击对照", "rumor": "冲击注入"}
+                "belief off": "信念关", "belief on": "信念开"}
     df_zh = df.rename(columns={**zh_label})
     df_zh["group"] = df_zh["group"].map(zh_group)
     df_zh = df_zh.rename(columns={"group": "实验组"})
@@ -338,6 +298,15 @@ def table_b1_markets():
 # Table 8 — B3 archetype P&L stats
 # ----------------------------------------------------------------------
 
+# Cluster id → named market-user behaviour profile (Roman Roy K=4).
+PROFILE_NAME = {
+    "Archetype-C0": "分散广覆盖型",
+    "Archetype-C1": "单市场速退型",
+    "Archetype-C2": "高赔率追逐型",
+    "Archetype-C3": "低价逆向型",
+}
+
+
 def table_b3_archetype_pnl():
     frames = [_positions_pnl("b3", f"b3_archetype_s{s}").assign(seed=s)
               for s in (0, 1, 2)]
@@ -345,7 +314,9 @@ def table_b3_archetype_pnl():
     g = df.groupby("persona_type")["pnl"].agg(
         n="count", mean="mean", std="std", median="median",
         min="min", max="max").reset_index()
-    g.columns = ["原型", "智能体数", "盈亏均值", "盈亏标准差",
+    g["persona_type"] = g["persona_type"].map(
+        lambda c: PROFILE_NAME.get(c, c))
+    g.columns = ["行为画像", "智能体数", "盈亏均值", "盈亏标准差",
                  "盈亏中位", "盈亏最小", "盈亏最大"]
     g = g.round(2)
     g.to_csv(TBL / "table8_b3_archetype_pnl.csv", index=False)
@@ -353,7 +324,6 @@ def table_b3_archetype_pnl():
 
 def main():
     fig_archetype_radar()
-    fig_network_b6()
     fig_b1_normalized()
     fig_b4_pnl_kde()
     fig_action_mix_groups()

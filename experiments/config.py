@@ -24,7 +24,19 @@ class PersonaRecipe(BaseModel):
     cache_path: str = "data/wallet_personas.json"
 
 
+class ModelShare(BaseModel):
+    """One LLM model and its share, for the model-heterogeneity
+    experiment. RESERVED scaffold — not yet active; pending
+    multi-model API access."""
+    model: str
+    weight: float = Field(..., gt=0)
+
+
 class AgentConfig(BaseModel):
+    # `model_mix` starts with the pydantic-protected `model_` prefix;
+    # disable the namespace guard since it is an intended field name.
+    model_config = {"protected_namespaces": ()}
+
     population: Literal[
         "calibrated", "hand_coded", "archetype", "no_signal",
         "marginal_random", "uniform_random",
@@ -42,6 +54,18 @@ class AgentConfig(BaseModel):
     # the post-merge behaviour (tool always offered to the LLM); set False
     # in B4 ablation configs to fall back to v12 tool inventory.
     belief_update_enabled: bool = True
+    # Override the mix of market-user behaviour profiles for the
+    # archetype population. None = use the empirical cluster proportions.
+    # When set, the list length must equal the number of clusters K;
+    # values are non-negative weights (need not sum to 1).
+    archetype_weights: Optional[list[float]] = None
+    # RESERVED scaffold for the model-heterogeneity experiment: when set,
+    # agents are assigned LLM models by these weights instead of all
+    # using a single llm.model. None = homogeneous (every agent uses
+    # llm.model). NOT YET ACTIVE — the runner does not consume this field
+    # until multi-model API access is available; configs may declare it
+    # so the experiment design is reserved.
+    model_mix: Optional[list[ModelShare]] = None
 
 
 class EnvironmentConfig(BaseModel):
@@ -57,9 +81,14 @@ class LLMRetry(BaseModel):
 
 class LLMConfig(BaseModel):
     model: Optional[str] = None         # None → Settings.DEEPSEEK_MODEL
-    temperature: float = 0.0
+    temperature: float = 1.0
     timeout_s: float = 120.0
     retry: LLMRetry = Field(default_factory=LLMRetry)
+    prompt_language: Literal["en", "zh"] = "en"
+    # DeepSeek hybrid reasoning toggle. None = API default (thinking on);
+    # True/False force the thinking mode for the thinking-vs-nonthinking
+    # experiment.
+    thinking: Optional[bool] = None
     # v9.3: parallel per-tick LLM calls. 0 or 1 = serial (legacy
     # behavior); None = auto (= n_agents capped at 16, polite default).
     concurrency: Optional[int] = None
@@ -71,29 +100,19 @@ class OutputConfig(BaseModel):
     output_dir: str = "output"
 
 
-class ShockPayload(BaseModel):
-    text: str
-
-
-class ShockConfig(BaseModel):
-    """v13 (B6) — synthetic news shock injected mid-run.
-
-    When set, the runner appends a synthetic memory entry of shape
-    ``{tick, action: 'EXTERNAL_NEWS', reasoning: payload.text}``
-    to every agent at tick ``tick``, so the NEXT tick's prompt's
-    "recent_decisions" block carries it."""
-    tick: int = Field(..., ge=0)
-    kind: Literal["rumor"] = "rumor"
-    payload: ShockPayload
-
-
 class ExperimentBlock(BaseModel):
     """Optional v13 wrapper for experiment-level toggles."""
-    shock: Optional[ShockConfig] = None
     # Override the empirically derived simulation horizon (priors["n_ticks"]).
     # Used by the tick-horizon experiment to hold every other parameter
     # fixed while sweeping only the number of decision rounds.
     n_ticks_override: Optional[int] = Field(default=None, ge=1)
+    # Long-tick runs can emit compact checkpoint artifacts for context
+    # handoff. Disabled by default so existing experiment outputs do not
+    # change unless a config opts in.
+    checkpoint_enabled: bool = False
+    checkpoint_interval_ticks: int = Field(default=5, ge=1)
+    checkpoint_compact_char_budget: Optional[int] = Field(default=None, ge=1)
+    checkpoint_recent_ticks: int = Field(default=5, ge=1)
 
 
 class ExperimentConfig(BaseModel):
@@ -104,7 +123,7 @@ class ExperimentConfig(BaseModel):
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
-    # v13: optional experiment-level shock / extension hooks.
+    # v13: optional experiment-level extension hooks.
     experiment: ExperimentBlock = Field(default_factory=ExperimentBlock)
 
 

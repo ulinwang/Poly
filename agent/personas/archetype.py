@@ -40,6 +40,11 @@ WALLETS_PATH = CLUSTERING_DIR / "wallet_clusters.parquet"
 # the legacy non-suffixed files for backward compat with v10/v11.
 _ENV_WALLETS = "POLYMETL_WALLET_CLUSTERS"
 _ENV_PROFILES = "POLYMETL_CLUSTER_PROFILES"
+# When set to a comma-separated list of K floats, this overrides the
+# empirical cluster proportions used to sample archetypes. Used by the
+# profile-distribution experiment to hold every other parameter fixed
+# while sweeping only the mix of market-user behaviour profiles.
+_ENV_WEIGHTS = "POLYMETL_ARCHETYPE_WEIGHTS"
 
 
 def _resolve_profiles_path() -> Path:
@@ -84,11 +89,36 @@ def reset_caches() -> None:
     _wallet_pool.cache_clear()
 
 
+def _resolve_weights(K: int) -> Optional[list[float]]:
+    """Parse the POLYMETL_ARCHETYPE_WEIGHTS override into K floats.
+
+    Returns None when the env var is unset (use the empirical mix).
+    """
+    raw = os.environ.get(_ENV_WEIGHTS)
+    if not raw:
+        return None
+    parts = [float(x) for x in raw.split(",") if x.strip()]
+    if len(parts) != K:
+        raise ValueError(
+            f"{_ENV_WEIGHTS} has {len(parts)} values, expected K={K}"
+        )
+    if any(p < 0 for p in parts) or sum(parts) <= 0:
+        raise ValueError(f"{_ENV_WEIGHTS} must be non-negative and sum > 0")
+    return parts
+
+
 def sample_archetype(rng: random.Random) -> int:
-    """Sample one cluster id according to its empirical probability."""
+    """Sample one cluster id.
+
+    By default the cluster's empirical proportion is used as its
+    probability. When POLYMETL_ARCHETYPE_WEIGHTS is set, those weights
+    replace the empirical mix (profile-distribution experiment).
+    """
     profiles = load_cluster_distribution()
     K = profiles["K"]
-    weights = [profiles["clusters"][str(c)]["pct"] for c in range(K)]
+    weights = _resolve_weights(K)
+    if weights is None:
+        weights = [profiles["clusters"][str(c)]["pct"] for c in range(K)]
     return rng.choices(range(K), weights=weights, k=1)[0]
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import json
 import logging
 import random
 import statistics
@@ -277,13 +278,14 @@ def _belief_action_row(
     column layout identical to other rows so downstream parquet writers
     don't need a special path."""
     now = dt.datetime.utcnow()
+    raw = json.dumps({"belief_update": belief}, ensure_ascii=False)
     return (
         sim.sim_id, tick, agent.agent_id,
         "UPDATE_BELIEF", "", "",
         float(belief["yes_prob"]), 0.0,
         sim.yes_mid, sim.yes_mid, 0.0,
         0,
-        belief.get("rationale", ""), "",
+        belief.get("rationale", ""), raw,
         0,
         "", now,
     )
@@ -507,6 +509,12 @@ def run_simulation(
             yes_mid_after = sim.yes_mid
 
             now = dt.datetime.utcnow()
+            # Keep the log order aligned with the decision order: belief
+            # stage first, then the trade/HOLD stage for the same tick.
+            if belief_applied and decision.order_type != "UPDATE_BELIEF":
+                sim.actions_log.append(
+                    _belief_action_row(sim, agent, belief_applied, tick)
+                )
             sim.actions_log.append((
                 sim.sim_id, tick, agent.agent_id,
                 decision.order_type, decision.outcome, decision.side,
@@ -517,14 +525,7 @@ def run_simulation(
                 decision.api_latency_ms,
                 decision.api_error or exec_err, now,
             ))
-            # v13: belief paired with a *trade* tool — emit a separate
-            # UPDATE_BELIEF row so downstream analysis can count belief
-            # updates independently of trade actions. Solo UPDATE_BELIEF
-            # decisions are already represented by the row above.
-            if belief_applied and decision.order_type != "UPDATE_BELIEF":
-                sim.actions_log.append(
-                    _belief_action_row(sim, agent, belief_applied, tick)
-                )
+            # Solo UPDATE_BELIEF decisions are represented by the row above.
             # Episodic memory: action + reasoning. The reasoning is the
             # LLM's own update on its market view; carrying it across
             # ticks gives the agent persistent belief continuity.
@@ -678,6 +679,12 @@ class PolyEnv:
             )
             yes_mid_after = sim.yes_mid
             n_fills += len(fills)
+            # Keep the log order aligned with the decision order: belief
+            # stage first, then the trade/HOLD stage for the same tick.
+            if belief_applied and decision.order_type != "UPDATE_BELIEF":
+                sim.actions_log.append(
+                    _belief_action_row(sim, agent, belief_applied, self._tick)
+                )
             sim.actions_log.append((
                 sim.sim_id, self._tick, agent.agent_id,
                 decision.order_type, decision.outcome, decision.side,
@@ -688,10 +695,6 @@ class PolyEnv:
                 decision.api_latency_ms,
                 decision.api_error or exec_err, dt.datetime.utcnow(),
             ))
-            if belief_applied and decision.order_type != "UPDATE_BELIEF":
-                sim.actions_log.append(
-                    _belief_action_row(sim, agent, belief_applied, self._tick)
-                )
             # Episodic memory: action + reasoning (belief carrier).
             # v13: include belief snapshot keys (None if no belief set).
             if getattr(agent, "memory", None) is not None:
@@ -721,6 +724,7 @@ class PolyEnv:
                 0.0, unrealized,
             ))
         self._tick += 1
+        setattr(sim, "_ticks_remaining", max(0, self.n_ticks - self._tick))
         return self._observations(), {"n_fills": n_fills, "tick": self._tick}
 
     def _observations(self) -> dict:

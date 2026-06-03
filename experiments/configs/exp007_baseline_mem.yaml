@@ -20,7 +20,7 @@ environment:
 
 llm:
   model: null
-  temperature: 0.0
+  temperature: 1.0
   timeout_s: 120.0
   retry: {max_attempts: 3, backoff_base_s: 2.0}
   concurrency: null

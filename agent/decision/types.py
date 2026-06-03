@@ -15,6 +15,13 @@ class MarketSnapshot:
     yes_mid_history: list[float]
     ticks_remaining: int
     total_ticks: int
+    yes_bid_depth: list[dict] | None = None
+    yes_ask_depth: list[dict] | None = None
+    no_bid_depth: list[dict] | None = None
+    no_ask_depth: list[dict] | None = None
+    yes_order_imbalance: float | None = None
+    no_order_imbalance: float | None = None
+    recent_fills: list[dict] | None = None
 
     @property
     def time_remaining_pct(self) -> float:
@@ -35,6 +42,8 @@ class AgentSnapshot:
     # "size_usd", "fills", "yes_mid_after"}. The observer caps this
     # at MEMORY_DEPTH ≈ 3 to keep the prompt small.
     recent_decisions: list[dict] | None = None
+    resting_orders: list[dict] | None = None
+    recent_own_fills: list[dict] | None = None
     # v13 (AGT-4): the agent's most recent posterior on P(YES) as set
     # by an `update_belief` tool call. Shape:
     # {"yes_prob": float, "confidence": float, "set_at_tick": int,

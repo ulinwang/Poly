@@ -24,25 +24,32 @@ class _StubBook:
 
 
 class _Order:
-    def __init__(self, agent_id, price):
+    def __init__(self, agent_id, price, remaining=10.0, ts=0):
         self.agent_id = agent_id
         self.price = price
+        self.remaining = remaining
+        self.ts = ts
 
 
 class _Sim:
     def __init__(self):
         self.book_yes = _StubBook(
-            bids=[_Order(0, 0.45), _Order(1, 0.40)],
-            asks=[_Order(0, 0.52), _Order(2, 0.55)],
+            bids=[_Order(0, 0.45, 20.0), _Order(1, 0.40, 5.0)],
+            asks=[_Order(0, 0.52, 10.0), _Order(2, 0.55, 20.0)],
             mid=0.485,
         )
         self.book_no = _StubBook(
-            bids=[_Order(0, 0.48)], asks=[_Order(0, 0.52)], mid=0.50,
+            bids=[_Order(0, 0.48, 8.0)], asks=[_Order(0, 0.52, 8.0)], mid=0.50,
         )
         self.yes_mid = 0.485
         self.no_mid = 0.50
         self.yes_mid_history = [0.50, 0.49, 0.485]
         self.n_ticks = 24
+        self._ticks_remaining = 20
+        self.fills_log = [
+            ("sim", 3, 1, 2, 0, 1, "YES", "SELL", 0.52, 4.0, 2.08, None),
+            ("sim", 4, 3, 4, 2, 0, "NO", "BUY", 0.48, 3.0, 1.44, None),
+        ]
 
         class _Agent:
             def __init__(self, aid, cash):
@@ -52,6 +59,8 @@ class _Sim:
                 self.no_shares = 0.0
                 self.private_signal_mu = None
                 self.private_signal_sigma = None
+                self.memory = []
+                self.belief = None
         self.agents = [_Agent(0, 100.0), _Agent(1, 50.0)]
 
 
@@ -66,6 +75,12 @@ class QuoteOnlyObserverTest(unittest.TestCase):
         self.assertEqual(agent.cash, 100.0)
         # agent.n_resting_orders should count agent 0's resting orders.
         self.assertEqual(agent.n_resting_orders, 4)  # 1 yes bid + 1 yes ask + 1 no bid + 1 no ask
+        self.assertEqual(market.yes_bid_depth[0]["price"], 0.45)
+        self.assertEqual(market.yes_bid_depth[0]["size"], 20.0)
+        self.assertAlmostEqual(market.yes_order_imbalance, -5 / 55)
+        self.assertEqual(len(market.recent_fills), 2)
+        self.assertEqual(len(agent.resting_orders), 4)
+        self.assertEqual(len(agent.recent_own_fills), 2)
 
     def test_no_full_book_attributes(self):
         sim = _Sim()

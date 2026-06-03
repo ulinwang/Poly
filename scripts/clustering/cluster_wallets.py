@@ -43,10 +43,11 @@ FEAT_COLS = [
     "log_notional",          # activity scale
     "top_market_share",      # concentration on top market
     "n_markets_per_log_dollar",  # diversification per $
-    "mean_price",            # preferred odds region
-    "tail_trade_pct",        # longshot appetite
+    "mean_price",            # preferred odds region (favorite/longshot)
+    "tail_trade_pct",        # extreme-price appetite
     "log_active_days",       # tenure
     "price_std",             # price-range diversity
+    "burstiness",            # v14: temporal clustering of trades (bounded -1..1)
 ]
 
 # Supplementary cols that go into the persona prompt but NOT into clustering
@@ -55,12 +56,17 @@ PROMPT_COLS = ["n_markets", "tx_count", "total_notional",
 
 SEED = 42
 SILH_SUBSAMPLE = 50_000   # silhouette is O(n²) memory
-K_SWEEP = (2, 3, 4, 5, 6, 7, 8)
+# v14: sweep 3..6 — K=2 is too coarse for behavioural roles, K>6 over-splits
+# beyond the six-role taxonomy.
+K_SWEEP = (3, 4, 5, 6)
 BOOTSTRAP_ITERS = 50
 BOOTSTRAP_SUBSAMPLE = 100_000
 MIN_CLUSTER_PCT = 0.03
 MIN_SILHOUETTE = 0.20
 MIN_MEDIAN_JACCARD = 0.75
+# v14: winsorize each feature at [p1, p99] before scaling so heavy-tailed
+# outliers (whales, bots) cannot spawn sub-1% micro-clusters.
+WINSOR_LO, WINSOR_HI = 1.0, 99.0
 
 _SUFFIX_RE = re.compile(r"wallet_features_([0-9TZ]+)\.parquet$")
 
@@ -132,15 +138,23 @@ def _fit_and_score(
 
 
 def _select_k(sweep_records: list[dict]) -> tuple[int, bool]:
-    """Apply the three-criterion rule. Returns (K, used_fallback)."""
-    for r in sorted(sweep_records, key=lambda r: r["k"]):
-        if (
-            r["silhouette"] >= MIN_SILHOUETTE
-            and r["median_jaccard"] >= MIN_MEDIAN_JACCARD
-            and r["min_cluster_pct"] >= MIN_CLUSTER_PCT
-        ):
-            return int(r["k"]), False
-    return 2, True
+    """Apply the three-criterion rule. Returns (K, used_fallback).
+
+    v14: among K that pass all three criteria, prefer the LARGEST for
+    behavioural granularity (the old rule picked the smallest, which
+    collapsed every modern market to K=2). If none qualify, fall back
+    to the K with the highest silhouette.
+    """
+    valid = [
+        r for r in sweep_records
+        if r["silhouette"] >= MIN_SILHOUETTE
+        and r["median_jaccard"] >= MIN_MEDIAN_JACCARD
+        and r["min_cluster_pct"] >= MIN_CLUSTER_PCT
+    ]
+    if valid:
+        return int(max(valid, key=lambda r: r["k"])["k"]), False
+    best = max(sweep_records, key=lambda r: r["silhouette"])
+    return int(best["k"]), True
 
 
 def run(features_parquet: Path, out_dir: Path) -> dict:
@@ -154,7 +168,15 @@ def run(features_parquet: Path, out_dir: Path) -> dict:
     df = pd.read_parquet(features_parquet)
     print(f"loaded: {len(df):,} wallets")
 
-    X = df[FEAT_COLS].values
+    X = np.array(df[FEAT_COLS].to_numpy(dtype=float), copy=True)
+    # v14: fill NaN (e.g. burstiness undefined for very few trades) with the
+    # column median, then winsorize at [p1, p99] to clip heavy-tailed outliers.
+    col_med = np.nanmedian(X, axis=0)
+    nan_idx = np.where(np.isnan(X))
+    X[nan_idx] = np.take(col_med, nan_idx[1])
+    lo = np.percentile(X, WINSOR_LO, axis=0)
+    hi = np.percentile(X, WINSOR_HI, axis=0)
+    X = np.clip(X, lo, hi)
 
     rng = np.random.RandomState(SEED)
     silh_idx = rng.choice(len(X), size=min(SILH_SUBSAMPLE, len(X)),

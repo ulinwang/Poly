@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_TIMEOUT: float = 60.0
-    DEEPSEEK_TEMPERATURE: float = 0.0
+    DEEPSEEK_TEMPERATURE: float = 1.0
 
     # v4 calibrated-init parameters (see docs/EXPERIMENT_LOG.md). The
     # signal sigma is the noise around the pre-event consensus mu the

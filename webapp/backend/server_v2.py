@@ -44,12 +44,15 @@ app.include_router(settings_router, prefix="/api/v1")
 app.include_router(markets_router, prefix="/api/v1")
 app.include_router(experiments_router, prefix="/api/v1")
 
-# Static files (built React app)
-if FRONTEND_DIST.exists():
-    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static")
+# Fallback SPA routes — serve index.html for all non-API routes
+@app.get("/{path:path}")
+def spa_fallback(path: str):
+    """Serve React SPA for all non-API routes."""
+    # Skip API routes
+    if path.startswith("api/"):
+        from fastapi import HTTPException
+        raise HTTPException(404, "API endpoint not found")
 
-@app.get("/")
-def index():
     index_html = FRONTEND_DIST / "index.html"
     if index_html.exists():
         return FileResponse(str(index_html))

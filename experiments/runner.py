@@ -44,6 +44,7 @@ from environment.env import PolyEnv
 from environment.seeders.from_clob_history import seed as seed_from_clob
 from environment.seeders.from_holders import seed as seed_from_holders
 from experiments.config import ExperimentConfig, parse_config
+from experiments.checkpoint import update_checkpoint
 from experiments.parquet_sink import (
     PERSONA_COLUMNS, append_llm_call, dump_simulation,
 )
@@ -51,46 +52,6 @@ from experiments.postprocess import run_postprocess
 
 
 log = logging.getLogger(__name__)
-
-
-# ============================================================
-# v13 (B6) — synthetic external-news shock
-# ============================================================
-
-
-def apply_shock_if_due(sim, tick: int, shock_cfg) -> int:
-    """Inject a synthetic memory entry into every agent if ``tick``
-    matches ``shock_cfg.tick``. Returns the number of agents touched
-    (0 means no shock fired). Idempotent: safe to call once per tick.
-
-    The injection mutates ``agent.memory`` directly so the next call
-    to ``observe()`` packs the synthetic entry into
-    ``AgentSnapshot.recent_decisions``."""
-    if shock_cfg is None:
-        return 0
-    if int(tick) != int(shock_cfg.tick):
-        return 0
-    entry = {
-        "tick": int(shock_cfg.tick),
-        "action": "EXTERNAL_NEWS",
-        "outcome": "",
-        "side": "",
-        "price": 0.0,
-        "size_usd": 0.0,
-        "fills": 0,
-        "yes_mid_after": float(getattr(sim, "yes_mid", 0.5)),
-        "reasoning": str(shock_cfg.payload.text)[:240],
-        "kind": shock_cfg.kind,
-    }
-    n = 0
-    for a in sim.agents:
-        if getattr(a, "memory", None) is None:
-            a.memory = []
-        a.memory.append(entry)
-        n += 1
-    log.info("shock fired at tick=%d (kind=%s, n_agents=%d): %s",
-             tick, shock_cfg.kind, n, entry["reasoning"][:80])
-    return n
 
 
 # ============================================================
@@ -191,6 +152,8 @@ def _decide_all_agents(
     temperature: float, timeout_s: float, max_attempts: int,
     concurrency: int, out_dir: Path,
     tools: list[dict] | None = None,
+    thinking: bool | None = None,
+    prompt_language: str = "en",
 ):
     """Run `decide()` for every agent in `obs` and return the
     `{agent_id: Decision}` dict the env expects.
@@ -215,6 +178,8 @@ def _decide_all_agents(
             timeout=timeout_s,
             max_attempts=max_attempts,
             tools=tools,
+            thinking=thinking,
+            prompt_language=prompt_language,
         )
         append_llm_call(
             out_dir, sim.sim_id, tick, aid,
@@ -293,6 +258,7 @@ def run_experiment(
         persona_set=config.agent.population,
         n_agents=config.agent.n_agents,
         seed=config.agent.seed,
+        archetype_weights=config.agent.archetype_weights,
     )
     if not pop:
         raise SystemExit(
@@ -323,6 +289,7 @@ def run_experiment(
         seed_from_clob(env.state, priors)
     elif config.environment.seeder == "from_holders":
         seed_from_holders(env.state, priors["condition_id"])
+    obs = env._observations()
     sim = env.state
     log.info("  env: yes_mid post-seed = %.3f", sim.yes_mid)
 
@@ -402,6 +369,7 @@ def run_experiment(
     )
     sensitivity_ticks = list(sensitivity_ticks or [])
     sensitivity_results: dict[int, dict] = {}
+    next_compact_char_budget = config.experiment.checkpoint_compact_char_budget
     for tick in range(n_ticks):
         tick_started = time.time()
         actions = _decide_all_agents(
@@ -415,6 +383,8 @@ def run_experiment(
             max_attempts=config.llm.retry.max_attempts,
             concurrency=concurrency, out_dir=out,
             tools=tools,
+            thinking=config.llm.thinking,
+            prompt_language=config.llm.prompt_language,
         )
         # v13 (AGT-4): optionally probe within-tick ordering sensitivity
         # BEFORE the real step (so the probe doesn't pollute the run).
@@ -431,14 +401,33 @@ def run_experiment(
             except Exception as exc:        # noqa: BLE001
                 log.warning("sensitivity_run failed at tick %d: %s", tick, exc)
         obs, info = env.step(actions)
-        # v13 (B6): fire external-news shock at the configured tick.
-        # Injecting AFTER env.step means agents see the synthetic
-        # entry in their next-tick prompt's recent_decisions block.
-        apply_shock_if_due(sim, tick, config.experiment.shock)
-        # Re-pack observations so the next tick's obs sees the shock.
-        if (config.experiment.shock is not None
-                and tick == config.experiment.shock.tick):
-            obs = env._observations()  # noqa: SLF001
+        if config.experiment.checkpoint_enabled:
+            tick_no = tick + 1
+            interval_hit = (
+                tick_no % config.experiment.checkpoint_interval_ticks == 0
+                or tick_no == n_ticks
+            )
+            budget_hit = False
+            reason = "tick_interval" if interval_hit else "tick"
+            if next_compact_char_budget is not None:
+                from experiments.checkpoint import estimate_context_chars
+                context_chars = estimate_context_chars(sim)
+                if context_chars >= next_compact_char_budget:
+                    budget_hit = True
+                    reason = "context_budget"
+                    while context_chars >= next_compact_char_budget:
+                        next_compact_char_budget += (
+                            config.experiment.checkpoint_compact_char_budget
+                        )
+            update_checkpoint(
+                out,
+                sim=sim,
+                tick=tick,
+                n_ticks=n_ticks,
+                force_handoff=interval_hit or budget_hit,
+                reason=reason,
+                max_recent_ticks=config.experiment.checkpoint_recent_ticks,
+            )
         log.info("  tick=%d/%d fills=%d yes_mid=%.3f (%.1fs)",
                  tick + 1, n_ticks, info["n_fills"], sim.yes_mid,
                  time.time() - tick_started)

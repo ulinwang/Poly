@@ -84,7 +84,7 @@ def _agg(rows, key):
 # ----------------------------------------------------------------------
 def fig_scale():
     runs = _runs("c1")
-    scales = [10, 20, 50]
+    scales = [10, 20, 50, 100]
     agg = {}
     for n in scales:
         rows = [_run_metrics("c1", runs[f"c1_closed_scale_n{n}_s{s}"])
@@ -163,7 +163,7 @@ def fig_scale():
 # ----------------------------------------------------------------------
 def fig_tick():
     runs = _runs("c3")
-    horizons = [10, 20, 40]
+    horizons = [10, 20, 50, 100]
     agg = {}
     for t in horizons:
         rows = [_run_metrics("c3", runs[f"c3_tick_horizon_t{t}_s{s}"])
@@ -205,7 +205,7 @@ def fig_tick():
 
     # Panel c — mean price path by horizon (seed-averaged)
     ax = axes[2]
-    colors = {10: BLUE, 20: GREEN, 40: NEUTRAL_DARK}
+    colors = {10: BLUE, 20: GREEN, 50: NEUTRAL_DARK, 100: RED}
     for t in horizons:
         # align by fraction of horizon completed
         paths = []
@@ -265,10 +265,228 @@ def fig_open():
 
 
 # ----------------------------------------------------------------------
+# Fig 16 — c4 profile-distribution sweep
+# ----------------------------------------------------------------------
+PROFILE_LABEL = {
+    "Archetype-C0": "diffuse",
+    "Archetype-C1": "one-shot",
+    "Archetype-C2": "longshot",
+    "Archetype-C3": "contrarian",
+}
+PROFILE_ORDER = ["Archetype-C0", "Archetype-C1",
+                 "Archetype-C2", "Archetype-C3"]
+VARIANTS = ["natural", "uniform", "concentrated"]
+
+
+def _profile_counts(suite, exp_id):
+    """Realized count of each behaviour profile in one run."""
+    d = _run_dir(suite, exp_id)
+    per = pd.read_parquet(d / "raw" / "agent_personas.parquet")
+    vc = per["persona_type"].value_counts()
+    return {p: int(vc.get(p, 0)) for p in PROFILE_ORDER}
+
+
+def fig_profile_mix():
+    runs = _runs("c4")
+    agg = {}
+    counts = {}
+    for v in VARIANTS:
+        rows, cnt = [], []
+        for s in (0, 1, 2):
+            eid = runs[f"c4_profile_mix_{v}_s{s}"]
+            rows.append(_run_metrics("c4", eid))
+            cnt.append(_profile_counts("c4", eid))
+        agg[v] = rows
+        counts[v] = cnt
+
+    fig, axes = plt.subplots(1, 3, figsize=fig_size(COL_DOUBLE_MM, 62))
+    x = np.arange(len(VARIANTS))
+    vlabel = ["natural", "uniform", "longshot-\nheavy"]
+
+    # Panel a — final YES price by profile mix
+    ax = axes[0]
+    means = [_agg(agg[v], "end_mid")[0] for v in VARIANTS]
+    sds = [_agg(agg[v], "end_mid")[1] for v in VARIANTS]
+    ax.errorbar(x, means, yerr=sds, fmt="o-", color=BLUE, capsize=2.5,
+                lw=1.0, label="simulated")
+    for v_i, v in enumerate(VARIANTS):
+        for r in agg[v]:
+            ax.plot(v_i, r["end_mid"], "o", color=NEUTRAL_MID, ms=2.5,
+                    alpha=0.7, zorder=1)
+    ax.axhline(ROMAN_TRUTH, ls="--", lw=0.8, color=RED, label="truth (NO)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(vlabel)
+    ax.set_xlabel("profile mix")
+    ax.set_ylabel("final YES mid-price")
+    ax.set_ylim(-0.03, 0.35)
+    ax.legend(loc="upper right")
+    panel_label(ax, "a")
+
+    # Panel b — volatility + traded notional by profile mix
+    ax = axes[1]
+    vol_m = [_agg(agg[v], "volatility")[0] for v in VARIANTS]
+    vol_s = [_agg(agg[v], "volatility")[1] for v in VARIANTS]
+    ax.errorbar(x, vol_m, yerr=vol_s, fmt="s-", color=BLUE, capsize=2.5,
+                lw=1.0, label="price volatility")
+    ax.set_xticks(x)
+    ax.set_xticklabels(vlabel)
+    ax.set_xlabel("profile mix")
+    ax.set_ylabel("per-round price volatility")
+    ax2 = ax.twinx()
+    notion_m = [_agg(agg[v], "notional")[0] for v in VARIANTS]
+    ax2.plot(x, notion_m, "^--", color=NEUTRAL_DARK, lw=1.0,
+             label="traded notional")
+    ax2.set_ylabel("traded notional (USD)")
+    ax.spines["right"].set_visible(True)
+    ax2.spines["top"].set_visible(False)
+    lines = ax.get_lines() + ax2.get_lines()
+    ax.legend(lines, [l.get_label() for l in lines], loc="upper left")
+    panel_label(ax, "b")
+
+    # Panel c — realized profile composition (seed-summed) by mix
+    ax = axes[2]
+    pcolors = {"Archetype-C0": BLUE, "Archetype-C1": GREEN,
+               "Archetype-C2": RED, "Archetype-C3": NEUTRAL_DARK}
+    bottom = np.zeros(len(VARIANTS))
+    for p in PROFILE_ORDER:
+        vals = []
+        for v in VARIANTS:
+            tot = sum(sum(c.values()) for c in counts[v])
+            share = sum(c[p] for c in counts[v]) / tot * 100
+            vals.append(share)
+        ax.bar(x, vals, bottom=bottom, width=0.6, color=pcolors[p],
+               label=PROFILE_LABEL[p])
+        bottom += np.array(vals)
+    ax.set_xticks(x)
+    ax.set_xticklabels(vlabel)
+    ax.set_xlabel("profile mix")
+    ax.set_ylabel("realized profile share (%)")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, 1.18), ncol=2,
+              fontsize=6.0)
+    panel_label(ax, "c")
+
+    src = []
+    for v in VARIANTS:
+        for s, r, c in zip((0, 1, 2), agg[v], counts[v]):
+            row = {"variant": v, "seed": s, "end_mid": r["end_mid"],
+                   "volatility": r["volatility"], "notional": r["notional"],
+                   "n_fills": r["n_fills"], "pnl_mean": r["pnl_mean"],
+                   "pnl_spread": r["pnl_spread"]}
+            row.update({PROFILE_LABEL[p]: c[p] for p in PROFILE_ORDER})
+            src.append(row)
+    finalize(fig, FIG / "fig16_profile_mix", source_data=pd.DataFrame(src))
+    return agg, counts
+
+
+# ----------------------------------------------------------------------
+# Fig 17 — c5 thinking-mode comparison
+# ----------------------------------------------------------------------
+ACTION_TYPES = ["LIMIT", "MARKET", "CANCEL", "HOLD", "SPLIT",
+                "MERGE", "UPDATE_BELIEF"]
+ACTION_EN = {"LIMIT": "limit", "MARKET": "market", "CANCEL": "cancel",
+             "HOLD": "hold", "SPLIT": "split", "MERGE": "merge",
+             "UPDATE_BELIEF": "belief"}
+THINK_MODES = ["on", "off"]
+
+
+def _action_mix(suite, exp_id):
+    """Action-type share (%) for one run."""
+    d = _run_dir(suite, exp_id)
+    acts = pd.read_parquet(d / "raw" / "agent_actions.parquet")
+    vc = acts["action_type"].value_counts(normalize=True) * 100
+    return {a: float(vc.get(a, 0.0)) for a in ACTION_TYPES}
+
+
+def fig_thinking():
+    runs = _runs("c5")
+    agg, mixes = {}, {}
+    for m in THINK_MODES:
+        rows, mx = [], []
+        for s in (0, 1, 2):
+            eid = runs[f"c5_thinking_{m}_s{s}"]
+            rows.append(_run_metrics("c5", eid))
+            mx.append(_action_mix("c5", eid))
+        agg[m] = rows
+        mixes[m] = mx
+
+    fig, axes = plt.subplots(1, 3, figsize=fig_size(COL_DOUBLE_MM, 62))
+    x = np.arange(len(THINK_MODES))
+    mlabel = ["thinking\non", "thinking\noff"]
+
+    # Panel a — final YES price by thinking mode
+    ax = axes[0]
+    means = [_agg(agg[m], "end_mid")[0] for m in THINK_MODES]
+    sds = [_agg(agg[m], "end_mid")[1] for m in THINK_MODES]
+    ax.errorbar(x, means, yerr=sds, fmt="o-", color=BLUE, capsize=2.5,
+                lw=1.0, label="simulated")
+    for m_i, m in enumerate(THINK_MODES):
+        for r in agg[m]:
+            ax.plot(m_i, r["end_mid"], "o", color=NEUTRAL_MID, ms=2.5,
+                    alpha=0.7, zorder=1)
+    ax.axhline(ROMAN_TRUTH, ls="--", lw=0.8, color=RED, label="truth (NO)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(mlabel)
+    ax.set_xlabel("reasoning mode")
+    ax.set_ylabel("final YES mid-price")
+    ax.set_ylim(-0.03, 0.35)
+    ax.legend(loc="upper right")
+    panel_label(ax, "a")
+
+    # Panel b — volatility + traded notional by thinking mode
+    ax = axes[1]
+    vol_m = [_agg(agg[m], "volatility")[0] for m in THINK_MODES]
+    vol_s = [_agg(agg[m], "volatility")[1] for m in THINK_MODES]
+    ax.errorbar(x, vol_m, yerr=vol_s, fmt="s-", color=BLUE, capsize=2.5,
+                lw=1.0, label="price volatility")
+    ax.set_xticks(x)
+    ax.set_xticklabels(mlabel)
+    ax.set_xlabel("reasoning mode")
+    ax.set_ylabel("per-round price volatility")
+    ax2 = ax.twinx()
+    notion_m = [_agg(agg[m], "notional")[0] for m in THINK_MODES]
+    ax2.plot(x, notion_m, "^--", color=NEUTRAL_DARK, lw=1.0,
+             label="traded notional")
+    ax2.set_ylabel("traded notional (USD)")
+    ax.spines["right"].set_visible(True)
+    ax2.spines["top"].set_visible(False)
+    lines = ax.get_lines() + ax2.get_lines()
+    ax.legend(lines, [l.get_label() for l in lines], loc="upper left")
+    panel_label(ax, "b")
+
+    # Panel c — action mix, thinking on vs off
+    ax = axes[2]
+    width = 0.38
+    ax_x = np.arange(len(ACTION_TYPES))
+    for i, m in enumerate(THINK_MODES):
+        vals = [np.mean([mx[a] for mx in mixes[m]]) for a in ACTION_TYPES]
+        ax.bar(ax_x + (i - 0.5) * width, vals, width,
+               color=(BLUE if m == "on" else NEUTRAL_DARK),
+               label=f"thinking {m}")
+    ax.set_xticks(ax_x)
+    ax.set_xticklabels([ACTION_EN[a] for a in ACTION_TYPES],
+                       rotation=45, ha="right", fontsize=6.0)
+    ax.set_ylabel("action share (%)")
+    ax.legend(loc="upper right")
+    panel_label(ax, "c")
+
+    src = []
+    for m in THINK_MODES:
+        for s, r, mx in zip((0, 1, 2), agg[m], mixes[m]):
+            row = {"thinking": m, "seed": s, "end_mid": r["end_mid"],
+                   "volatility": r["volatility"], "notional": r["notional"],
+                   "n_fills": r["n_fills"], "pnl_mean": r["pnl_mean"],
+                   "pnl_spread": r["pnl_spread"]}
+            row.update({ACTION_EN[a]: mx[a] for a in ACTION_TYPES})
+            src.append(row)
+    finalize(fig, FIG / "fig17_thinking", source_data=pd.DataFrame(src))
+    return agg, mixes
+
+
+# ----------------------------------------------------------------------
 # Tables
 # ----------------------------------------------------------------------
 def table_scale(agg):
-    horizons = [10, 20, 50]
+    horizons = [10, 20, 50, 100]
     rows = []
     for n in horizons:
         em, es = _agg(agg[n], "end_mid")
@@ -291,7 +509,7 @@ def table_scale(agg):
 
 
 def table_tick(agg):
-    horizons = [10, 20, 40]
+    horizons = [10, 20, 50, 100]
     rows = []
     for t in horizons:
         em, es = _agg(agg[t], "end_mid")
@@ -327,6 +545,53 @@ def table_open(rows):
     pd.DataFrame(out).to_csv(TBL / "table11_open.csv", index=False)
 
 
+def table_profile_mix(agg, counts):
+    name = {"natural": "自然分布", "uniform": "均匀分布",
+            "concentrated": "高赔率主导"}
+    rows = []
+    for v in VARIANTS:
+        em, es = _agg(agg[v], "end_mid")
+        vm, _ = _agg(agg[v], "volatility")
+        nm, _ = _agg(agg[v], "notional")
+        fm, _ = _agg(agg[v], "n_fills")
+        sm, _ = _agg(agg[v], "pnl_spread")
+        # realized longshot (C2) share across the 3 seeds
+        tot = sum(sum(c.values()) for c in counts[v])
+        c2 = sum(c["Archetype-C2"] for c in counts[v]) / tot * 100
+        rows.append({
+            "variant": name[v],
+            "end_mid_mean": round(em, 3),
+            "end_mid_sd": round(es, 3),
+            "volatility": round(vm, 4),
+            "notional_mean": round(nm, 0),
+            "fills_mean": round(fm, 1),
+            "longshot_share_pct": round(c2, 1),
+            "pnl_spread_mean": round(sm, 0),
+        })
+    pd.DataFrame(rows).to_csv(TBL / "table12_profile_mix.csv", index=False)
+
+
+def table_thinking(agg):
+    name = {"on": "思考开", "off": "思考关"}
+    rows = []
+    for m in THINK_MODES:
+        em, es = _agg(agg[m], "end_mid")
+        vm, _ = _agg(agg[m], "volatility")
+        nm, _ = _agg(agg[m], "notional")
+        fm, _ = _agg(agg[m], "n_fills")
+        sm, _ = _agg(agg[m], "pnl_spread")
+        rows.append({
+            "mode": name[m],
+            "end_mid_mean": round(em, 3),
+            "end_mid_sd": round(es, 3),
+            "volatility": round(vm, 4),
+            "notional_mean": round(nm, 0),
+            "fills_mean": round(fm, 1),
+            "pnl_spread_mean": round(sm, 0),
+        })
+    pd.DataFrame(rows).to_csv(TBL / "table13_thinking.csv", index=False)
+
+
 def main():
     scale_agg = fig_scale()
     tick_agg = fig_tick()
@@ -334,6 +599,16 @@ def main():
     table_scale(scale_agg)
     table_tick(tick_agg)
     table_open(open_rows)
+    try:
+        mix_agg, mix_counts = fig_profile_mix()
+        table_profile_mix(mix_agg, mix_counts)
+    except (FileNotFoundError, KeyError) as exc:
+        print(f"skipped c4 profile-mix figures (suite not ready): {exc}")
+    try:
+        think_agg, _ = fig_thinking()
+        table_thinking(think_agg)
+    except (FileNotFoundError, KeyError) as exc:
+        print(f"skipped c5 thinking figures (suite not ready): {exc}")
     print("figures + tables written to docs/v13/figures/ and docs/v13/tables/")
 
 

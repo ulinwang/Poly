@@ -14,7 +14,7 @@ environment:
   seeder: from_clob_history
 llm:
   model: null
-  temperature: 0.0
+  temperature: 1.0
   timeout_s: 120.0
   retry:
     max_attempts: 3

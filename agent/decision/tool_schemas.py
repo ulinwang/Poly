@@ -1,6 +1,6 @@
 """OpenAI-compatible function tool schemas the LLM sees per tick.
 
-Five tools (HOLD = no tool call, see runtime.decide). Each
+Trading tools use HOLD = no tool call (see runtime.decide). Each
 `function.name` matches the dispatcher in `parser.parse_tool_call`,
 which converts a `tool_calls[0]` object → the legacy
 parsed-decision dict shape that `environment.env._execute_decision`
@@ -127,10 +127,9 @@ _TOOL_UPDATE_BELIEF = {
     "function": {
         "name": "update_belief",
         "description": (
-            "Record your current posterior over YES outcome before (or "
-            "in addition to) any trade. Use this each tick when your "
-            "view changes. Calling update_belief alone (without a trade "
-            "tool) counts as a HOLD with a belief update."
+            "Record your current posterior over the YES outcome. In the "
+            "standard two-stage decision flow this tool is called first "
+            "each tick, before the separate trade-action stage."
         ),
         "parameters": {
             "type": "object",

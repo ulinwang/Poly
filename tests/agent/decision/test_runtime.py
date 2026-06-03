@@ -33,7 +33,33 @@ def _agent_state() -> AgentSnapshot:
 
 class DecideToolCallingTest(unittest.TestCase):
     def test_tool_call_translates_to_decision(self):
+        calls = []
+
         def fake_llm(**kwargs):
+            calls.append(kwargs)
+            names = {t["function"]["name"] for t in kwargs["tools"]}
+            if names == {"update_belief"}:
+                return {
+                    "tool_call": {
+                        "id": "tc_belief",
+                        "name": "update_belief",
+                        "arguments": {
+                            "yes_prob": 0.57, "confidence": 0.6,
+                            "rationale": "book is below my fair value",
+                        },
+                    },
+                    "tool_calls": [{
+                        "id": "tc_belief",
+                        "name": "update_belief",
+                        "arguments": {
+                            "yes_prob": 0.57, "confidence": 0.6,
+                            "rationale": "book is below my fair value",
+                        },
+                    }],
+                    "text": "",
+                    "raw": "{\"stage\":\"belief\"}",
+                    "prompt_tokens": 10, "completion_tokens": 5,
+                }
             return {
                 "tool_call": {
                     "id": "tc_1",
@@ -45,7 +71,7 @@ class DecideToolCallingTest(unittest.TestCase):
                     },
                 },
                 "text": "",
-                "raw": "{...}",
+                "raw": "{\"stage\":\"trade\"}",
                 "prompt_tokens": 10, "completion_tokens": 5,
             }
 
@@ -59,10 +85,39 @@ class DecideToolCallingTest(unittest.TestCase):
         self.assertEqual(d.outcome, "YES")
         self.assertEqual(d.size_usd, 50.0)
         self.assertEqual(d.reasoning, "below fair value")
+        self.assertIsNotNone(d.belief_update)
+        self.assertAlmostEqual(d.belief_update["yes_prob"], 0.57)
         self.assertEqual(d.api_error, "")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            [t["function"]["name"] for t in calls[0]["tools"]],
+            ["update_belief"],
+        )
+        self.assertNotIn(
+            "update_belief",
+            {t["function"]["name"] for t in calls[1]["tools"]},
+        )
 
     def test_no_tool_call_is_hold(self):
+        calls = []
+
         def fake_llm(**kwargs):
+            calls.append(kwargs)
+            names = {t["function"]["name"] for t in kwargs["tools"]}
+            if names == {"update_belief"}:
+                return {
+                    "tool_call": {
+                        "id": "tc_belief",
+                        "name": "update_belief",
+                        "arguments": {
+                            "yes_prob": 0.45, "confidence": 0.5,
+                            "rationale": "no meaningful change",
+                        },
+                    },
+                    "text": "",
+                    "raw": "{\"stage\":\"belief\"}",
+                    "prompt_tokens": 0, "completion_tokens": 0,
+                }
             return {"tool_call": None, "text": "I'll wait.",
                     "raw": "{}", "prompt_tokens": 0, "completion_tokens": 0}
 
@@ -75,6 +130,8 @@ class DecideToolCallingTest(unittest.TestCase):
         self.assertEqual(d.order_type, "HOLD")
         # decline-text becomes the reasoning
         self.assertIn("wait", d.reasoning)
+        self.assertIsNotNone(d.belief_update)
+        self.assertEqual(len(calls), 2)
 
     def test_llm_failure_returns_hold_with_error(self):
         def boom(**kwargs):

@@ -8,10 +8,9 @@ Two entry points:
 
   call_deepseek_with_tools(...)  — function-tool mode. Used by the
                                     per-tick trader decision flow
-                                    (agent.decision.runtime). The LLM
-                                    chooses which of `tools` to call;
-                                    response is a tool_calls[0] object,
-                                    or text if it declines (= HOLD).
+                                    (agent.decision.runtime). The caller
+                                    may let the LLM choose a tool or force
+                                    a specific tool for staged decisions.
 
 Stateless, synchronous. The OpenAI Python SDK is the underlying
 transport — DeepSeek exposes an OpenAI-compatible endpoint.
@@ -84,7 +83,8 @@ def call_deepseek_with_tools(
     tools: list[dict],
     temperature: float = 0.0,
     timeout: float = 60.0,
-    tool_choice: str = "auto",
+    tool_choice: str | dict = "auto",
+    thinking: Optional[bool] = None,
 ) -> dict:
     """Send one chat-completion request with OpenAI function tools.
 
@@ -102,6 +102,13 @@ def call_deepseek_with_tools(
       }
     """
     client = _client(api_key, base_url, timeout)
+    # `thinking` toggles the DeepSeek hybrid reasoning mode. None keeps
+    # the API default (thinking on); True/False force enabled/disabled.
+    extra_body: dict[str, Any] = {}
+    if thinking is not None:
+        extra_body["thinking"] = {
+            "type": "enabled" if thinking else "disabled"
+        }
     resp = client.chat.completions.create(
         model=model,
         temperature=temperature,
@@ -111,6 +118,7 @@ def call_deepseek_with_tools(
         ],
         tools=tools,
         tool_choice=tool_choice,
+        extra_body=extra_body or None,
     )
     msg = resp.choices[0].message
     usage = resp.usage

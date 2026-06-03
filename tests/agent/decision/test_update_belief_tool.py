@@ -11,6 +11,7 @@ Covers Changes 1+2 from docs/v13/AGT4_REPORT.md:
 """
 from __future__ import annotations
 
+import json
 import unittest
 
 from agent.decision.parser import parse_belief_tool_call, parse_tool_call
@@ -145,8 +146,13 @@ class UpdateBeliefEnvIntegrationTest(unittest.TestCase):
         self.env.step({0: d})
         # two rows: one LIMIT, one UPDATE_BELIEF
         types = [r[3] for r in self.env.state.actions_log]
+        self.assertEqual(types[:2], ["UPDATE_BELIEF", "LIMIT"])
         self.assertIn("LIMIT", types)
         self.assertIn("UPDATE_BELIEF", types)
+        raw_belief = json.loads(self.env.state.actions_log[0][13])
+        self.assertAlmostEqual(
+            raw_belief["belief_update"]["confidence"], 0.6,
+        )
         agent = self.env.state.agents[0]
         self.assertIsNotNone(agent.belief)
         self.assertAlmostEqual(agent.belief["yes_prob"], 0.55)

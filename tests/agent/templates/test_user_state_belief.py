@@ -5,7 +5,7 @@ Two cases covered:
   - When `belief_snapshot` is set: the template renders P(YES),
     confidence, rationale, and the "ticks_ago" age.
   - When `belief_snapshot` is None: the template renders the
-    "have not yet stated a belief" nudge.
+    two-stage belief-first nudge.
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class UserStateBeliefTest(unittest.TestCase):
             _market(), _agent_with_belief(None),
         )
         self.assertIn("have not yet stated a belief", text)
-        self.assertIn("update_belief", text)
+        self.assertIn("first state one", text)
         # No "stated belief" header in this branch
         self.assertNotIn("Your current stated belief", text)
 
