@@ -30,8 +30,39 @@ export const api = {
     fetchJson<{ categories: string[] }>('/api/v1/markets/categories'),
 
   // Experiments
-  listExperiments: () =>
-    fetchJson<{ experiments: import('../types').Experiment[] }>('/api/v1/experiments'),
+  listExperiments: (params?: {
+    status?: string;
+    slug?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const url = new URL('/api/v1/experiments', window.location.origin);
+    if (params?.status) url.searchParams.set('status', params.status);
+    if (params?.slug) url.searchParams.set('slug', params.slug);
+    if (params?.limit) url.searchParams.set('limit', String(params.limit));
+    if (params?.offset) url.searchParams.set('offset', String(params.offset));
+    return fetchJson<{
+      experiments: import('../types').Experiment[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(url.pathname + url.search);
+  },
+
+  searchExperiments: (q: string, limit?: number) => {
+    const url = new URL('/api/v1/experiments/search', window.location.origin);
+    url.searchParams.set('q', q);
+    if (limit) url.searchParams.set('limit', String(limit));
+    return fetchJson<{ experiments: import('../types').Experiment[] }>(url.pathname + url.search);
+  },
+
+  getExperimentStats: () =>
+    fetchJson<{
+      total_runs: number;
+      running_count: number;
+      avg_agents: number;
+      avg_ticks: number;
+    }>('/api/v1/experiments/stats'),
 
   getExperiment: (id: string) =>
     fetchJson<{ experiment: import('../types').Experiment }>(`/api/v1/experiments/${id}`),

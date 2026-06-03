@@ -1,0 +1,45 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
+import { config } from './config';
+
+import marketsRoutes from './routes/markets';
+import experimentsRoutes from './routes/experiments';
+import settingsRoutes from './routes/settings';
+import providersRoutes from './routes/providers';
+
+const isDev = process.env.NODE_ENV === 'development';
+
+export async function buildServer() {
+  const app = Fastify({
+    logger: isDev,
+  });
+
+  await app.register(cors, {
+    origin: '*',
+    credentials: true,
+  });
+
+  await app.register(marketsRoutes, { prefix: '/api/v1/markets' });
+  await app.register(experimentsRoutes, { prefix: '/api/v1/experiments' });
+  await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
+  await app.register(providersRoutes, { prefix: '/api/v1/providers' });
+
+  const distPath = path.resolve(__dirname, '../../webapp/frontend/dist');
+  await app.register(fastifyStatic, {
+    root: distPath,
+    wildcard: false,
+  });
+
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) {
+      reply.status(404).send({ message: 'API endpoint not found' });
+      return;
+    }
+    const indexPath = path.join(distPath, 'index.html');
+    return reply.sendFile('index.html');
+  });
+
+  return app;
+}
