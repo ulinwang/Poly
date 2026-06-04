@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
+import ErrorBoundary from './components/ErrorBoundary';
 import MarketBrowser from './pages/MarketBrowser';
 
 const MarketDetail = lazy(() => import('./pages/MarketDetail'));
@@ -15,30 +16,31 @@ function PageLoader() {
     </div>
   );
 }
-// TODO: wire ErrorFallback into react-error-boundary when added
 
 function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<Navigate to="/markets" replace />} />
-          <Route path="/markets" element={<MarketBrowser />} />
-          <Route path="/markets/:slug" element={
-            <Suspense fallback={<PageLoader />}><MarketDetail /></Suspense>
-          } />
-          <Route path="/experiments" element={
-            <Suspense fallback={<PageLoader />}><ExperimentManager /></Suspense>
-          } />
-          <Route path="/experiments/:id" element={
-            <Suspense fallback={<PageLoader />}><ExperimentLive /></Suspense>
-          } />
-          <Route path="/settings/*" element={
-            <Suspense fallback={<PageLoader />}><Settings /></Suspense>
-          } />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <Routes>
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<Navigate to="/markets" replace />} />
+            <Route path="/markets" element={<MarketBrowser />} />
+            <Route path="/markets/:slug" element={
+              <Suspense fallback={<PageLoader />}><MarketDetail /></Suspense>
+            } />
+            <Route path="/experiments" element={
+              <Suspense fallback={<PageLoader />}><ExperimentManager /></Suspense>
+            } />
+            <Route path="/experiments/:id" element={
+              <Suspense fallback={<PageLoader />}><ExperimentLive /></Suspense>
+            } />
+            <Route path="/settings/*" element={
+              <Suspense fallback={<PageLoader />}><Settings /></Suspense>
+            } />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </ErrorBoundary>
   );
 }
 
