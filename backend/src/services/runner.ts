@@ -1,6 +1,5 @@
 import { spawn } from 'child_process';
-import type { ExperimentRow } from '../types';
-import { saveExperiment } from '../db/experiments';
+// import type { ExperimentRow } from '../types'; // available when needed
 
 export interface RunHandle {
   runId: string;
@@ -57,24 +56,7 @@ export function emitEvent(handle: RunHandle, kind: string, data: Record<string, 
   }
 }
 
-function onEnd(handle: RunHandle, onPersist: (payload: Partial<ExperimentRow>) => void): void {
-  const metrics = handle.finalMetrics;
-  const payload: Partial<ExperimentRow> = {
-    id: handle.runId,
-    finished_at: new Date().toISOString(),
-    result_summary: metrics ? JSON.stringify(metrics) : null,
-    final_yes_mid: metrics.yes_mid_final as number | undefined,
-    total_fills: metrics.n_fills as number | undefined,
-    total_actions: metrics.n_actions as number | undefined,
-    avg_tick_time_ms: handle.tickCount
-      ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
-      : undefined,
-  };
-  if (!handle.cancel) {
-    payload.status = 'completed';
-  }
-  onPersist(payload);
-}
+// onEnd helper available for future use if persisting from runner directly
 
 export function spawnRun(
   handle: RunHandle,
@@ -124,7 +106,6 @@ export function spawnRun(
 
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', (chunk: string) => {
-    // eslint-disable-next-line no-console
     console.error('[runner_cli.py stderr]', chunk.trimEnd());
   });
 

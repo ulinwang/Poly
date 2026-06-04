@@ -7,7 +7,7 @@ const CATEGORIES = [
 ];
 
 export default async function marketsRoutes(app: FastifyInstance) {
-  app.get('', async (req, reply) => {
+  app.get('', async (req, _reply) => {
     const { q = '', limit = '30', live_only = '' } = req.query as Record<string, string>;
     const markets = await listPolymarketMarkets(
       q,

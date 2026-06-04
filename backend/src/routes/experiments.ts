@@ -8,7 +8,7 @@ import {
   getExperiment,
 } from '../db/experiments';
 import { createRunHandle, emitEvent, spawnRun } from '../services/runner';
-import type { ExperimentConfig, ExperimentRow, ApiSettings } from '../types';
+import type { ExperimentConfig, ExperimentRow } from '../types';
 import { getApiSettings } from '../db/settings';
 
 import type { RunHandle } from '../services/runner';

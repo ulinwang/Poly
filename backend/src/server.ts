@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { config } from './config';
+// config imported for potential future use
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,7 +41,6 @@ export async function buildServer() {
       reply.status(404).send({ message: 'API endpoint not found' });
       return;
     }
-    const indexPath = path.join(distPath, 'index.html');
     return reply.sendFile('index.html');
   });
 
