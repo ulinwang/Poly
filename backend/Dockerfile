@@ -1,30 +1,38 @@
-FROM python:3.12-slim
+# Backend Dockerfile for the TypeScript Fastify API
+# Build context: project root (polymetl/)
+
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install system dependencies (for packages that may need compilation)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Install build tools required for native dependencies (better-sqlite3)
+RUN apk add --no-cache python3 make g++
 
-# Copy dependency files
-COPY pyproject.toml requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# 1. Copy backend dependency manifests and install all deps (dev + prod) for build
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci
 
-# Copy backend source code and parent packages it depends on
-COPY webapp/backend/ ./webapp/backend/
-COPY agent/ ./agent/
-COPY environment/ ./environment/
-COPY experiments/ ./experiments/
-COPY viz/ ./viz/
-COPY data/ ./data/
+# 2. Copy backend source and compile TypeScript
+COPY backend/src ./backend/src
+COPY backend/tsconfig.json ./backend/
+RUN cd backend && npm run build
 
-# Ensure SQLite data directory exists and is writable
-RUN mkdir -p /app/webapp/backend/data
+# 3. Remove dev dependencies to keep the image lean
+RUN cd backend && npm prune --production
 
-# Set Python path so webapp.backend resolves correctly
-ENV PYTHONPATH=/app
+# 4. Copy pre-built frontend static files so Fastify can serve them
+COPY webapp/frontend/dist ./webapp/frontend/dist
+
+# 5. Ensure SQLite data directory exists for volume persistence
+RUN mkdir -p /app/backend/data
+
+# Runtime configuration
+ENV PORT=8000
+ENV HOST=0.0.0.0
+ENV NODE_ENV=production
+ENV DATA_DIR=/app/backend/data
 
 EXPOSE 8000
 
-CMD ["uvicorn", "webapp.backend.server_v2:app", "--host", "0.0.0.0", "--port", "8000"]
+WORKDIR /app/backend
+CMD ["npm", "start"]

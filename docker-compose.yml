@@ -16,6 +16,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
-      - ./webapp/backend/data:/app/webapp/backend/data
+      - ./backend/data:/app/backend/data
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+      - DATA_DIR=/app/backend/data
     restart: unless-stopped
