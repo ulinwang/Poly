@@ -1,9 +1,10 @@
-"""FastAPI v2 backend — modular routers, SQLite persistence, LLM provider abstraction.
+"""FastAPI v2 backend — DEPRECATED.
 
-This is the new backend that serves the React frontend while maintaining
-backward compatibility with the existing SSE streaming runner.
+⚠️  This Python backend is deprecated and kept for reference only.
+    The active backend is the TypeScript Fastify server in `backend/`.
+    Please use `cd backend && npm run dev` instead.
 
-Run:
+Run (legacy only):
     uv run python -m webapp.backend.server_v2 --port 8765
 """
 from __future__ import annotations
