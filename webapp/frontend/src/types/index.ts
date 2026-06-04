@@ -42,7 +42,7 @@ export interface Experiment {
 
 export interface ApiSettings {
   id?: number;
-  provider: 'openai' | 'anthropic' | 'deepseek' | 'custom';
+  provider: 'openai' | 'anthropic' | 'deepseek' | 'kimi' | 'custom';
   model: string;
   api_key: string;
   base_url?: string;
