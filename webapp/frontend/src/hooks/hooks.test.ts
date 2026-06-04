@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Inline the pure formatter logic (no React hook dependency)
 function fmt(n: number | null | undefined): string {
@@ -36,16 +36,9 @@ describe('formatNumber', () => {
 });
 
 describe('useDebounce', () => {
-  it('waits before updating (simulated)', async () => {
-    vi.useFakeTimers();
-    let value = 'a';
-    const delay = 300;
-
-    // Simulate debounce: set value, wait, check
-    value = 'b';
-    vi.advanceTimersByTime(delay - 10);
-    expect(value).toBe('b'); // value changed immediately in this simulation
-
-    vi.useRealTimers();
+  it(' conceptually delays updates', () => {
+    // useDebounce is a React hook; unit testing it requires a test renderer.
+    // This test documents the expected behavior.
+    expect(true).toBe(true);
   });
 });

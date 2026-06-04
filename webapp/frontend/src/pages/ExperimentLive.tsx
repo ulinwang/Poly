@@ -8,10 +8,13 @@ import { Square, ArrowLeft, TrendingUp, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber } from '../hooks';
+import type { Experiment } from '../types';
+
+const PIE_COLORS = ['#0d9488', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899'];
 
 export default function ExperimentLive() {
   const { id } = useParams<{ id: string }>();
-  const [experiment, setExperiment] = useState<any>(null);
+  const [experiment, setExperiment] = useState<Experiment | null>(null);
   const [loading, setLoading] = useState(true);
 
   const metrics = useExperimentStore((s) => s.metrics);
@@ -29,11 +32,17 @@ export default function ExperimentLive() {
   useEffect(() => {
     if (!id) return;
     resetSimulation();
+    let cancelled = false;
     setLoading(true);
     api.getExperiment(id)
-      .then((res) => setExperiment(res.experiment))
+      .then((res) => {
+        if (!cancelled) setExperiment(res.experiment);
+      })
       .catch((err) => console.error('Failed to load experiment:', err))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [id, resetSimulation]);
 
   const handleCancel = () => {
@@ -41,13 +50,12 @@ export default function ExperimentLive() {
     api.cancelExperiment(id).catch(console.error);
   };
 
-  if (loading) {
-    return <div className="text-center py-20 text-surface-400">Loading experiment...</div>;
-  }
+  // Derived data — must be before any conditional return
+  const chartData = useMemo(
+    () => metrics.yesMidHistory.map((v, i) => ({ tick: i, value: v })),
+    [metrics.yesMidHistory],
+  );
 
-  const chartData = metrics.yesMidHistory.map((v, i) => ({ tick: i, value: v }));
-
-  // Compute derived stats
   const summary = experiment?.result_summary as Record<string, unknown> | undefined;
   const pnlData = useMemo(() => {
     const pnl = summary?.pnl as Record<string, number> | undefined;
@@ -64,9 +72,11 @@ export default function ExperimentLive() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [decisions]);
 
-  const PIE_COLORS = ['#0d9488', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899'];
-
   const isDone = experiment?.status === 'completed' || experiment?.status === 'cancelled' || experiment?.status === 'error';
+
+  if (loading) {
+    return <div className="text-center py-20 text-surface-400">Loading experiment...</div>;
+  }
 
   return (
     <div className="space-y-6">

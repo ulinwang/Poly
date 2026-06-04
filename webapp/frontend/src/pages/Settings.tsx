@@ -103,7 +103,7 @@ function APISettings() {
           onChange={(e) => {
             const p = PROVIDERS.find((p) => p.id === e.target.value);
             updateApiSettings({
-              provider: e.target.value as any,
+              provider: e.target.value as import('../types').ApiSettings['provider'],
               model: p?.models[0] || '',
             });
           }}

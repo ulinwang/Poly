@@ -126,7 +126,7 @@ export default function MarketDetail() {
               <label className="block text-xs text-surface-500 mb-1">Persona Set</label>
               <select
                 value={personaSet}
-                onChange={(e) => setPersonaSet(e.target.value as any)}
+                onChange={(e) => setPersonaSet(e.target.value as 'archetype' | 'calibrated' | 'no_signal')}
                 className="input"
               >
                 <option value="archetype">Archetype (K-means)</option>
