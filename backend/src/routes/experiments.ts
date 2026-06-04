@@ -8,7 +8,8 @@ import {
   getExperiment,
 } from '../db/experiments';
 import { createRunHandle, emitEvent, spawnRun } from '../services/runner';
-import type { ExperimentConfig, ExperimentRow } from '../types';
+import type { ExperimentConfig, ExperimentRow, ApiSettings } from '../types';
+import { getApiSettings } from '../db/settings';
 
 import type { RunHandle } from '../services/runner';
 
@@ -110,27 +111,36 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       result_summary: null,
     });
 
-    spawnRun(handle, (kind: string, data: Record<string, unknown>) => {
-      emitEvent(handle, kind, data);
-      if (kind === '__end__') {
-        const metrics = handle.finalMetrics;
-        const payload: Partial<ExperimentRow> = {
-          id: runId,
-          finished_at: new Date().toISOString(),
-          result_summary: metrics ? JSON.stringify(metrics) : null,
-          final_yes_mid: metrics.yes_mid_final as number | undefined,
-          total_fills: metrics.n_fills as number | undefined,
-          total_actions: metrics.n_actions as number | undefined,
-          avg_tick_time_ms: handle.tickCount
-            ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
-            : undefined,
-        };
-        if (!handle.cancel) {
-          payload.status = 'completed';
+    const settings = getApiSettings();
+    const apiSettings = settings
+      ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
+      : undefined;
+
+    spawnRun(
+      handle,
+      (kind: string, data: Record<string, unknown>) => {
+        emitEvent(handle, kind, data);
+        if (kind === '__end__') {
+          const metrics = handle.finalMetrics;
+          const payload: Partial<ExperimentRow> = {
+            id: runId,
+            finished_at: new Date().toISOString(),
+            result_summary: metrics ? JSON.stringify(metrics) : null,
+            final_yes_mid: metrics.yes_mid_final as number | undefined,
+            total_fills: metrics.n_fills as number | undefined,
+            total_actions: metrics.n_actions as number | undefined,
+            avg_tick_time_ms: handle.tickCount
+              ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
+              : undefined,
+          };
+          if (!handle.cancel) {
+            payload.status = 'completed';
+          }
+          saveExperiment(payload);
         }
-        saveExperiment(payload);
-      }
-    });
+      },
+      apiSettings,
+    );
 
     return { run_id: runId };
   });

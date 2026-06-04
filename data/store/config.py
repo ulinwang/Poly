@@ -28,12 +28,18 @@ class Settings(BaseSettings):
     # Network chain id (137 for Polygon mainnet)
     CHAIN_ID: int = 137
 
-    # DeepSeek agent simulation (src/agent.py)
+    # LLM provider settings (DeepSeek & Kimi are OpenAI-compatible)
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_TIMEOUT: float = 60.0
     DEEPSEEK_TEMPERATURE: float = 1.0
+
+    KIMI_BASE_URL: str = "https://api.moonshot.cn/v1"
+    KIMI_MODEL: str = "moonshot-v1-8k"
+    KIMI_API_KEY: str | None = None
+    KIMI_TIMEOUT: float = 60.0
+    KIMI_TEMPERATURE: float = 1.0
 
     # v4 calibrated-init parameters (see docs/EXPERIMENT_LOG.md). The
     # signal sigma is the noise around the pre-event consensus mu the

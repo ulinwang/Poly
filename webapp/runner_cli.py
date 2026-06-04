@@ -57,7 +57,7 @@ def main() -> None:
 
     # 3. Run simulation
     try:
-        run_stream(
+        kwargs = dict(
             slug=config["slug"],
             n_agents=config["n_agents"],
             n_ticks_override=config["n_ticks"] if config["n_ticks"] is not None else None,
@@ -68,6 +68,11 @@ def main() -> None:
             cancel=cancel_event,
             data_dir=Path(config["data_dir"]),
         )
+        # Pass through optional LLM overrides from frontend settings
+        for key in ("api_key", "base_url", "model"):
+            if key in config and config[key] is not None:
+                kwargs[key] = config[key]
+        run_stream(**kwargs)
     except Exception as exc:  # noqa: BLE001
         on_event("error", {"message": str(exc)})
         sys.exit(1)

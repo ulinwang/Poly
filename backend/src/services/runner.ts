@@ -79,12 +79,13 @@ function onEnd(handle: RunHandle, onPersist: (payload: Partial<ExperimentRow>) =
 export function spawnRun(
   handle: RunHandle,
   onEvent: (kind: string, data: Record<string, unknown>) => void,
+  apiSettings?: { api_key?: string; base_url?: string; model?: string },
 ): void {
   const child = spawn('.venv/bin/python3', ['webapp/runner_cli.py'], {
     cwd: '/Users/moonshot/Projects/Poly/polymetl',
   });
 
-  const config = {
+  const config: Record<string, unknown> = {
     slug: handle.slug,
     n_agents: handle.nAgents,
     n_ticks: handle.nTicks,
@@ -93,6 +94,9 @@ export function spawnRun(
     temperature: 0.0,
     data_dir: 'data',
   };
+  if (apiSettings?.api_key) config.api_key = apiSettings.api_key;
+  if (apiSettings?.base_url) config.base_url = apiSettings.base_url;
+  if (apiSettings?.model) config.model = apiSettings.model;
 
   child.stdin.write(JSON.stringify(config));
   child.stdin.end();

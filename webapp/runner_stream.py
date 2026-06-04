@@ -74,6 +74,9 @@ def run_stream(
     on_event: EventCallback,
     cancel: Optional[threading.Event] = None,
     data_dir: Path = Path("data"),
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> None:
     """Execute one simulation, streaming events through `on_event`.
 
@@ -168,14 +171,16 @@ def run_stream(
     })
 
     # 5. LLM loop — events fire as soon as each decision lands.
-    if not settings.DEEPSEEK_API_KEY:
+    _api_key = api_key or settings.DEEPSEEK_API_KEY
+    _base_url = base_url or settings.DEEPSEEK_BASE_URL
+    _model = model or settings.DEEPSEEK_MODEL
+
+    if not _api_key:
         on_event("error", {
             "where": "preflight_llm",
-            "message": "POLYMETL_DEEPSEEK_API_KEY not set; live demo requires it",
+            "message": "LLM API key not set; configure provider in Settings or set POLYMETL_DEEPSEEK_API_KEY",
         })
         return
-
-    model = settings.DEEPSEEK_MODEL
     for tick in range(n_ticks):
         if cancel is not None and cancel.is_set():
             on_event("cancelled", {"tick": tick})
@@ -204,9 +209,9 @@ def run_stream(
                     description=meta.get("description", ""),
                     end_date=meta.get("end_date_iso", ""),
                     market=market_snap, agent=agent_snap,
-                    api_key=settings.DEEPSEEK_API_KEY,
-                    base_url=settings.DEEPSEEK_BASE_URL,
-                    model=model,
+                    api_key=_api_key,
+                    base_url=_base_url,
+                    model=_model,
                     tick_size=priors["tick_size"],
                     temperature=temperature,
                     timeout=settings.DEEPSEEK_TIMEOUT,

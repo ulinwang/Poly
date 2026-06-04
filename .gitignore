@@ -63,6 +63,11 @@ backend/node_modules/
 backend/package-lock.json
 backend/data/
 
+# SQLite temp files
+*.db-shm
+*.db-wal
+*.db-journal
+
 # Local dev artifacts
 .mplconfig/
 tmp/

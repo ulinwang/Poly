@@ -42,6 +42,7 @@ function SettingsTab({ to, icon, label }: { to: string; icon: React.ReactNode; l
 
 const PROVIDERS = [
   { id: 'deepseek', name: 'DeepSeek', models: ['deepseek-chat', 'deepseek-reasoner'], requiresBaseUrl: false },
+  { id: 'kimi', name: 'Kimi (Moonshot)', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'], requiresBaseUrl: false },
   { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1-preview'], requiresBaseUrl: false },
   { id: 'anthropic', name: 'Anthropic', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'], requiresBaseUrl: false },
   { id: 'custom', name: 'Custom (OpenAI-compatible)', models: [], requiresBaseUrl: true },

@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { buildServer } from '../server';
+import { db } from '../db';
 
 describe('settings routes', () => {
+  beforeEach(() => {
+    db.prepare('DELETE FROM api_settings').run();
+  });
+
   it('GET /api/v1/settings/api returns defaults when empty', async () => {
     const app = await buildServer();
     const res = await app.inject({ method: 'GET', url: '/api/v1/settings/api' });

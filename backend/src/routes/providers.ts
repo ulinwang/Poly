@@ -9,6 +9,12 @@ const PROVIDERS: ProviderInfo[] = [
     requires_base_url: false,
   },
   {
+    id: 'kimi',
+    name: 'Kimi (Moonshot)',
+    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+    requires_base_url: false,
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     models: [
