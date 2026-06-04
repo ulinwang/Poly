@@ -1,7 +1,10 @@
 import { useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Square, ArrowLeft } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { Square, ArrowLeft, TrendingUp, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber } from '../hooks';
@@ -43,6 +46,27 @@ export default function ExperimentLive() {
   }
 
   const chartData = metrics.yesMidHistory.map((v, i) => ({ tick: i, value: v }));
+
+  // Compute derived stats
+  const summary = experiment?.result_summary as Record<string, unknown> | undefined;
+  const pnlData = useMemo(() => {
+    const pnl = summary?.pnl as Record<string, number> | undefined;
+    if (!pnl) return [];
+    return Object.entries(pnl).map(([agent_id, value]) => ({ agent_id: `A${agent_id}`, value }));
+  }, [summary]);
+
+  const decisionTypeData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    decisions.forEach((d) => {
+      const key = d.order_type || 'unknown';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [decisions]);
+
+  const PIE_COLORS = ['#0d9488', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899'];
+
+  const isDone = experiment?.status === 'completed' || experiment?.status === 'cancelled' || experiment?.status === 'error';
 
   return (
     <div className="space-y-6">
@@ -86,29 +110,89 @@ export default function ExperimentLive() {
         <MetricCard label="Tick Time" value={`${metrics.lastTickElapsed.toFixed(1)}s`} />
       </div>
 
-      {/* Chart */}
-      <div className="card p-4">
-        <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
-          YES Price History
-        </h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="tick" tick={{ fontSize: 12 }} />
-              <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#0d9488"
-                strokeWidth={2}
-                dot={false}
-                fill="rgba(13, 148, 136, 0.1)"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Price History */}
+        <div className="card p-4">
+          <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
+            YES Price History
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="tick" tick={{ fontSize: 12 }} />
+                <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#0d9488"
+                  strokeWidth={2}
+                  dot={false}
+                  fill="rgba(13, 148, 136, 0.1)"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+
+        {/* PnL Distribution (completed experiments only) */}
+        {isDone && pnlData.length > 0 && (
+          <div className="card p-4">
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Agent PnL Distribution
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pnlData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="agent_id" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v) => `$${Number(v).toFixed(2)}`} />
+                  <Bar dataKey="value">
+                    {pnlData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.value >= 0 ? '#0d9488' : '#ef4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Decision Type Distribution */}
+        {decisionTypeData.length > 0 && (
+          <div className="card p-4">
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Decision Types
+            </h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={decisionTypeData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                  >
+                    {decisionTypeData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Two columns: decisions + tick log */}
