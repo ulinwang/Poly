@@ -165,51 +165,71 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     const { expId } = req.params as { expId: string };
     const { replay = '1' } = req.query as Record<string, string>;
     const wantReplay = replay !== '0' && replay !== 'false';
+
     const handle = runs.get(expId);
-    if (!handle) {
-      reply.status(404);
-      return { message: 'Experiment not found' };
-    }
+    if (handle) {
+      // Live or recently finished run — stream from in-memory queue
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
 
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    });
-
-    if (wantReplay) {
-      for (const ev of handle.history) {
-        if (ev.kind === '__end__') continue;
-        reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+      if (wantReplay) {
+        for (const ev of handle.history) {
+          if (ev.kind === '__end__') continue;
+          reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+        }
       }
-    }
 
-    let idx = handle.history.length;
-    const timer = setInterval(() => {
-      while (idx < handle.queue.length) {
-        const ev = handle.queue[idx++];
-        if (ev.kind === '__end__') {
+      let idx = handle.history.length;
+      const timer = setInterval(() => {
+        while (idx < handle.queue.length) {
+          const ev = handle.queue[idx++];
+          if (ev.kind === '__end__') {
+            reply.raw.write(`event: end\ndata: {}\n\n`);
+            clearInterval(timer);
+            reply.raw.end();
+            return;
+          }
+          reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+        }
+        if (handle.finished && idx >= handle.queue.length) {
           reply.raw.write(`event: end\ndata: {}\n\n`);
           clearInterval(timer);
           reply.raw.end();
           return;
         }
-        reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
-      }
-      if (handle.finished && idx >= handle.queue.length) {
-        reply.raw.write(`event: end\ndata: {}\n\n`);
+        reply.raw.write(`event: ping\ndata: {}\n\n`);
+      }, 250);
+
+      req.raw.on('close', () => {
         clearInterval(timer);
-        reply.raw.end();
-        return;
+      });
+
+      return reply;
+    }
+
+    // Fallback: check SQLite for completed experiments
+    const row = getExperiment(expId);
+    if (row && row.result_summary) {
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      try {
+        const summary = JSON.parse(row.result_summary);
+        reply.raw.write(`event: settled\ndata: ${JSON.stringify(summary)}\n\n`);
+      } catch {
+        reply.raw.write(`event: settled\ndata: {}\n\n`);
       }
-      // heartbeat
-      reply.raw.write(`event: ping\ndata: {}\n\n`);
-    }, 250);
+      reply.raw.write(`event: end\ndata: {}\n\n`);
+      reply.raw.end();
+      return reply;
+    }
 
-    req.raw.on('close', () => {
-      clearInterval(timer);
-    });
-
-    return reply;
+    reply.status(404);
+    return { message: 'Experiment not found' };
   });
 }
