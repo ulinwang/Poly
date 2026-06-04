@@ -2,7 +2,11 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { config } from './config';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 import marketsRoutes from './routes/markets';
 import experimentsRoutes from './routes/experiments';
