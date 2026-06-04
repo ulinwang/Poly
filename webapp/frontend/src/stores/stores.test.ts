@@ -78,4 +78,30 @@ describe('Experiment store', () => {
     }
     expect(useExperimentStore.getState().decisions.length).toBe(400);
   });
+
+  it('adds tick log with FIFO cap', () => {
+    const store = useExperimentStore.getState();
+    for (let i = 0; i < 310; i++) {
+      store.addTickLog({
+        id: i, time: '12:00:00', label: 'tick', msg: `tick ${i}`, kind: 'info',
+      });
+    }
+    expect(useExperimentStore.getState().tickLog.length).toBe(300);
+  });
+
+  it('merges metrics partially', () => {
+    const store = useExperimentStore.getState();
+    store.setMetrics({ yesMid: 0.75, nFills: 12 });
+    const s = useExperimentStore.getState();
+    expect(s.metrics.yesMid).toBe(0.75);
+    expect(s.metrics.nFills).toBe(12);
+    expect(s.metrics.nActions).toBe(0); // unchanged default
+  });
+
+  it('accumulates events', () => {
+    const store = useExperimentStore.getState();
+    store.addEvent({ event: 'tick_started', data: { tick: 1 } });
+    store.addEvent({ event: 'tick_finished', data: { tick: 1 } });
+    expect(useExperimentStore.getState().events.length).toBe(2);
+  });
 });
