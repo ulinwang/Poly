@@ -1,2 +1,0 @@
-config,market_key,n_agents,n_ticks,truth_label,signal_mu,start_mid,end_mid,drift,direction_score,distance_to_truth,volatility,max_abs_step,n_fills,fills_per_agent_tick,notional,notional_per_agent,active_trade_fill_rate,cancel_per_fill,price_response_per_1k_notional,pnl_mean,pnl_std,pnl_spread
-rq5_spacex_s0,spacex,20,20,NO 结局，YES=0.00,0.6794,0.7,0.635,-0.065,0.065,0.635,0.0344,0.125,70,0.175,832.4202,41.621,0.303,1.6857,0.0781,0.034,165.4819,594.3585

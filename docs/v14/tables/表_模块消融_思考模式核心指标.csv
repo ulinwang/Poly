@@ -1,5 +1,0 @@
-base,mode,end_mid_mean,end_mid_sd,volatility
-robotaxi,on,0.417,0.033,0.0184
-robotaxi,off,0.443,0.02,0.0161
-ethereum,on,0.553,0.016,0.0072
-ethereum,off,0.568,0.035,0.0065

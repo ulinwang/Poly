@@ -1,7 +1,0 @@
-suite,run,n_trades,frac_consistent
-c5_robotaxi,20260523T065209-c5_robotaxi_on,121,0.959
-c5_robotaxi,20260523T064254-c5_robotaxi_on,113,0.991
-c5_robotaxi,20260523T064732-c5_robotaxi_on,120,0.958
-c5_ethereum,20260523T064226-c5_ethereum_on,129,0.953
-c5_ethereum,20260523T064539-c5_ethereum_on,110,0.936
-c5_ethereum,20260523T065240-c5_ethereum_on,132,0.879
