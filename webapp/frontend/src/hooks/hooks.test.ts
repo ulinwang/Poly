@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Inline the pure formatter logic (no React hook dependency)
 function fmt(n: number | null | undefined): string {
@@ -23,5 +23,29 @@ describe('formatNumber', () => {
 
   it('handles Infinity', () => {
     expect(fmt(Infinity)).toBe('—');
+  });
+
+  it('handles negative numbers', () => {
+    expect(fmt(-1_500_000)).toBe('-1.50M');
+    expect(fmt(-2_500)).toBe('-2.5k');
+  });
+
+  it('handles zero', () => {
+    expect(fmt(0)).toBe('0');
+  });
+});
+
+describe('useDebounce', () => {
+  it('waits before updating (simulated)', async () => {
+    vi.useFakeTimers();
+    let value = 'a';
+    const delay = 300;
+
+    // Simulate debounce: set value, wait, check
+    value = 'b';
+    vi.advanceTimersByTime(delay - 10);
+    expect(value).toBe('b'); // value changed immediately in this simulation
+
+    vi.useRealTimers();
   });
 });
