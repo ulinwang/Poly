@@ -22,50 +22,50 @@ Key features:
 ## Architecture
 
 ```text
-+------------------+       +------------------+
-|   experiments/   |       |  webapp/         |
-|   runner.py      |       |  ├── backend/    |
-|   parquet_sink   |       |  │   FastAPI + SSE|
-|   analysis/      |       |  └── frontend/   |
-|   plots/         |       |       React 19   |
-+--------+---------+       +--------+---------+
-         |                          |
-    reads features            SQLite settings
-    writes parquet            Live tick streams
-         |                          |
-+--------v---------+       +--------v---------+
-|     agent/       |       |   environment/   |
-|  factory.py      |       |  PolyEnv (CLOB)  |
-|  features/*.py   |       |  orderbook.py    |
-|  personas/*.py   |       |  tools/*.py      |
-|  prompt/*.py     |       |  observers/*.py  |
-|  decision/*.py   |       |  ctf/fees/settle |
-|  memory/*.py     |       |  seeders/*.py    |
-+--------+---------+       +--------+---------+
-         |                          |
-         |    data.query.* only     |  priors
-         +------------+-------------+
-                      |
-           +----------v----------+
-           |       data/         |
-           |  sources/{gamma_api,|
-           |          clob_api,  |
-           |          data_api}  |
-           |  store/clickhouse   |
-           |  query/*.py         |
-           +----------+----------+
-                      |
-           +----------v----------+
-           |    ClickHouse DB    |
-           |  (canonical market  |
-           |   + trade data)     |
-           +---------------------+
++------------------+       +------------------+       +------------------+
+|   experiments/   |       |   backend/       |       |  webapp/frontend |
+|   runner.py      |       |   Fastify + SSE  |       |  React 19 SPA    |
+|   parquet_sink   |       |   SQLite + TS    |       |  Vite + Tailwind |
+|   analysis/      |       |                  |       |  Zustand + Charts|
++--------+---------+       +--------+---------+       +--------+---------+
+         |                          |                          |
+    reads features            serves API                 live tick UI
+    writes parquet            spawns Python              market explorer
+         |                     runner via CLI             experiment mgr
++--------v---------+          +--------v---------+        +--------v---------+
+|     agent/       |          |  webapp/runner_  |        |   environment/   |
+|  factory.py      |          |   stream.py      |        |  PolyEnv (CLOB)  |
+|  features/*.py   |          |   (LLM sim core) |        |  orderbook.py    |
+|  personas/*.py   |          +------------------+        |  tools/*.py      |
+|  prompt/*.py     |                                      |  observers/*.py  |
+|  decision/*.py   |                                      |  ctf/fees/settle |
+|  memory/*.py     |                                      |  seeders/*.py    |
++--------+---------+                                      +--------+---------+
+         |                                                         |
+         |              data.query.* only                          |  priors
+         +---------------------------+-----------------------------+
+                                     |
+                          +----------v----------+
+                          |       data/         |
+                          |  sources/{gamma_api,|
+                          |          clob_api,  |
+                          |          data_api}  |
+                          |  store/clickhouse   |
+                          |  query/*.py         |
+                          +----------+----------+
+                                     |
+                          +----------v----------+
+                          |    ClickHouse DB    |
+                          |  (canonical market  |
+                          |   + trade data)     |
+                          +---------------------+
 ```
 
 * **Frontend** — React 19 + Vite + Tailwind CSS + Recharts + Zustand
-* **Backend** — FastAPI (Python) with modular routers, SQLite persistence, and Server-Sent Events (SSE) for live simulation streaming
-* **Data Layer** — ClickHouse (historical Polymarket data) + SQLite (experiments, settings, results)
-* **Simulation Core** — LLM agents with configurable personas, empirically calibrated from real wallet behavior
+* **Backend** — TypeScript Fastify with modular routers, SQLite persistence, and Server-Sent Events (SSE) for live simulation streaming
+* **Simulation Core** — Python LLM agents with configurable personas, empirically calibrated from real wallet behavior; spawned via CLI wrapper from the TS backend
+* **Data Layer** — ClickHouse (historical Polymarket data, optional) + SQLite (experiments, settings, results)
+* **Provider Support** — DeepSeek (default), Kimi (Moonshot), OpenAI, Anthropic, and any OpenAI-compatible custom endpoint
 
 ## Quick Start
 
@@ -84,7 +84,7 @@ cd polymetl
 docker-compose up
 ```
 
-*Access the dashboard at `http://localhost:8765`*
+*Access the dashboard at `http://localhost:80`* (frontend nginx proxies `/api` to backend on `:8000`)
 
 ### Option 2: Manual
 
@@ -93,23 +93,28 @@ docker-compose up
 uv sync
 # or: pip install -e .
 
-# 2. Configure environment
+# 2. Install Node.js dependencies
+cd backend && npm install
+cd ../webapp/frontend && npm install
+
+# 3. Configure environment
 cp .env.example .env
-# Edit .env — set your LLM API key and ClickHouse host
+# Edit .env — set your LLM API key and ClickHouse host (optional)
 
-# 3. Start ClickHouse (if local) and create the database
-clickhouse-client --query "CREATE DATABASE IF NOT EXISTS polymetl"
-
-# 4. Start the backend (from project root)
-uv run python -m webapp.backend.server_v2 --port 8765
-
-# 5. Start the frontend (in another terminal)
+# 4. Build the frontend
 cd webapp/frontend
-npm install
-npm run dev
+npm run build
+
+# 5. Start the TypeScript backend (from project root)
+cd backend
+npm run dev          # dev mode with hot reload (port 8765)
+# or: npm run build && npm start   # production mode
+
+# 6. Open the dashboard
+open http://localhost:8765
 ```
 
-*Frontend dev server runs on `http://localhost:5173` (or as printed in the terminal).*
+*The TS backend serves the built frontend statically and proxies API requests. No separate frontend dev server is required in production.*
 
 ## Configuration
 
@@ -117,16 +122,21 @@ Copy `.env.example` to `.env` and fill in the required values.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `POLYMETL_DEEPSEEK_API_KEY` | DeepSeek API key (preferred) | `sk-...` |
-| `POLYMETL_OPENAI_API_KEY` | OpenAI API key (alternative) | `sk-...` |
+| `POLYMETL_DEEPSEEK_API_KEY` | DeepSeek API key (default) | `sk-...` |
+| `POLYMETL_KIMI_API_KEY` | Kimi (Moonshot) API key | `sk-...` |
+| `POLYMETL_OPENAI_API_KEY` | OpenAI API key | `sk-...` |
 | `POLYMETL_DEEPSEEK_BASE_URL` | DeepSeek-compatible endpoint | `https://api.deepseek.com/v1` |
-| `POLYMETL_DEEPSEEK_MODEL` | Model name for agent decisions | `deepseek-v4-flash` |
-| `POLYMETL_CLICKHOUSE_HOST` | ClickHouse host | `localhost` |
+| `POLYMETL_KIMI_BASE_URL` | Kimi-compatible endpoint | `https://api.moonshot.cn/v1` |
+| `POLYMETL_DEEPSEEK_MODEL` | Default model for agent decisions | `deepseek-v4-flash` |
+| `POLYMETL_KIMI_MODEL` | Default Kimi model | `moonshot-v1-8k` |
+| `POLYMETL_CLICKHOUSE_HOST` | ClickHouse host (optional) | `localhost` |
 | `POLYMETL_CLICKHOUSE_PORT` | ClickHouse native port | `9000` |
 | `POLYMETL_CLICKHOUSE_USER` | ClickHouse user | `default` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | ClickHouse password | *(empty)* |
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database name | `polymetl` |
 | `POLYMETL_RPC_URL` | Polygon RPC for on-chain data | `https://1rpc.io/matic` |
+
+> **Provider selection at runtime** — The web dashboard's Settings page lets you switch between DeepSeek, Kimi, OpenAI, Anthropic, or any custom OpenAI-compatible endpoint without restarting the server.
 
 > **Security note** — Never commit `.env`. The `.env.example` file contains only safe defaults.
 
@@ -136,6 +146,15 @@ Copy `.env.example` to `.env` and fill in the required values.
 
 ```text
 polymetl/
+├── backend/             # TypeScript Fastify backend (NEW)
+│   ├── src/
+│   │   ├── server.ts    # Fastify app factory
+│   │   ├── routes/      # markets, experiments, settings, providers
+│   │   ├── services/    # Polymarket API fetcher, runner spawner
+│   │   ├── db/          # better-sqlite3 persistence
+│   │   └── types/       # Shared TypeScript interfaces
+│   ├── Dockerfile       # TS backend container image
+│   └── tests/           # Vitest unit + integration tests
 ├── data/                # ETL pipelines, ClickHouse schemas, query layer
 │   ├── sources/         # API pullers (Gamma, CLOB, Data API)
 │   ├── store/           # ClickHouse + config connections
@@ -161,26 +180,27 @@ polymetl/
 │   ├── analysis/        # Post-hoc metrics + SERD clustering
 │   └── plots/           # Matplotlib / Plotly figure generation
 ├── webapp/              # Full-stack dashboard
-│   ├── backend/         # FastAPI server + SQLite DB
-│   │   ├── server_v2.py
-│   │   ├── routers/     # settings, markets, experiments
-│   │   ├── models/      # Pydantic request/response models
-│   │   └── database.py  # SQLite persistence layer
+│   ├── runner_stream.py # Python simulation streaming entry point
+│   ├── runner_cli.py    # CLI wrapper (stdin JSON → stdout JSONL events)
+│   ├── backend/         # Legacy FastAPI server (deprecated, kept for reference)
 │   └── frontend/        # React 19 SPA
 │       ├── src/pages/   # Dashboard, Market Explorer, Experiment Builder
 │       ├── src/components/
 │       └── src/stores/  # Zustand state management
-├── tests/               # Unit + integration tests
-├── output/              # Per-experiment artifact trees (gitignored)
-└── docs/                # Architecture, reproduction, data inventory
+├── tests/               # Python unit + integration tests
+├── output/              # Per-experiment artifact trees (gitignored, see ../thesis-assets/)
+└── docs/                # Thesis manuscripts (gitignored, see ../thesis-assets/)
 ```
 
 ### Running Tests
 
 ```bash
+# TypeScript backend tests (vitest)
+cd backend
+npm test
+
 # Python tests (~240 tests)
 python -m unittest discover -s tests -t .
-
 # Or with uv
 uv run python -m unittest discover -s tests -t .
 ```
@@ -197,18 +217,26 @@ uv run python -m unittest discover -s tests -t .
 
 ### Docker
 
-A `docker-compose.yml` (to be added) should orchestrate:
+`docker-compose.yml` orchestrates two services:
 
-* `clickhouse` — historical data store
-* `backend` — FastAPI server (`webapp/backend/server_v2.py`)
 * `frontend` — Nginx serving the built React SPA (`webapp/frontend/dist`)
+* `backend` — TypeScript Fastify server (`backend/Dockerfile`)
 
-Build the frontend for production:
+Build and run:
 
 ```bash
-cd webapp/frontend
-npm run build
+# 1. Build frontend first (needed by backend static file serving)
+cd webapp/frontend && npm install && npm run build
+
+# 2. Start everything
+cd ../..
+docker-compose up
 ```
+
+The backend container:
+- Serves API on port `8000`
+- Serves built frontend SPA with fallback to `index.html`
+- Persists SQLite data via volume mount `./backend/data:/app/backend/data`
 
 ### Environment-Specific Configs
 
