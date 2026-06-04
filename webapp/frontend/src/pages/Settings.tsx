@@ -73,12 +73,12 @@ function APISettings() {
   const handleTest = async () => {
     setTestResult('Testing connection...');
     try {
-      // In a real implementation, this would call a test endpoint
-      await new Promise((r) => setTimeout(r, 1000));
-      setTestResult('Connection successful!');
-      setTimeout(() => setTestResult(null), 3000);
+      const res = await api.testConnection(apiSettings);
+      setTestResult(res.ok ? 'Connection successful!' : `Connection failed: ${res.message}`);
+      setTimeout(() => setTestResult(null), 5000);
     } catch (err) {
       setTestResult('Connection failed: ' + (err as Error).message);
+      setTimeout(() => setTestResult(null), 5000);
     }
   };
 

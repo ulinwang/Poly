@@ -86,6 +86,13 @@ export const api = {
       body: JSON.stringify(settings),
     }),
 
+  // Settings test
+  testConnection: (settings: import('../types').ApiSettings) =>
+    fetchJson<{ ok: boolean; message: string }>('/api/v1/settings/test', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+
   // Providers
   listProviders: () =>
     fetchJson<{ providers: import('../types').ProviderInfo[] }>('/api/v1/providers'),
