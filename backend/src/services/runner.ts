@@ -1,3 +1,4 @@
+import { spawn } from 'child_process';
 import type { ExperimentRow } from '../types';
 import { saveExperiment } from '../db/experiments';
 
@@ -79,38 +80,74 @@ export function spawnRun(
   handle: RunHandle,
   onEvent: (kind: string, data: Record<string, unknown>) => void,
 ): void {
-  const totalTicks = handle.nTicks;
-  let tick = 0;
+  const child = spawn('.venv/bin/python3', ['webapp/runner_cli.py'], {
+    cwd: '/Users/moonshot/Projects/Poly/polymetl',
+  });
 
-  const interval = setInterval(() => {
+  const config = {
+    slug: handle.slug,
+    n_agents: handle.nAgents,
+    n_ticks: handle.nTicks,
+    persona_set: handle.personaSet,
+    seed: 0,
+    temperature: 0.0,
+    data_dir: 'data',
+  };
+
+  child.stdin.write(JSON.stringify(config));
+  child.stdin.end();
+
+  let buffer = '';
+
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    buffer += chunk;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line) as { kind: string; data: Record<string, unknown> };
+        onEvent(event.kind, event.data);
+        if (event.kind === '__end__') {
+          handle.finished = true;
+        }
+      } catch {
+        // ignore malformed lines
+      }
+    }
+  });
+
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    // eslint-disable-next-line no-console
+    console.error('[runner_cli.py stderr]', chunk.trimEnd());
+  });
+
+  const cancelCheck = setInterval(() => {
     if (handle.cancel) {
-      clearInterval(interval);
-      handle.finished = true;
-      onEvent('__end__', {});
-      return;
+      clearInterval(cancelCheck);
+      child.kill('SIGTERM');
     }
+  }, 250);
 
-    tick += 1;
-    const yesMid = 0.4 + Math.random() * 0.2;
-    onEvent('tick', {
-      tick,
-      yesMid,
-      fills: Math.floor(Math.random() * 10),
-      actions: Math.floor(Math.random() * 20),
-    });
-    onEvent('tick_finished', { tick, elapsed_s: 0.25 + Math.random() * 0.5 });
-
-    if (tick >= totalTicks) {
-      clearInterval(interval);
-      const finalYesMid = 0.4 + Math.random() * 0.2;
-      onEvent('settled', {
-        yes_mid_final: finalYesMid,
-        n_fills: Math.floor(Math.random() * 100),
-        n_actions: Math.floor(Math.random() * 200),
-        total_ticks: totalTicks,
-      });
+  child.on('error', (err) => {
+    clearInterval(cancelCheck);
+    if (!handle.finished) {
+      onEvent('error', { message: err.message });
       handle.finished = true;
       onEvent('__end__', {});
     }
-  }, 300);
+  });
+
+  child.on('exit', (code) => {
+    clearInterval(cancelCheck);
+    if (!handle.finished) {
+      if (code !== 0) {
+        onEvent('error', { message: `process exited with code ${code}` });
+      }
+      handle.finished = true;
+      onEvent('__end__', {});
+    }
+  });
 }
