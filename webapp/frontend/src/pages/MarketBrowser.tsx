@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, memo } from 'react';
 import { TrendingUp, Flame, Globe, Trophy, Bitcoin, Gamepad2, Landmark, Brain, Music, Droplets, Vote, MoreHorizontal } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
@@ -101,12 +101,22 @@ export default function MarketBrowser() {
   );
 }
 
-function MarketCard({ market }: { market: Market }) {
-  const formatVol = (v: number) => {
-    if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-    if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}k`;
-    return `$${v.toFixed(0)}`;
-  };
+function formatVol(v: number) {
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}k`;
+  return `$${v.toFixed(0)}`;
+}
+
+const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
+  // Stable sparkline based on slug hash so it doesn't flicker on re-render
+  const sparkline = useMemo(() => {
+    const seed = market.slug.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const rng = (n: number) => {
+      const x = Math.sin(seed + n) * 10000;
+      return x - Math.floor(x);
+    };
+    return Array.from({ length: 20 }, (_, i) => 20 + rng(i) * 60);
+  }, [market.slug]);
 
   return (
     <a
@@ -138,16 +148,13 @@ function MarketCard({ market }: { market: Market }) {
 
       {/* Mini price sparkline placeholder */}
       <div className="h-8 flex items-end gap-0.5">
-        {Array.from({ length: 20 }).map((_, i) => {
-          const h = 20 + Math.random() * 60;
-          return (
-            <div
-              key={i}
-              className="flex-1 rounded-sm bg-primary-200 dark:bg-primary-800/50"
-              style={{ height: `${h}%` }}
-            />
-          );
-        })}
+        {sparkline.map((h, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-sm bg-primary-200 dark:bg-primary-800/50"
+            style={{ height: `${h}%` }}
+          />
+        ))}
       </div>
 
       <div className="flex items-center justify-between text-xs text-surface-500 dark:text-surface-400">
@@ -156,4 +163,4 @@ function MarketCard({ market }: { market: Market }) {
       </div>
     </a>
   );
-}
+});
