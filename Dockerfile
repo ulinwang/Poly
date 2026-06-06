@@ -5,11 +5,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files first for better layer caching
-COPY webapp/frontend/package*.json ./
+COPY apps/web/package*.json ./
 RUN npm ci
 
 # Copy source and build
-COPY webapp/frontend/ ./
+COPY apps/web/ ./
 RUN npm run build
 
 # Stage 2: Serve with nginx
@@ -25,7 +25,7 @@ RUN echo 'server { \
         try_files $uri $uri/ /index.html; \
     } \
     location /api/ { \
-        proxy_pass http://backend:8000/api/; \
+        proxy_pass http://backend:8765/api/; \
         proxy_http_version 1.1; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \

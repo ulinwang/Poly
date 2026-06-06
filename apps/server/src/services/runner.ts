@@ -64,7 +64,7 @@ export function spawnRun(
   onEvent: (kind: string, data: Record<string, unknown>) => void,
   apiSettings?: { api_key?: string; base_url?: string; model?: string },
 ): void {
-  const child = spawn(config.PYTHON_BIN, ['webapp/runner_cli.py'], {
+  const child = spawn(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
     cwd: config.REPO_ROOT,
   });
 

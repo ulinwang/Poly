@@ -38,7 +38,11 @@ dependencies = [
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# Monorepo Python layout: simulation core under sim/, analysis under research/,
+# shared data package at root. Multiple roots keep the historical top-level
+# import names (agent, environment, experiments, viz, scripts, data) stable so
+# no import statements needed rewriting during the reorg.
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["data*", "agent*", "environment*", "experiments*", "viz*", "webapp*"]
-exclude = ["tests*", "docs*", "output*", "figures*", "tables*"]
+where = ["sim", "research", "."]
+include = ["agent*", "environment*", "experiments*", "viz*", "scripts*", "data*"]
+exclude = ["tests*", "docs*", "output*", "figures*", "tables*", "apps*", "legacy*"]

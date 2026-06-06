@@ -13,7 +13,7 @@ import sys
 import threading
 from pathlib import Path
 
-from webapp.runner_stream import run_stream
+from runner_stream import run_stream
 
 
 def main() -> None:

@@ -1,0 +1,88 @@
+{
+  "rows": [
+    {
+      "experiment": "baseline",
+      "n_agents": 9,
+      "n_ticks": 20,
+      "yes_mid_final": 0.16,
+      "direction_correct": true,
+      "pnl_mean": -7.679043227328091,
+      "pnl_std": 156.7058039033171,
+      "pnl_min": -300.0,
+      "pnl_max": 347.05882371999905,
+      "cancel_pct": 74.44444444444444,
+      "limit_pct": 22.77777777777778,
+      "n_actions": 180
+    },
+    {
+      "experiment": "archetype-n9",
+      "n_agents": 9,
+      "n_ticks": 20,
+      "yes_mid_final": 0.16,
+      "direction_correct": true,
+      "pnl_mean": -2.2222222222222223,
+      "pnl_std": 6.285393610547089,
+      "pnl_min": -20.0,
+      "pnl_max": 0.0,
+      "cancel_pct": 66.11111111111111,
+      "limit_pct": 15.555555555555555,
+      "n_actions": 180
+    },
+    {
+      "experiment": "archetype-n30",
+      "n_agents": 30,
+      "n_ticks": 20,
+      "yes_mid_final": 0.165,
+      "direction_correct": true,
+      "pnl_mean": -2.8941990932809594,
+      "pnl_std": 73.22504845565459,
+      "pnl_min": -175.30676332453436,
+      "pnl_max": 189.21000000000004,
+      "cancel_pct": 62.5,
+      "limit_pct": 20.333333333333332,
+      "n_actions": 600
+    },
+    {
+      "experiment": "no-signal",
+      "n_agents": 9,
+      "n_ticks": 20,
+      "yes_mid_final": 0.475,
+      "direction_correct": true,
+      "pnl_mean": -37.25490182666684,
+      "pnl_std": 130.81969139153006,
+      "pnl_min": -284.7972245096171,
+      "pnl_max": 226.52173913043407,
+      "cancel_pct": 52.77777777777778,
+      "limit_pct": 33.33333333333333,
+      "n_actions": 180
+    },
+    {
+      "experiment": "baseline-mem",
+      "n_agents": 9,
+      "n_ticks": 20,
+      "yes_mid_final": 0.13,
+      "direction_correct": true,
+      "pnl_mean": 4.9019607666662575,
+      "pnl_std": 631.0434878790601,
+      "pnl_min": -988.1106438447678,
+      "pnl_max": 895.1030502344074,
+      "cancel_pct": 23.88888888888889,
+      "limit_pct": 50.0,
+      "n_actions": 180
+    },
+    {
+      "experiment": "archetype-n30-mem",
+      "n_agents": 30,
+      "n_ticks": 20,
+      "yes_mid_final": 0.175,
+      "direction_correct": true,
+      "pnl_mean": 0.8291901694578425,
+      "pnl_std": 450.6772642614955,
+      "pnl_min": -685.1176470588236,
+      "pnl_max": 2169.374677661399,
+      "cancel_pct": 16.166666666666664,
+      "limit_pct": 40.5,
+      "n_actions": 600
+    }
+  ]
+}

@@ -47,7 +47,7 @@ describe('spawnRun', () => {
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
     spawnRun(handle, vi.fn());
 
-    expect(mockSpawn).toHaveBeenCalledWith(config.PYTHON_BIN, ['webapp/runner_cli.py'], {
+    expect(mockSpawn).toHaveBeenCalledWith(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
       cwd: config.REPO_ROOT,
     });
   });

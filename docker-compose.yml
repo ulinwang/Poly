@@ -12,14 +12,14 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: apps/server/Dockerfile
     ports:
-      - "8000:8000"
+      - "8765:8765"
     volumes:
-      - ./backend/data:/app/backend/data
+      - ./apps/server/data:/app/apps/server/data
     environment:
-      - PORT=8000
+      - PORT=8765
       - HOST=0.0.0.0
       - NODE_ENV=production
-      - DATA_DIR=/app/backend/data
+      - DATA_DIR=/app/apps/server/data
     restart: unless-stopped
