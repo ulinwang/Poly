@@ -1,5 +1,10 @@
 import type { Market, MarketDetail } from '../types';
 
+interface GammaTag {
+  label?: string;
+  slug?: string;
+}
+
 interface GammaMarket {
   slug?: string;
   question?: string;
@@ -10,6 +15,7 @@ interface GammaMarket {
   closed?: boolean;
   endDate?: string;
   description?: string;
+  tags?: GammaTag[];
   markets?: Array<{
     minimumTickSize?: number;
     takerBaseFee?: number;
@@ -29,7 +35,7 @@ async function fetchGammaMarkets(): Promise<GammaMarket[]> {
   const now = Date.now();
   if (cache && now - cache.ts < CACHE_TTL_MS) return cache.data;
   try {
-    const resp = await fetch('https://gamma-api.polymarket.com/markets?limit=100');
+    const resp = await fetch('https://gamma-api.polymarket.com/markets?limit=100&include_tag=true');
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = (await resp.json()) as GammaMarket[];
     cache = { data: json, ts: now };
@@ -38,6 +44,20 @@ async function fetchGammaMarkets(): Promise<GammaMarket[]> {
     if (cache) return cache.data;
     throw err;
   }
+}
+
+// Internal/operational Gamma tags that should never surface as a user-facing
+// category (catch-all buckets, editorial flags, etc.).
+const TAG_DENYLIST = new Set([
+  'all', 'hide from new', 'recurring', 'new', 'breaking news', 'trending',
+]);
+
+// Pull human-readable category labels from the market's tags, dropping
+// internal/operational tags.
+function extractCategories(m: GammaMarket): string[] {
+  return (m.tags ?? [])
+    .map((t) => (t.label || '').trim())
+    .filter((label) => label && !TAG_DENYLIST.has(label.toLowerCase()));
 }
 
 function normalizeMarket(m: GammaMarket): Market {
@@ -50,7 +70,7 @@ function normalizeMarket(m: GammaMarket): Market {
     is_live: isLive,
     end_date_iso: m.endDate || null,
     n_holders: null,
-    categories: [],
+    categories: extractCategories(m),
   };
 }
 

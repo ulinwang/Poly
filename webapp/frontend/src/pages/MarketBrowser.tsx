@@ -1,24 +1,43 @@
 import { useEffect, useState, useMemo, memo } from 'react';
-import { TrendingUp, Flame, Globe, Trophy, Bitcoin, Gamepad2, Landmark, Brain, Music, Droplets, Vote, MoreHorizontal } from 'lucide-react';
+import {
+  TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
+  Globe, Droplets, Vote, Search, Tag,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
 import type { Market } from '../types';
 
-const CATEGORIES = [
-  { id: 'All', label: 'All', icon: null },
-  { id: 'Trending', label: 'Trending', icon: TrendingUp },
-  { id: 'Breaking', label: 'Breaking', icon: Flame },
-  { id: 'Politics', label: 'Politics', icon: Landmark },
-  { id: 'Sports', label: 'Sports', icon: Trophy },
-  { id: 'Crypto', label: 'Crypto', icon: Bitcoin },
-  { id: 'Esports', label: 'Esports', icon: Gamepad2 },
-  { id: 'Tech', label: 'Tech', icon: Brain },
-  { id: 'Culture', label: 'Culture', icon: Music },
-  { id: 'Economy', label: 'Economy', icon: Globe },
-  { id: 'Weather', label: 'Weather', icon: Droplets },
-  { id: 'Elections', label: 'Elections', icon: Vote },
-  { id: 'More', label: 'More', icon: MoreHorizontal },
-];
+// Icon hints for well-known category labels (falls back to a generic tag icon).
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  politics: Landmark,
+  sports: Trophy,
+  crypto: Bitcoin,
+  esports: Gamepad2,
+  tech: Brain,
+  culture: Music,
+  economy: Globe,
+  weather: Droplets,
+  elections: Vote,
+  trending: TrendingUp,
+};
+
+const MAX_TABS = 11;
+
+// Derive category tabs from the loaded markets, ranked by how many markets
+// carry each tag. Guarantees every tab actually has content when clicked.
+function deriveCategories(markets: Market[]): string[] {
+  const counts = new Map<string, number>();
+  for (const m of markets) {
+    for (const c of m.categories ?? []) {
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_TABS)
+    .map(([label]) => label);
+}
 
 export default function MarketBrowser() {
   const [loading, setLoading] = useState(false);
@@ -27,6 +46,7 @@ export default function MarketBrowser() {
   const category = useMarketStore((s) => s.category);
   const setCategory = useMarketStore((s) => s.setCategory);
   const searchQuery = useMarketStore((s) => s.searchQuery);
+  const setSearchQuery = useMarketStore((s) => s.setSearchQuery);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,47 +60,71 @@ export default function MarketBrowser() {
     return () => { cancelled = true; };
   }, [searchQuery, setMarkets]);
 
-  const filtered = category === 'All'
-    ? markets
-    : markets.filter((m) => {
-        const q = m.question?.toLowerCase() || '';
-        const slug = m.slug?.toLowerCase() || '';
-        return q.includes(category.toLowerCase()) || slug.includes(category.toLowerCase());
-      });
+  const categories = useMemo(() => deriveCategories(markets), [markets]);
+
+  const filtered = useMemo(() => (
+    category === 'All'
+      ? markets
+      : markets.filter((m) => (m.categories ?? []).includes(category))
+  ), [markets, category]);
+
+  const tabs = ['All', ...categories];
 
   return (
-    <div className="space-y-6">
-      {/* Category Tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-hide">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setCategory(cat.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              category === cat.id
-                ? 'bg-surface-800 dark:bg-white text-white dark:text-surface-900'
-                : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700'
-            }`}
-          >
-            {cat.icon && <cat.icon className="w-3.5 h-3.5" />}
-            {cat.label}
-          </button>
-        ))}
+    <div className="max-w-6xl mx-auto space-y-5">
+      {/* Search bar (mobile — desktop search lives in the top nav) */}
+      <div className="lg:hidden relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索市场…"
+          className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none"
+        />
       </div>
 
-      {/* Market Grid */}
+      {/* Category tabs (horizontal, Polymarket style) */}
+      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-surface-200 dark:border-surface-700">
+        {tabs.map((cat) => {
+          const Icon = cat === 'All' ? undefined : (CATEGORY_ICONS[cat.toLowerCase()] ?? Tag);
+          const active = category === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                active
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300'
+              }`}
+            >
+              {Icon && <Icon className="w-3.5 h-3.5" />}
+              {cat}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Section title */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-surface-900 dark:text-white">{category}</h2>
+        <span className="text-sm text-surface-400">{filtered.length} markets</span>
+      </div>
+
+      {/* Market grid */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="card p-4 space-y-3 animate-pulse">
+            <div key={i} className="card p-5 space-y-4 animate-pulse">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-surface-200 dark:bg-surface-700 flex-shrink-0" />
+                <div className="w-12 h-12 rounded-xl bg-surface-200 dark:bg-surface-700 flex-shrink-0" />
                 <div className="flex-1 space-y-2">
                   <div className="h-4 bg-surface-200 dark:bg-surface-700 rounded w-3/4" />
                   <div className="h-3 bg-surface-200 dark:bg-surface-700 rounded w-1/2" />
                 </div>
               </div>
-              <div className="h-8 bg-surface-200 dark:bg-surface-700 rounded" />
+              <div className="h-10 bg-surface-200 dark:bg-surface-700 rounded" />
               <div className="h-3 bg-surface-200 dark:bg-surface-700 rounded w-1/3" />
             </div>
           ))}
@@ -91,7 +135,7 @@ export default function MarketBrowser() {
           <p className="text-sm">Try adjusting your search or category filter.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((market) => (
             <MarketCard key={market.slug} market={market} />
           ))}
@@ -107,59 +151,103 @@ function formatVol(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
+function hashString(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+// Deterministic emoji/icon based on slug
+function marketIcon(slug: string): string {
+  const icons = ['🗳️', '💰', '⚽', '🎮', '🎵', '🌤️', '🏛️', '🚀', '🔬', '🌍', '🔥', '⚡'];
+  return icons[hashString(slug) % icons.length];
+}
+
+// Deterministic color for icon background
+function marketIconBg(slug: string): string {
+  const bgs = [
+    'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
+    'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
+    'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400',
+    'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400',
+    'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400',
+    'bg-cyan-50 text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400',
+  ];
+  return bgs[hashString(slug) % bgs.length];
+}
+
 const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
-  // Stable sparkline based on slug hash so it doesn't flicker on re-render
   const sparkline = useMemo(() => {
-    const seed = market.slug.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const seed = hashString(market.slug);
     const rng = (n: number) => {
       const x = Math.sin(seed + n) * 10000;
       return x - Math.floor(x);
     };
-    return Array.from({ length: 20 }, (_, i) => 20 + rng(i) * 60);
+    return Array.from({ length: 20 }, (_, i) => 30 + rng(i) * 50);
   }, [market.slug]);
+
+  const yesPrice = useMemo(() => {
+    const h = hashString(market.slug + 'yes');
+    return (h % 100);
+  }, [market.slug]);
+
+  const icon = marketIcon(market.slug);
+  const iconBg = marketIconBg(market.slug);
 
   return (
     <a
       href={`#/markets/${market.slug}`}
-      className="card p-4 hover:shadow-md transition-shadow flex flex-col gap-3"
+      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
     >
+      {/* Header */}
       <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-lg ${
-          market.is_live
-            ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600'
-            : 'bg-surface-100 dark:bg-surface-700 text-surface-400'
-        }`}>
-          {market.is_live ? '🟢' : '🔴'}
+        <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl ${iconBg}`}>
+          {icon}
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
             {market.question || market.slug}
           </h3>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1.5">
             <span className={`badge text-[10px] ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
               {market.is_live ? 'Open' : 'Resolved'}
             </span>
             <span className="text-xs text-surface-400">
-              Vol {formatVol(market.volume)}
+              {formatVol(market.volume)} Vol
             </span>
           </div>
         </div>
       </div>
 
-      {/* Mini price sparkline placeholder */}
-      <div className="h-8 flex items-end gap-0.5">
+      {/* Yes / No prices */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
+          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Yes</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{yesPrice}¢</div>
+        </div>
+        <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
+          <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">No</div>
+          <div className="text-lg font-bold text-rose-700 dark:text-rose-300">{100 - yesPrice}¢</div>
+        </div>
+      </div>
+
+      {/* Sparkline */}
+      <div className="h-8 flex items-end gap-[3px]">
         {sparkline.map((h, i) => (
           <div
             key={i}
-            className="flex-1 rounded-sm bg-primary-200 dark:bg-primary-800/50"
+            className="flex-1 rounded-sm bg-primary-200/70 dark:bg-primary-800/40"
             style={{ height: `${h}%` }}
           />
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-xs text-surface-500 dark:text-surface-400">
-        <span>Condition: {market.condition_id.slice(0, 8)}...</span>
-        <span>{market.n_holders?.toLocaleString() || 0} holders</span>
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50">
+        <span>{market.n_holders?.toLocaleString() || 0} traders</span>
+        <span className="font-mono text-[10px]">{market.condition_id.slice(0, 6)}…</span>
       </div>
     </a>
   );
