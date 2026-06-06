@@ -1,0 +1,429 @@
+import { useCallback } from 'react';
+import { useSettingsStore } from '../stores';
+
+// Lightweight self-built i18n (no extra deps). Two flat dictionaries keyed by
+// dotted keys (e.g. `nav.browse`). `t(key, vars?)` looks up the current locale,
+// falls back to English (then the key itself) on a miss, and interpolates
+// `{var}` placeholders. The current locale lives in the settings store and is
+// persisted to localStorage, so switching it re-renders every subscriber.
+
+export type Locale = 'zh' | 'en';
+
+export const LOCALES: Locale[] = ['zh', 'en'];
+
+type Dict = Record<string, string>;
+
+const zh: Dict = {
+  // ── Layout / nav ────────────────────────────────────────────────────
+  'app.name': 'Poly',
+  'nav.browse': '浏览',
+  'nav.experiments': '实验',
+  'nav.settings': '设置',
+  'nav.expandSidebar': '展开侧边栏',
+  'nav.collapseSidebar': '收起侧边栏',
+  'nav.openMenu': '打开菜单',
+  'nav.searchMarkets': '搜索市场…',
+  'theme.light': '浅色模式',
+  'theme.dark': '深色模式',
+  'lang.label': '语言',
+  'lang.zh': '中文',
+  'lang.en': 'English',
+
+  // ── Error boundary ─────────────────────────────────────────────────
+  'error.title': '出错了',
+  'error.unexpected': '发生了意外错误。',
+  'error.reload': '重新加载页面',
+
+  // ── Common ─────────────────────────────────────────────────────────
+  'common.loading': '加载中…',
+  'common.noMore': '没有更多市场了',
+  'common.refresh': '刷新',
+  'common.cancel': '取消',
+  'common.close': '关闭',
+  'common.current': '当前',
+
+  // ── Market browser ─────────────────────────────────────────────────
+  'market.all': '全部',
+  'market.refreshMarkets': '刷新市场数据',
+  'market.countMarkets': '{count} 个市场',
+  'market.noneFound': '未找到市场',
+  'market.adjustSearch': '尝试调整搜索词或分类筛选。',
+  'market.open': '进行中',
+  'market.resolved': '已结算',
+  'market.yes': 'Yes',
+  'market.no': 'No',
+  'market.vol': '成交额',
+  'market.traders': '{count} 名交易者',
+  'market.change24h': '24h',
+  'market.outcomes': '{count} 个结果',
+  'market.moreOutcomes': '+{count} 个结果',
+  'market.multiOutcomeEvent': '多结果事件',
+
+  // ── Market detail ──────────────────────────────────────────────────
+  'detail.back': '返回市场列表',
+  'detail.deadline': '截止 {date}',
+  'detail.viewOnPolymarket': '在 Polymarket 查看',
+  'detail.notFound': '未找到该市场',
+  'detail.otherOutcomes': '该事件的其它结果',
+  'detail.multiOutcomeHint': '这是一个多结果事件。仿真针对当前选中的单个结果子市场，点击下方结果可切换。',
+  'detail.noQuote': '暂无行情',
+  'detail.marketExperiments': '该市场的实验',
+  'detail.noExperiments': '还没有针对该市场的实验，在下方新建一个。',
+  'detail.unitAgents': 'agents',
+  'detail.unitTicks': 'ticks',
+  'detail.seedLabel': 'seed {seed}',
+  'detail.newExperiment': '新建实验',
+  'detail.agentCount': 'Agent 数量 ({count})',
+  'detail.tickCount': 'Tick 数 ({count})',
+  'detail.personaSet': 'Persona 组',
+  'detail.persona.archetype': '原型 (K-means)',
+  'detail.persona.calibrated': '校准 (真实钱包)',
+  'detail.persona.noSignal': '无信号 (消融)',
+  'detail.seed': '随机种子 (seed)',
+  'detail.seedHint': '相同种子可复现同一次仿真。',
+  'detail.apiKey': 'API Key',
+  'detail.useDefaultSettings': '使用默认设置',
+  'detail.apiKeyHint': '选择已保存的命名密钥，或使用设置中的默认配置。',
+  'detail.starting': '启动中…',
+  'detail.startSimulation': '开始仿真',
+  'detail.resolvedNoSim': '该市场已结算，无法仿真。',
+  'detail.startFailed': '启动实验失败：{msg}',
+
+  // ── Experiment manager ─────────────────────────────────────────────
+  'exp.title': '实验',
+  'exp.marketCount': '{count} 个市场',
+  'exp.searchPlaceholder': '按 slug 或问题搜索市场…',
+  'exp.allStatus': '全部状态',
+  'exp.status.running': '运行中',
+  'exp.status.completed': '已完成',
+  'exp.status.cancelled': '已取消',
+  'exp.status.error': '出错',
+  'exp.status.queued': '排队中',
+  'exp.status.paused': '已暂停',
+  'exp.status.done': '完成',
+  'exp.loadFailed': '加载实验失败：{msg}',
+  'exp.noMatchingMarkets': '没有匹配的市场。',
+  'exp.noExperimentsYet': '还没有任何实验。',
+  'exp.selectMarketHint': '选择一个市场并开始仿真，结果会显示在这里。',
+  'exp.runsOne': '{count} 次运行',
+  'exp.runsMany': '{count} 次运行',
+  'exp.allMarkets': '全部市场',
+  'exp.noMatchingExperiments': '没有匹配的实验。',
+  'exp.noExperimentsForMarket': '该市场还没有实验。',
+  'exp.pageOf': '第 {current} / {total} 页',
+
+  // ── Experiment live ────────────────────────────────────────────────
+  'live.loading': '正在加载实验…',
+  'live.running': '运行中',
+  'live.paused': '已暂停',
+  'live.done': '已完成',
+  'live.pausing': '暂停中…',
+  'live.pause': '暂停',
+  'live.resume': '继续',
+  'live.cancel': '取消',
+  'live.error': '错误：{msg}',
+  'live.metric.yesMid': 'YES 中间价',
+  'live.metric.parityGap': '平价偏差',
+  'live.metric.cumulativeFills': '累计成交',
+  'live.metric.tickProgress': 'Tick 进度',
+  'live.chartTitle': '各 Tick 的 YES 中间价',
+  'live.macroIdle': '暂无市场指标。开始实验后将逐 tick 推送价格。',
+  'live.macroLive': '等待第一个 tick…',
+  'live.agentsIdle': '暂无智能体。运行开始后会显示智能体快照（需要 LLM API Key）。',
+  'live.agentsLive': '正在构建智能体群体…',
+  'live.noHistory': '暂无历史',
+  'live.stat.pnl': '盈亏',
+  'live.stat.cash': '现金',
+  'live.stat.posYes': 'YES 持仓',
+  'live.stat.posNo': 'NO 持仓',
+  'live.stat.beliefYes': 'YES 信念',
+  'live.stat.reserved': '冻结资金',
+  'live.noSnapshot': '该智能体暂无快照。',
+  'live.thinking': '思考过程 ({count})',
+  'live.noDecisions': '该智能体暂无决策记录。',
+
+  // ── Settings ───────────────────────────────────────────────────────
+  'settings.title': '设置',
+  'settings.tab.api': 'API',
+  'settings.tab.keys': 'API 密钥',
+  'settings.tab.general': '通用',
+  'settings.api.heading': 'LLM API 配置',
+  'settings.api.subtitle': '配置用于智能体仿真的 LLM 服务商。',
+  'settings.api.provider': '服务商',
+  'settings.api.model': '模型',
+  'settings.api.refreshingModels': '刷新中…',
+  'settings.api.refreshModels': '刷新模型',
+  'settings.api.modelsLive': '已从 /models 获取 {count} 个模型 (live)',
+  'settings.api.modelsCatalog': '使用目录默认模型 (catalog){suffix}',
+  'settings.api.modelsFailed': '获取模型失败：{msg}',
+  'settings.api.modelPlaceholder': '选择或输入模型 id，如 deepseek-v4-flash',
+  'settings.api.apiKey': 'API Key',
+  'settings.api.keySet': 'API Key 已配置',
+  'settings.api.keyUnset': 'API Key 未配置',
+  'settings.api.keyPlaceholderSet': '已配置，留空则保持不变',
+  'settings.api.keyHint': '密钥在服务器端加密存储，不会返回浏览器。',
+  'settings.api.baseUrl': 'Base URL',
+  'settings.api.temperature': '温度 ({value})',
+  'settings.api.deterministic': '确定 (0)',
+  'settings.api.creative': '发散 (2)',
+  'settings.api.maxTokens': '最大 Token ({value})',
+  'settings.api.saving': '保存中…',
+  'settings.api.save': '保存',
+  'settings.api.testConnection': '测试连接',
+  'settings.api.saved': '设置已保存',
+  'settings.api.saveFailed': '保存失败：{msg}',
+  'settings.api.testing': '正在测试连接…',
+  'settings.api.testOk': '连接成功！',
+  'settings.api.testFailed': '连接失败：{msg}',
+  'settings.keys.heading': 'API 密钥',
+  'settings.keys.subtitle': '保存多个命名密钥，创建实验时可选择使用其中一个。密钥在服务器端加密存储，不会返回浏览器。',
+  'settings.keys.none': '尚未保存任何密钥。',
+  'settings.keys.delete': '删除',
+  'settings.keys.add': '新增密钥',
+  'settings.keys.name': '名称',
+  'settings.keys.namePlaceholder': '如 我的 DeepSeek key',
+  'settings.keys.provider': '服务商',
+  'settings.keys.baseUrlOptional': 'Base URL（可选）',
+  'settings.keys.modelOptional': 'Model（可选）',
+  'settings.keys.adding': '保存中…',
+  'settings.keys.addButton': '添加密钥',
+  'settings.keys.errName': '请填写名称',
+  'settings.keys.errProvider': '请选择服务商',
+  'settings.keys.errKey': '请填写 API Key',
+  'settings.keys.saveFailed': '保存失败：{msg}',
+  'settings.keys.deleteFailed': '删除失败：{msg}',
+  'settings.general.heading': '通用设置',
+  'settings.general.darkMode': '深色模式',
+  'settings.general.darkModeHint': '在浅色与深色主题之间切换',
+  'settings.general.language': '语言',
+  'settings.general.languageHint': '选择界面显示语言',
+};
+
+const en: Dict = {
+  // ── Layout / nav ────────────────────────────────────────────────────
+  'app.name': 'Poly',
+  'nav.browse': 'Browse',
+  'nav.experiments': 'Experiments',
+  'nav.settings': 'Settings',
+  'nav.expandSidebar': 'Expand sidebar',
+  'nav.collapseSidebar': 'Collapse sidebar',
+  'nav.openMenu': 'Open menu',
+  'nav.searchMarkets': 'Search markets…',
+  'theme.light': 'Light mode',
+  'theme.dark': 'Dark mode',
+  'lang.label': 'Language',
+  'lang.zh': '中文',
+  'lang.en': 'English',
+
+  // ── Error boundary ─────────────────────────────────────────────────
+  'error.title': 'Something went wrong',
+  'error.unexpected': 'An unexpected error occurred.',
+  'error.reload': 'Reload Page',
+
+  // ── Common ─────────────────────────────────────────────────────────
+  'common.loading': 'Loading…',
+  'common.noMore': 'No more markets',
+  'common.refresh': 'Refresh',
+  'common.cancel': 'Cancel',
+  'common.close': 'Close',
+  'common.current': 'Current',
+
+  // ── Market browser ─────────────────────────────────────────────────
+  'market.all': 'All',
+  'market.refreshMarkets': 'Refresh market data',
+  'market.countMarkets': '{count} markets',
+  'market.noneFound': 'No markets found',
+  'market.adjustSearch': 'Try adjusting your search or category filter.',
+  'market.open': 'Open',
+  'market.resolved': 'Resolved',
+  'market.yes': 'Yes',
+  'market.no': 'No',
+  'market.vol': 'Vol',
+  'market.traders': '{count} traders',
+  'market.change24h': '24h',
+  'market.outcomes': '{count} outcomes',
+  'market.moreOutcomes': '+{count} outcomes',
+  'market.multiOutcomeEvent': 'Multi-outcome event',
+
+  // ── Market detail ──────────────────────────────────────────────────
+  'detail.back': 'Back to markets',
+  'detail.deadline': 'Ends {date}',
+  'detail.viewOnPolymarket': 'View on Polymarket',
+  'detail.notFound': 'Market not found',
+  'detail.otherOutcomes': 'Other outcomes in this event',
+  'detail.multiOutcomeHint': 'This is a multi-outcome event. The simulation targets the single selected outcome sub-market; click an outcome below to switch.',
+  'detail.noQuote': 'No quote',
+  'detail.marketExperiments': 'Experiments for this market',
+  'detail.noExperiments': 'No experiments for this market yet. Start one below.',
+  'detail.unitAgents': 'agents',
+  'detail.unitTicks': 'ticks',
+  'detail.seedLabel': 'seed {seed}',
+  'detail.newExperiment': 'New experiment',
+  'detail.agentCount': 'Agents ({count})',
+  'detail.tickCount': 'Ticks ({count})',
+  'detail.personaSet': 'Persona set',
+  'detail.persona.archetype': 'Archetype (K-means)',
+  'detail.persona.calibrated': 'Calibrated (Real wallets)',
+  'detail.persona.noSignal': 'No Signal (Ablation)',
+  'detail.seed': 'Random seed',
+  'detail.seedHint': 'The same seed reproduces the same simulation.',
+  'detail.apiKey': 'API Key',
+  'detail.useDefaultSettings': 'Use default settings',
+  'detail.apiKeyHint': 'Pick a saved named key, or use the default from Settings.',
+  'detail.starting': 'Starting…',
+  'detail.startSimulation': 'Start simulation',
+  'detail.resolvedNoSim': 'This market is resolved and cannot be simulated.',
+  'detail.startFailed': 'Failed to start experiment: {msg}',
+
+  // ── Experiment manager ─────────────────────────────────────────────
+  'exp.title': 'Experiments',
+  'exp.marketCount': '{count} markets',
+  'exp.searchPlaceholder': 'Search markets by slug or question...',
+  'exp.allStatus': 'All Status',
+  'exp.status.running': 'Running',
+  'exp.status.completed': 'Completed',
+  'exp.status.cancelled': 'Cancelled',
+  'exp.status.error': 'Error',
+  'exp.status.queued': 'Queued',
+  'exp.status.paused': 'Paused',
+  'exp.status.done': 'Done',
+  'exp.loadFailed': 'Failed to load experiments: {msg}',
+  'exp.noMatchingMarkets': 'No matching markets.',
+  'exp.noExperimentsYet': 'No experiments yet.',
+  'exp.selectMarketHint': 'Select a market and start a simulation to see it here.',
+  'exp.runsOne': '{count} run',
+  'exp.runsMany': '{count} runs',
+  'exp.allMarkets': 'All markets',
+  'exp.noMatchingExperiments': 'No matching experiments.',
+  'exp.noExperimentsForMarket': 'No experiments for this market.',
+  'exp.pageOf': 'Page {current} of {total}',
+
+  // ── Experiment live ────────────────────────────────────────────────
+  'live.loading': 'Loading experiment...',
+  'live.running': 'Running',
+  'live.paused': 'Paused',
+  'live.done': 'Done',
+  'live.pausing': 'Pausing…',
+  'live.pause': 'Pause',
+  'live.resume': 'Resume',
+  'live.cancel': 'Cancel',
+  'live.error': 'Error: {msg}',
+  'live.metric.yesMid': 'YES Mid',
+  'live.metric.parityGap': 'Parity Gap',
+  'live.metric.cumulativeFills': 'Cumulative Fills',
+  'live.metric.tickProgress': 'Tick Progress',
+  'live.chartTitle': 'Market YES Mid by Tick',
+  'live.macroIdle': 'No market metrics yet. Start the experiment to stream per-tick prices.',
+  'live.macroLive': 'Waiting for the first tick…',
+  'live.agentsIdle': 'No agents yet. Agent snapshots will appear once the run starts (requires an LLM API key).',
+  'live.agentsLive': 'Building agent population…',
+  'live.noHistory': 'no history',
+  'live.stat.pnl': 'PnL',
+  'live.stat.cash': 'Cash',
+  'live.stat.posYes': 'Pos YES',
+  'live.stat.posNo': 'Pos NO',
+  'live.stat.beliefYes': 'Belief YES',
+  'live.stat.reserved': 'Reserved',
+  'live.noSnapshot': 'No snapshot for this agent yet.',
+  'live.thinking': 'Thinking ({count})',
+  'live.noDecisions': 'No decisions recorded for this agent.',
+
+  // ── Settings ───────────────────────────────────────────────────────
+  'settings.title': 'Settings',
+  'settings.tab.api': 'API',
+  'settings.tab.keys': 'API Keys',
+  'settings.tab.general': 'General',
+  'settings.api.heading': 'LLM API Configuration',
+  'settings.api.subtitle': 'Configure the LLM provider used for agent simulation.',
+  'settings.api.provider': 'Provider',
+  'settings.api.model': 'Model',
+  'settings.api.refreshingModels': 'Refreshing...',
+  'settings.api.refreshModels': 'Refresh models',
+  'settings.api.modelsLive': 'Fetched {count} models from /models (live)',
+  'settings.api.modelsCatalog': 'Using catalog default models (catalog){suffix}',
+  'settings.api.modelsFailed': 'Failed to fetch models: {msg}',
+  'settings.api.modelPlaceholder': 'Select or type a model id, e.g. deepseek-v4-flash',
+  'settings.api.apiKey': 'API Key',
+  'settings.api.keySet': 'API Key configured',
+  'settings.api.keyUnset': 'API Key not configured',
+  'settings.api.keyPlaceholderSet': 'Configured — leave blank to keep unchanged',
+  'settings.api.keyHint': 'The key is encrypted at rest on the server and is never returned to the browser.',
+  'settings.api.baseUrl': 'Base URL',
+  'settings.api.temperature': 'Temperature ({value})',
+  'settings.api.deterministic': 'Deterministic (0)',
+  'settings.api.creative': 'Creative (2)',
+  'settings.api.maxTokens': 'Max Tokens ({value})',
+  'settings.api.saving': 'Saving...',
+  'settings.api.save': 'Save',
+  'settings.api.testConnection': 'Test Connection',
+  'settings.api.saved': 'Settings saved successfully',
+  'settings.api.saveFailed': 'Failed to save: {msg}',
+  'settings.api.testing': 'Testing connection...',
+  'settings.api.testOk': 'Connection successful!',
+  'settings.api.testFailed': 'Connection failed: {msg}',
+  'settings.keys.heading': 'API Keys',
+  'settings.keys.subtitle': 'Save multiple named keys and pick one when creating an experiment. Keys are encrypted at rest on the server and never returned to the browser.',
+  'settings.keys.none': 'No keys saved yet.',
+  'settings.keys.delete': 'Delete',
+  'settings.keys.add': 'Add a key',
+  'settings.keys.name': 'Name',
+  'settings.keys.namePlaceholder': 'e.g. My DeepSeek key',
+  'settings.keys.provider': 'Provider',
+  'settings.keys.baseUrlOptional': 'Base URL (optional)',
+  'settings.keys.modelOptional': 'Model (optional)',
+  'settings.keys.adding': 'Saving…',
+  'settings.keys.addButton': 'Add key',
+  'settings.keys.errName': 'Please enter a name',
+  'settings.keys.errProvider': 'Please select a provider',
+  'settings.keys.errKey': 'Please enter an API Key',
+  'settings.keys.saveFailed': 'Failed to save: {msg}',
+  'settings.keys.deleteFailed': 'Failed to delete: {msg}',
+  'settings.general.heading': 'General Settings',
+  'settings.general.darkMode': 'Dark Mode',
+  'settings.general.darkModeHint': 'Toggle between light and dark theme',
+  'settings.general.language': 'Language',
+  'settings.general.languageHint': 'Choose the interface language',
+};
+
+const DICTS: Record<Locale, Dict> = { zh, en };
+
+function interpolate(template: string, vars?: Record<string, string | number>): string {
+  if (!vars) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name) => {
+    const v = vars[name];
+    return v === undefined ? match : String(v);
+  });
+}
+
+export function translate(
+  locale: Locale,
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
+  const dict = DICTS[locale] ?? en;
+  let template = dict[key];
+  if (template === undefined) {
+    // Fall back to English, then to the raw key. Warn during development so
+    // missing translations surface quickly.
+    template = en[key];
+    if (template === undefined) {
+      if (import.meta.env?.DEV) {
+        console.warn(`[i18n] missing key: ${key}`);
+      }
+      return key;
+    } else if (import.meta.env?.DEV && locale !== 'en') {
+      console.warn(`[i18n] missing "${locale}" translation for: ${key}`);
+    }
+  }
+  return interpolate(template, vars);
+}
+
+export function useI18n() {
+  const locale = useSettingsStore((s) => s.locale);
+  const setLocale = useSettingsStore((s) => s.setLocale);
+  const t = useCallback(
+    (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars),
+    [locale],
+  );
+  return { t, locale, setLocale };
+}

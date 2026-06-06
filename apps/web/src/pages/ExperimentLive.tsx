@@ -7,6 +7,7 @@ import { Square, ArrowLeft, X, Pause, Play } from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber } from '../hooks';
+import { useI18n } from '../lib/i18n';
 import type { Experiment, AgentSnapshot, AgentDecision } from '../types';
 
 /** Deterministic HSL color block from an agent id, used as a tiny "avatar". */
@@ -16,6 +17,7 @@ function agentColor(agentId: number): string {
 }
 
 export default function ExperimentLive() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const [experiment, setExperiment] = useState<Experiment | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +130,7 @@ export default function ExperimentLive() {
       : '—';
 
   if (loading) {
-    return <div className="text-center py-20 text-surface-400">Loading experiment...</div>;
+    return <div className="text-center py-20 text-surface-400">{t('live.loading')}</div>;
   }
 
   return (
@@ -145,11 +147,17 @@ export default function ExperimentLive() {
             </h1>
             <div className="flex items-center gap-2 text-xs text-surface-400">
               <span className={`badge ${running ? 'badge-live' : paused ? 'badge-warn' : 'badge-resolved'}`}>
-                {running ? 'Running' : paused ? 'Paused' : experiment?.status || 'Done'}
+                {running
+                  ? t('live.running')
+                  : paused
+                    ? t('live.paused')
+                    : experiment?.status
+                      ? t(`exp.status.${experiment.status}`)
+                      : t('live.done')}
               </span>
               <span>
-                {experiment?.n_agents} agents · {experiment?.n_ticks} ticks
-                {experiment?.seed != null ? ` · seed ${experiment.seed}` : ''}
+                {experiment?.n_agents} {t('detail.unitAgents')} · {experiment?.n_ticks} {t('detail.unitTicks')}
+                {experiment?.seed != null ? ` · ${t('detail.seedLabel', { seed: experiment.seed })}` : ''}
               </span>
             </div>
           </div>
@@ -162,19 +170,19 @@ export default function ExperimentLive() {
               className="btn-secondary flex items-center gap-2 disabled:opacity-50"
             >
               <Pause className="w-4 h-4" />
-              {pausePending ? 'Pausing…' : 'Pause'}
+              {pausePending ? t('live.pausing') : t('live.pause')}
             </button>
           )}
           {paused && !running && (
             <button onClick={handleResume} className="btn-secondary flex items-center gap-2 text-primary-600">
               <Play className="w-4 h-4" />
-              Resume
+              {t('live.resume')}
             </button>
           )}
           {(running || paused) && (
             <button onClick={handleCancel} className="btn-secondary flex items-center gap-2 text-danger">
               <Square className="w-4 h-4" />
-              Cancel
+              {t('live.cancel')}
             </button>
           )}
         </div>
@@ -182,7 +190,7 @@ export default function ExperimentLive() {
 
       {error && (
         <div className="card p-4 bg-danger/10 border-danger/20 text-danger text-sm">
-          Error: {error}
+          {t('live.error', { msg: error })}
         </div>
       )}
 
@@ -202,27 +210,27 @@ export default function ExperimentLive() {
           {/* Macro metric cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <MetricCard
-              label="YES Mid"
+              label={t('live.metric.yesMid')}
               value={latestTickMetrics ? latestTickMetrics.yes_mid.toFixed(3) : metrics.yesMid.toFixed(3)}
             />
             <MetricCard
-              label="Parity Gap"
+              label={t('live.metric.parityGap')}
               value={latestTickMetrics ? latestTickMetrics.parity_gap.toFixed(3) : '—'}
             />
-            <MetricCard label="Cumulative Fills" value={formatNumber(cumFills || metrics.nFills)} />
-            <MetricCard label="Tick Progress" value={progressLabel} />
+            <MetricCard label={t('live.metric.cumulativeFills')} value={formatNumber(cumFills || metrics.nFills)} />
+            <MetricCard label={t('live.metric.tickProgress')} value={progressLabel} />
           </div>
 
           {/* Macro chart: yes_mid over ticks */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
-              Market YES Mid by Tick
+              {t('live.chartTitle')}
             </h3>
             {macroData.length === 0 ? (
               <EmptyState
                 running={running}
-                idle="No market metrics yet. Start the experiment to stream per-tick prices."
-                live="Waiting for the first tick…"
+                idle={t('live.macroIdle')}
+                live={t('live.macroLive')}
               />
             ) : (
               <div className="h-72">
@@ -281,13 +289,14 @@ function AgentStrip({
   hasAgents: boolean;
   running: boolean;
 }) {
+  const { t } = useI18n();
   if (!hasAgents) {
     return (
       <div className="card p-4">
         <EmptyState
           running={running}
-          idle="No agents yet. Agent snapshots will appear once the run starts (requires an LLM API key)."
-          live="Building agent population…"
+          idle={t('live.agentsIdle')}
+          live={t('live.agentsLive')}
         />
       </div>
     );
@@ -336,10 +345,11 @@ function AgentStrip({
 
 /** Tiny inline SVG sparkline for a pnl series. */
 function Sparkline({ values, positive }: { values: number[]; positive: boolean }) {
+  const { t } = useI18n();
   const W = 130;
   const H = 28;
   if (values.length < 2) {
-    return <div className="mt-2 h-7 text-[10px] text-surface-400">no history</div>;
+    return <div className="mt-2 h-7 text-[10px] text-surface-400">{t('live.noHistory')}</div>;
   }
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -379,6 +389,7 @@ function AgentDrawer({
   onClose: () => void;
   formatNumber: (n: number | null | undefined) => string;
 }) {
+  const { t } = useI18n();
   // Latest tick first.
   const ordered = useMemo(
     () => [...decisions].sort((a, b) => b.tick - a.tick),
@@ -406,7 +417,7 @@ function AgentDrawer({
         <button
           onClick={onClose}
           className="p-1.5 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800"
-          aria-label="Close"
+          aria-label={t('common.close')}
         >
           <X className="w-4 h-4 text-surface-500" />
         </button>
@@ -415,29 +426,29 @@ function AgentDrawer({
       {/* State from latest snapshot */}
       {snapshot ? (
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <StatCell label="PnL" value={`${snapshot.pnl >= 0 ? '+' : ''}${snapshot.pnl.toFixed(2)}`} accent={snapshot.pnl >= 0 ? 'pos' : 'neg'} />
-          <StatCell label="Cash" value={`$${formatNumber(snapshot.cash)}`} />
-          <StatCell label="Pos YES" value={snapshot.pos_yes.toFixed(2)} />
-          <StatCell label="Pos NO" value={snapshot.pos_no.toFixed(2)} />
+          <StatCell label={t('live.stat.pnl')} value={`${snapshot.pnl >= 0 ? '+' : ''}${snapshot.pnl.toFixed(2)}`} accent={snapshot.pnl >= 0 ? 'pos' : 'neg'} />
+          <StatCell label={t('live.stat.cash')} value={`$${formatNumber(snapshot.cash)}`} />
+          <StatCell label={t('live.stat.posYes')} value={snapshot.pos_yes.toFixed(2)} />
+          <StatCell label={t('live.stat.posNo')} value={snapshot.pos_no.toFixed(2)} />
           <StatCell
-            label="Belief YES"
+            label={t('live.stat.beliefYes')}
             value={snapshot.belief_yes !== null ? snapshot.belief_yes.toFixed(3) : '—'}
           />
           <StatCell
-            label="Reserved"
+            label={t('live.stat.reserved')}
             value={`$${formatNumber(snapshot.cash_reserved)}`}
           />
         </div>
       ) : (
-        <div className="text-xs text-surface-400 mb-4">No snapshot for this agent yet.</div>
+        <div className="text-xs text-surface-400 mb-4">{t('live.noSnapshot')}</div>
       )}
 
       {/* Thinking log: reasoning per tick, newest first */}
       <h4 className="text-xs font-semibold uppercase tracking-wide text-surface-500 mb-2">
-        Thinking ({ordered.length})
+        {t('live.thinking', { count: ordered.length })}
       </h4>
       {ordered.length === 0 ? (
-        <div className="text-xs text-surface-400">No decisions recorded for this agent.</div>
+        <div className="text-xs text-surface-400">{t('live.noDecisions')}</div>
       ) : (
         <div className="space-y-2">
           {ordered.map((d) => (

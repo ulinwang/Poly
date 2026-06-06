@@ -148,14 +148,19 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
   }),
 }));
 
+/** UI locale for the self-built i18n layer. */
+export type Locale = 'zh' | 'en';
+
 interface SettingsState {
   apiSettings: ApiSettings;
   darkMode: boolean;
   sidebarCollapsed: boolean;
+  locale: Locale;
   setApiSettings: (settings: ApiSettings) => void;
   updateApiSettings: (partial: Partial<ApiSettings>) => void;
   toggleDarkMode: () => void;
   toggleSidebar: () => void;
+  setLocale: (locale: Locale) => void;
 }
 
 const defaultApiSettings: ApiSettings = {
@@ -191,10 +196,36 @@ function writeBool(key: string, value: boolean): void {
   }
 }
 
+// String counterpart of readBool/writeBool, used for the persisted UI locale.
+function readString(key: string, fallback: string): string {
+  try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
+      return fallback;
+    }
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : raw;
+  } catch {
+    return fallback;
+  }
+}
+function writeString(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.setItem !== 'function') return;
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore persistence failures (private mode, quota, non-browser env)
+  }
+}
+
+function readLocale(): Locale {
+  return readString('poly.locale', 'zh') === 'en' ? 'en' : 'zh';
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   apiSettings: defaultApiSettings,
   darkMode: readBool('poly.darkMode', false),
   sidebarCollapsed: readBool('poly.sidebarCollapsed', false),
+  locale: readLocale(),
   setApiSettings: (apiSettings) => set({ apiSettings }),
   updateApiSettings: (partial) => set((s) => ({
     apiSettings: { ...s.apiSettings, ...partial },
@@ -212,4 +243,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     writeBool('poly.sidebarCollapsed', next);
     return { sidebarCollapsed: next };
   }),
+  setLocale: (locale) => {
+    writeString('poly.locale', locale);
+    set({ locale });
+  },
 }));
