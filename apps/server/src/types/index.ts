@@ -17,6 +17,7 @@ export interface MarketDetail extends Market {
   yes_token_id: string;
   no_token_id: string;
   outcomes: string[];
+  event_slug?: string | null;
 }
 
 export interface ExperimentConfig {

@@ -15,7 +15,10 @@ interface GammaMarket {
   closed?: boolean;
   endDate?: string;
   description?: string;
+  image?: string;
+  icon?: string;
   tags?: GammaTag[];
+  events?: Array<{ slug?: string }>;
   markets?: Array<{
     minimumTickSize?: number;
     takerBaseFee?: number;
@@ -48,6 +51,28 @@ async function fetchGammaMarkets(offset = 0, limit = 100): Promise<GammaMarket[]
     return json;
   } catch (err) {
     if (hit) return hit.data;
+    throw err;
+  }
+}
+
+// Fetch a single market by its slug directly from Gamma. This is robust to
+// pagination/ordering — the paged feed only holds a window of markets, so a
+// detail lookup must query by slug rather than search a cached page.
+async function fetchGammaMarketBySlug(slug: string): Promise<GammaMarket | null> {
+  const now = Date.now();
+  const key = `slug:${slug}`;
+  const hit = cache.get(key);
+  if (hit && now - hit.ts < CACHE_TTL_MS) return hit.data[0] ?? null;
+  try {
+    const url =
+      `https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}&include_tag=true`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = (await resp.json()) as GammaMarket[];
+    cache.set(key, { data: json, ts: now });
+    return json[0] ?? null;
+  } catch (err) {
+    if (hit) return hit.data[0] ?? null;
     throw err;
   }
 }
@@ -99,8 +124,7 @@ export async function listPolymarketMarkets(
 }
 
 export async function getPolymarketMarket(slug: string): Promise<MarketDetail | null> {
-  const markets = await fetchGammaMarkets();
-  const m = markets.find((x) => x.slug === slug);
+  const m = await fetchGammaMarketBySlug(slug);
   if (!m) return null;
   const sub = m.markets?.[0];
   const tick = sub?.minimumTickSize ?? 0.01;
@@ -122,5 +146,10 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     yes_token_id: yes?.token_id || '',
     no_token_id: no?.token_id || '',
     outcomes: ['Yes', 'No'],
+    categories: extractCategories(m),
+    icon_url: m.image || m.icon || undefined,
+    // Polymarket groups markets under an event; the event slug is what the
+    // public site routes on (polymarket.com/event/<event_slug>).
+    event_slug: m.events?.[0]?.slug || null,
   };
 }
