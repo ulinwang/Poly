@@ -30,6 +30,7 @@ from agent.decision import (
 from agent.personas.persona import Persona
 from environment.ctf import split as ctf_split, merge as ctf_merge
 from environment.fees import taker_fee
+from environment.forum import Forum
 from environment.orderbook import Fill, OrderBook
 from environment.settlement import settle as _settle
 
@@ -76,10 +77,27 @@ class AgentRuntime:
     memory: list = None  # default_factory in __post_init__ to keep
     # the dataclass default order stable
     belief: Optional[dict] = None
+    # --- v15 (FORUM): structured, bounded, priority-ordered social memory.
+    # The flat `memory` list above stays the agent's own decision/belief
+    # trail (unchanged). `social_memory` adds the SOCIAL channel as a small
+    # dict of bounded lists, each capped at a few entries so the prompt can
+    # never blow up:
+    #   - "my_posts":      [{tick, post_id, content}]      — what I posted
+    #   - "read_posts":    [{tick, post_id, author_id, content, followed}]
+    #                      — posts I read (followed authors prioritised)
+    #   - "following":     [agent_id, ...]                  — who I follow
+    # Priority / dedup rules (see prompt builder): read_posts is kept newest-
+    # first, de-duplicated by post_id, and posts by *followed* authors are
+    # retained preferentially over crowd posts when trimming to capacity.
+    social_memory: dict = None
 
     def __post_init__(self):
         if self.memory is None:
             self.memory = []
+        if self.social_memory is None:
+            self.social_memory = {
+                "my_posts": [], "read_posts": [], "following": [],
+            }
 
 
 def available_cash(a: "AgentRuntime") -> float:
@@ -112,6 +130,12 @@ class Simulation:
     agents: list[AgentRuntime]
     book_yes: OrderBook = field(default_factory=lambda: OrderBook("YES"))
     book_no: OrderBook = field(default_factory=lambda: OrderBook("NO"))
+    # v15 (FORUM): the per-experiment social board. Plain dataclass state,
+    # so it is captured automatically when the whole Simulation is pickled
+    # for a checkpoint (runner/checkpoint.py) — a resumed run keeps every
+    # post/comment/follow. `default_factory` makes pre-existing checkpoints
+    # that predate the forum still unpickle (the attr just defaults empty).
+    forum: Forum = field(default_factory=Forum)
 
     yes_mid_history: list[float] = field(default_factory=list)
     no_mid_history: list[float] = field(default_factory=list)
@@ -245,6 +269,62 @@ def _agent_resting_count(book: OrderBook, agent_id: int) -> int:
     return sum(
         1 for o in (book.bids + book.asks) if o.agent_id == agent_id
     )
+
+
+# v15 (FORUM): capacities for the structured social memory. Kept small so
+# the social section of the prompt stays bounded regardless of run length.
+SOCIAL_MY_POSTS_CAP = 5      # my own recent posts
+SOCIAL_READ_POSTS_CAP = 8    # posts I have read (followed authors first)
+SOCIAL_FOLLOWING_CAP = 16    # who I follow
+
+
+def _fold_social_memory(agent: "AgentRuntime", decision: Decision) -> None:
+    """Fold this tick's `decision.forum_activity` into `agent.social_memory`.
+
+    Memory structure & priority (see AgentRuntime.social_memory docstring):
+      - "my_posts":   newest-first, capped at SOCIAL_MY_POSTS_CAP.
+      - "read_posts": de-duplicated by post_id, newest-first; when trimming
+        to SOCIAL_READ_POSTS_CAP, posts from *followed* authors are kept
+        preferentially over crowd posts (follow = the diffusion channel).
+      - "following":  unique target ids, most-recent follow first, capped.
+    Deterministic; only the post text inside the entries is LLM-generated.
+    """
+    activity = getattr(decision, "forum_activity", None)
+    if not activity:
+        return
+    sm = getattr(agent, "social_memory", None)
+    if sm is None:
+        sm = {"my_posts": [], "read_posts": [], "following": []}
+        agent.social_memory = sm
+
+    # --- my_posts: prepend newest, cap ---
+    for p in activity.get("posts", []):
+        sm["my_posts"].insert(0, dict(p))
+    sm["my_posts"] = sm["my_posts"][:SOCIAL_MY_POSTS_CAP]
+
+    # --- read_posts: merge, dedup by post_id, follow-priority trim ---
+    merged = list(activity.get("reads", [])) + list(sm.get("read_posts", []))
+    seen: set = set()
+    deduped: list[dict] = []
+    for r in merged:
+        pid = r.get("post_id")
+        if pid in seen:
+            continue
+        seen.add(pid)
+        deduped.append(dict(r))
+    # Stable sort: followed authors first, then by tick desc (newest first).
+    deduped.sort(key=lambda r: (0 if r.get("followed") else 1,
+                                -int(r.get("tick", 0))))
+    sm["read_posts"] = deduped[:SOCIAL_READ_POSTS_CAP]
+
+    # --- following: unique, most-recent first, cap ---
+    follows = list(activity.get("follows", []))
+    existing = list(sm.get("following", []))
+    ordered: list[int] = []
+    for fid in follows + existing:
+        if fid not in ordered:
+            ordered.append(int(fid))
+    sm["following"] = ordered[:SOCIAL_FOLLOWING_CAP]
 
 
 def _apply_belief_update(
@@ -542,6 +622,9 @@ def run_simulation(
                     "belief_yes_prob": b.get("yes_prob"),
                     "belief_confidence": b.get("confidence"),
                 })
+            # v15 (FORUM): fold this tick's social activity into the
+            # agent's structured social memory (posts/reads/follows).
+            _fold_social_memory(agent, decision)
             if log_progress:
                 err = decision.api_error or exec_err
                 err_s = f" err={err}" if err else ""
@@ -712,6 +795,8 @@ class PolyEnv:
                     "belief_yes_prob": b.get("yes_prob"),
                     "belief_confidence": b.get("confidence"),
                 })
+            # v15 (FORUM): fold social activity into structured memory.
+            _fold_social_memory(agent, decision)
 
         for agent in sim.agents:
             unrealized = (

@@ -66,5 +66,25 @@ Guidance:
 - Treat your "most recent stated view" as your prior; only revise it if NEW information justifies it (price moved, time decayed, your bet sized).
 - Do NOT cancel a resting order just to "clean the slate" — re-cancelling work you already approved wastes capacity. Only cancel if your view has materially changed.
 {%- endif %}
+{%- if social_read_lines or social_my_post_lines or social_following %}
+
+Social memory (the forum — what other traders are saying; followed authors first):
+{%- if social_read_lines %}
+Posts you have read:
+{%- for line in social_read_lines %}
+  {{ line }}
+{%- endfor %}
+{%- endif %}
+{%- if social_my_post_lines %}
+Your own recent posts:
+{%- for line in social_my_post_lines %}
+  {{ line }}
+{%- endfor %}
+{%- endif %}
+{%- if social_following %}
+You follow: {{ social_following | join(", ") }}
+{%- endif %}
+You can use read_forum to refresh this feed, and post_to_forum / comment_on_post / follow_user to participate. Social posts are opinions, not ground truth — weigh them against your own analysis.
+{%- endif %}
 
 Use the available tools for the current decision stage.

@@ -177,6 +177,119 @@ _TOOL_GET_INFORMATION = {
     },
 }
 
+# --- Forum (social) tools ----------------------------------------------
+# These power the social-information-diffusion layer (see
+# environment/forum.py). They are offered only in the *trade* stage (never
+# the belief stage). `read_forum` is a READ tool: like `get_information` it
+# returns content fed back into a bounded multi-turn loop and does NOT end
+# the decision. `post_to_forum` / `comment_on_post` / `follow_user` are
+# *record* (action) tools: they mutate `sim.forum`, return a short
+# confirmation, and likewise do NOT terminate the decision — the agent must
+# still converge on a trade or HOLD. The runtime caps the number of these
+# social actions per tick (K_social) so they cannot loop forever.
+_TOOL_READ_FORUM = {
+    "type": "function",
+    "function": {
+        "name": "read_forum",
+        "description": (
+            "Read the social forum to see what other traders are saying about "
+            "THIS market (and related topics). Returns your feed: recent posts, "
+            "prioritising authors you follow, plus other recent/trending posts "
+            "and their top comments. This is a READ action: it returns "
+            "information and does NOT place a trade — after reading you must "
+            "still choose a trading action (or HOLD), and you may post, comment, "
+            "or follow a poster. Available in the trade stage only."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic": {
+                    "type": "string",
+                    "description": (
+                        "Optional topic/keyword hint for what you want to read "
+                        "about. The feed is returned regardless; this just "
+                        "states your interest."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+}
+
+_TOOL_POST_TO_FORUM = {
+    "type": "function",
+    "function": {
+        "name": "post_to_forum",
+        "description": (
+            "Publish a short post to the social forum so other traders can read "
+            "it (e.g. share your view, a rumour, or a piece of analysis). This "
+            "records a post; it does NOT place a trade. You must still choose a "
+            "trading action (or HOLD) afterwards. Available in the trade stage "
+            "only; limited to a few social actions per tick."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "Your post text, in your persona's voice.",
+                },
+            },
+            "required": ["content"],
+        },
+    },
+}
+
+_TOOL_COMMENT_ON_POST = {
+    "type": "function",
+    "function": {
+        "name": "comment_on_post",
+        "description": (
+            "Reply to an existing forum post by its id (use the ids shown in "
+            "your feed from read_forum). Records a comment; it does NOT place a "
+            "trade. You must still choose a trading action (or HOLD) afterwards."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "post_id": {
+                    "type": "integer",
+                    "description": "The id of the post to comment on.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Your comment text.",
+                },
+            },
+            "required": ["post_id", "content"],
+        },
+    },
+}
+
+_TOOL_FOLLOW_USER = {
+    "type": "function",
+    "function": {
+        "name": "follow_user",
+        "description": (
+            "Follow another trader by their agent_id (use ids shown in your "
+            "feed). Followed authors' posts are prioritised in your future "
+            "feeds. Records a follow; it does NOT place a trade. You must still "
+            "choose a trading action (or HOLD) afterwards."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "integer",
+                    "description": "The agent_id of the trader to follow.",
+                },
+            },
+            "required": ["agent_id"],
+        },
+    },
+}
+
 _TOOL_MERGE = {
     "type": "function",
     "function": {
@@ -207,6 +320,10 @@ TOOL_SCHEMAS = [
     _TOOL_MERGE,
     _TOOL_UPDATE_BELIEF,
     _TOOL_GET_INFORMATION,
+    _TOOL_READ_FORUM,
+    _TOOL_POST_TO_FORUM,
+    _TOOL_COMMENT_ON_POST,
+    _TOOL_FOLLOW_USER,
 ]
 
 # The information tool is a *read* tool: it is offered only in the trade
@@ -215,20 +332,44 @@ TOOL_SCHEMAS = [
 # loop). It is NOT an order, so it is absent from NAME_TO_ORDER_TYPE.
 INFO_TOOL_NAME = "get_information"
 
+# Forum (social) tool names. `read_forum` is a READ tool (feeds the feed
+# back into the bounded loop); the other three are record/action tools that
+# mutate sim.forum. None of them are orders, so none appear in
+# NAME_TO_ORDER_TYPE — the runtime dispatches them explicitly.
+FORUM_READ_TOOL_NAME = "read_forum"
+FORUM_POST_TOOL_NAME = "post_to_forum"
+FORUM_COMMENT_TOOL_NAME = "comment_on_post"
+FORUM_FOLLOW_TOOL_NAME = "follow_user"
+# The "record" social actions (everything except the read tool). These are
+# the actions bounded by K_social per tick.
+FORUM_ACTION_TOOL_NAMES = frozenset({
+    FORUM_POST_TOOL_NAME, FORUM_COMMENT_TOOL_NAME, FORUM_FOLLOW_TOOL_NAME,
+})
+# All forum tool names (read + actions).
+FORUM_TOOL_NAMES = frozenset({FORUM_READ_TOOL_NAME}) | FORUM_ACTION_TOOL_NAMES
+
 
 def select_tools(
     *, belief_update_enabled: bool = True, info_enabled: bool = True,
+    forum_enabled: bool = True,
 ) -> list[dict]:
-    """Return TOOL_SCHEMAS, optionally without the belief and/or info tools.
+    """Return TOOL_SCHEMAS, optionally without the belief, info, and/or
+    forum (social) tools.
 
     Used by the runner to honour ExperimentConfig.agent.belief_update_enabled
-    and to toggle the `get_information` read tool (default on).
+    and to toggle the `get_information` read tool and the forum tools
+    (both default on).
     """
     tools = list(TOOL_SCHEMAS)
     if not belief_update_enabled:
         tools = [t for t in tools if t["function"]["name"] != "update_belief"]
     if not info_enabled:
         tools = [t for t in tools if t["function"]["name"] != INFO_TOOL_NAME]
+    if not forum_enabled:
+        tools = [
+            t for t in tools
+            if t["function"]["name"] not in FORUM_TOOL_NAMES
+        ]
     return tools
 
 
