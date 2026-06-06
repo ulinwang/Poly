@@ -175,4 +175,74 @@ describe('settings routes', () => {
     expect(Array.isArray(body.providers)).toBe(true);
     expect(body.providers.length).toBeGreaterThan(0);
   });
+
+  it('GET /providers/:id/models returns live models when /models succeeds', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }],
+      }),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/providers/deepseek/models?api_key=sk-test',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.source).toBe('live');
+    expect(body.models).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    vi.restoreAllMocks();
+  });
+
+  it('GET /providers/:id/models falls back to catalog when /models fails', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: vi.fn().mockResolvedValue({}),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/providers/deepseek/models?api_key=sk-test',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.source).toBe('catalog');
+    // Static catalog models for deepseek.
+    expect(body.models).toContain('deepseek-v4-flash');
+    expect(body.message).toContain('401');
+
+    vi.restoreAllMocks();
+  });
+
+  it('GET /providers/:id/models returns catalog with no-api-key message when no key', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/providers/deepseek/models',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.source).toBe('catalog');
+    expect(body.message).toBe('no api key');
+  });
+
+  it('GET /providers/:id/models falls back to catalog for litellm-native provider', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/providers/anthropic/models?api_key=sk-test',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.source).toBe('catalog');
+    expect(body.models).toContain('anthropic/claude-opus-4-8');
+  });
 });

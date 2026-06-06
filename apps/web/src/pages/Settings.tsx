@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Key, Palette, Save, TestTube } from 'lucide-react';
+import { Key, Palette, RefreshCw, Save, TestTube } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
 import { api } from '../lib/api';
@@ -47,6 +47,12 @@ function APISettings() {
   const [testResult, setTestResult] = useState<string | null>(null);
   // Provider catalog comes from the backend (single source of truth, litellm).
   const [providers, setProviders] = useState<import('../types').ProviderInfo[]>([]);
+  // Live model list fetched via the provider's /models endpoint. When set, it
+  // overrides the static catalog suggestions for the current provider. Cleared
+  // when the provider changes (see onChange below).
+  const [liveModels, setLiveModels] = useState<string[] | null>(null);
+  const [modelsSource, setModelsSource] = useState<string | null>(null);
+  const [refreshingModels, setRefreshingModels] = useState(false);
 
   useEffect(() => {
     api.listProviders()
@@ -77,7 +83,26 @@ function APISettings() {
   }, []);
 
   const provider = providers.find((p) => p.id === apiSettings.provider);
-  const models = provider?.models || [];
+  // Live models (if fetched) take precedence over the static catalog list.
+  const models = liveModels ?? provider?.models ?? [];
+
+  const handleRefreshModels = async () => {
+    setRefreshingModels(true);
+    setModelsSource(null);
+    try {
+      const res = await api.listProviderModels(apiSettings.provider);
+      setLiveModels(res.models);
+      setModelsSource(
+        res.source === 'live'
+          ? `已从 /models 获取 ${res.models.length} 个模型 (live)`
+          : `使用目录默认模型 (catalog)${res.message ? `：${res.message}` : ''}`,
+      );
+    } catch (err) {
+      setModelsSource('获取模型失败：' + (err as Error).message);
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -130,6 +155,9 @@ function APISettings() {
           value={apiSettings.provider}
           onChange={(e) => {
             const p = providers.find((p) => p.id === e.target.value);
+            // Reset live-model state back to the catalog for the new provider.
+            setLiveModels(null);
+            setModelsSource(null);
             updateApiSettings({
               provider: e.target.value as import('../types').ApiSettings['provider'],
               model: p?.models[0] || '',
@@ -148,12 +176,24 @@ function APISettings() {
 
       {/* Model */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          Model
-        </label>
-        {/* Editable combobox: suggestions from the provider catalog, but any
-            model id can be typed (the endpoint forwards it as-is), so newer
-            models that aren't in the list still work. */}
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
+            Model
+          </label>
+          {/* Fetch the live model list from the provider's /models endpoint. */}
+          <button
+            type="button"
+            onClick={handleRefreshModels}
+            disabled={refreshingModels}
+            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />
+            {refreshingModels ? '刷新中...' : '刷新模型'}
+          </button>
+        </div>
+        {/* Editable combobox: suggestions from the provider catalog (or the live
+            /models list once refreshed), but any model id can be typed (the
+            endpoint forwards it as-is), so newer models still work. */}
         <input
           type="text"
           list="model-options"
@@ -165,6 +205,9 @@ function APISettings() {
         <datalist id="model-options">
           {models.map((m) => <option key={m} value={m} />)}
         </datalist>
+        {modelsSource && (
+          <p className="text-xs text-surface-400">{modelsSource}</p>
+        )}
       </div>
 
       {/* API Key */}

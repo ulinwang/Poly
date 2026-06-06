@@ -113,4 +113,12 @@ export const api = {
   // Providers
   listProviders: () =>
     fetchJson<{ providers: import('../types').ProviderInfo[] }>('/api/v1/providers'),
+
+  // Fetch a provider's available models live via its /models endpoint.
+  // Falls back to the static catalog (source: 'catalog') when no key is set,
+  // the provider is litellm-native, or the upstream fetch fails.
+  listProviderModels: (providerId: string) =>
+    fetchJson<{ models: string[]; source: 'live' | 'catalog'; message?: string }>(
+      `/api/v1/providers/${encodeURIComponent(providerId)}/models`,
+    ),
 };
