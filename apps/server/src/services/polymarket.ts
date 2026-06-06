@@ -5,7 +5,7 @@ interface GammaTag {
   slug?: string;
 }
 
-interface GammaMarket {
+export interface GammaMarket {
   slug?: string;
   question?: string;
   groupItemTitle?: string;
@@ -18,8 +18,15 @@ interface GammaMarket {
   description?: string;
   image?: string;
   icon?: string;
+  // Live pricing fields from Gamma. outcomePrices is usually a JSON-encoded
+  // string array (e.g. "[\"0.62\",\"0.38\"]") ordered [Yes, No].
+  bestBid?: number;
+  bestAsk?: number;
+  lastTradePrice?: number;
+  outcomePrices?: string;
+  oneDayPriceChange?: number;
   tags?: GammaTag[];
-  events?: Array<{ slug?: string; title?: string }>;
+  events?: Array<{ slug?: string; title?: string; image?: string }>;
   markets?: Array<{
     minimumTickSize?: number;
     takerBaseFee?: number;
@@ -122,6 +129,34 @@ function extractCategories(m: GammaMarket): string[] {
     .filter((label) => label && !TAG_DENYLIST.has(label.toLowerCase()));
 }
 
+// Derive the YES probability (0..1) from Gamma's live pricing fields. Prefers
+// the quoted outcome price, then the last trade, then the bid/ask midpoint.
+// Returns null when no live price is available (so the UI can show "—" rather
+// than a misleading fabricated number).
+export function deriveYesPrice(m: GammaMarket): number | null {
+  if (typeof m.outcomePrices === 'string' && m.outcomePrices.trim()) {
+    try {
+      const parsed = JSON.parse(m.outcomePrices) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const yes = parseFloat(String(parsed[0]));
+        if (Number.isFinite(yes)) return yes;
+      }
+    } catch {
+      // Fall through to the other price sources.
+    }
+  }
+  if (typeof m.lastTradePrice === 'number' && Number.isFinite(m.lastTradePrice)) {
+    return m.lastTradePrice;
+  }
+  if (
+    typeof m.bestBid === 'number' && Number.isFinite(m.bestBid) &&
+    typeof m.bestAsk === 'number' && Number.isFinite(m.bestAsk)
+  ) {
+    return (m.bestBid + m.bestAsk) / 2;
+  }
+  return null;
+}
+
 function normalizeMarket(m: GammaMarket): Market {
   const isLive = m.active === true && m.closed !== true;
   return {
@@ -140,6 +175,14 @@ function normalizeMarket(m: GammaMarket): Market {
     event_slug: m.events?.[0]?.slug || null,
     event_title: m.events?.[0]?.title || null,
     group_title: m.groupItemTitle || null,
+    // Card thumbnail (own market image first, then icon).
+    icon_url: m.image || m.icon || undefined,
+    // Parent event image, used as the event-card thumbnail.
+    event_icon: m.events?.[0]?.image || null,
+    // Live YES probability (0..1) or null when no quote is available.
+    yes_price: deriveYesPrice(m),
+    // 24h YES price change from Gamma, or null.
+    price_change_24h: m.oneDayPriceChange ?? null,
   };
 }
 
@@ -186,6 +229,9 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     outcomes: ['Yes', 'No'],
     categories: extractCategories(m),
     icon_url: m.image || m.icon || undefined,
+    event_icon: m.events?.[0]?.image || null,
+    yes_price: deriveYesPrice(m),
+    price_change_24h: m.oneDayPriceChange ?? null,
     // Polymarket groups markets under an event; the event slug is what the
     // public site routes on (polymarket.com/event/<event_slug>).
     event_slug: m.events?.[0]?.slug || null,

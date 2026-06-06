@@ -22,15 +22,6 @@ function formatVol(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
-// Deterministic hash for the placeholder multi-outcome chart heights.
-function hashSlug(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
-  }
-  return h;
-}
-
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -229,15 +220,34 @@ export default function MarketDetail() {
               );
             })}
           </div>
-          {/* Simplified multi-line placeholder — real multi-outcome pricing not wired. */}
-          <div className="mt-4 h-12 flex items-end gap-[3px]" aria-hidden="true">
-            {siblings.slice(0, 24).map((s) => (
-              <div
-                key={s.slug}
-                className="flex-1 rounded-sm bg-primary-200/70 dark:bg-primary-800/40"
-                style={{ height: `${20 + (Math.abs(hashSlug(s.slug)) % 70)}%` }}
-              />
-            ))}
+          {/* Per-outcome YES probability bars (real Polymarket quotes). Bar
+              height reflects each outcome's YES price; outcomes without a live
+              quote render as a flat grey "暂无行情" bar. */}
+          <div className="mt-4 flex items-end gap-[3px] h-16">
+            {siblings.slice(0, 24).map((s) => {
+              const yes = s.yes_price;
+              const hasPrice = yes != null && Number.isFinite(yes);
+              const heightPct = hasPrice ? Math.max(4, Math.round(yes! * 100)) : 100;
+              const cents = hasPrice ? Math.round(yes! * 100) : null;
+              return (
+                <div
+                  key={s.slug}
+                  className="flex-1 h-full flex items-end"
+                  title={hasPrice
+                    ? `${s.group_title || s.slug}: ${cents}¢`
+                    : `${s.group_title || s.slug}: 暂无行情`}
+                >
+                  <div
+                    className={`w-full rounded-sm ${
+                      hasPrice
+                        ? 'bg-primary-400/80 dark:bg-primary-500/60'
+                        : 'bg-surface-200 dark:bg-surface-600'
+                    }`}
+                    style={{ height: `${heightPct}%` }}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
