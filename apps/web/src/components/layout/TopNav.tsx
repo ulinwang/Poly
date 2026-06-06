@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { Search, Menu, Zap } from 'lucide-react';
 import { useMarketStore } from '../../stores';
 import { useDebounce } from '../../hooks';
+import { useI18n } from '../../lib/i18n';
 
 export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   const [searchInput, setSearchInput] = useState('');
   const setSearchQuery = useMarketStore((s) => s.setSearchQuery);
   const debouncedSearch = useDebounce(searchInput, 300);
+  const { t } = useI18n();
 
   useEffect(() => {
     setSearchQuery(debouncedSearch);
@@ -20,7 +22,7 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
           <button
             onClick={onMenuClick}
             className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 lg:hidden"
-            aria-label="打开菜单"
+            aria-label={t('nav.openMenu')}
           >
             <Menu className="w-5 h-5 text-surface-600 dark:text-surface-400" />
           </button>
@@ -29,7 +31,7 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
               <Zap className="w-4 h-4 text-white" />
             </div>
             <span className="text-lg font-bold text-surface-900 dark:text-white hidden sm:block">
-              Poly
+              {t('app.name')}
             </span>
           </a>
         </div>
@@ -42,7 +44,7 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="搜索市场…"
+              placeholder={t('nav.searchMarkets')}
               className="w-full pl-9 pr-4 py-2 bg-surface-100 dark:bg-surface-800 border-0 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none"
             />
           </div>

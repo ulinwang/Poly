@@ -3,17 +3,19 @@ import { Key, KeyRound, Palette, Plus, RefreshCw, Save, TestTube, Trash2 } from 
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
 import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import type { ApiKey, ProviderInfo } from '../types';
 
 export default function Settings() {
+  const { t } = useI18n();
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-xl font-bold text-surface-900 dark:text-white">Settings</h1>
+      <h1 className="text-xl font-bold text-surface-900 dark:text-white">{t('settings.title')}</h1>
 
       <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
-        <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label="API" />
-        <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label="API Keys" />
-        <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label="General" />
+        <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label={t('settings.tab.api')} />
+        <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label={t('settings.tab.keys')} />
+        <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label={t('settings.tab.general')} />
       </div>
 
       <Routes>
@@ -44,10 +46,14 @@ function SettingsTab({ to, icon, label }: { to: string; icon: React.ReactNode; l
 }
 
 function APISettings() {
+  const { t } = useI18n();
   const apiSettings = useSettingsStore((s) => s.apiSettings);
   const updateApiSettings = useSettingsStore((s) => s.updateApiSettings);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // Track whether the current result is a success (drives color) independently
+  // of the (now localized) message text.
+  const [testOk, setTestOk] = useState<boolean | null>(null);
   // Provider catalog comes from the backend (single source of truth, litellm).
   const [providers, setProviders] = useState<import('../types').ProviderInfo[]>([]);
   // Live model list fetched via the provider's /models endpoint. When set, it
@@ -97,11 +103,11 @@ function APISettings() {
       setLiveModels(res.models);
       setModelsSource(
         res.source === 'live'
-          ? `已从 /models 获取 ${res.models.length} 个模型 (live)`
-          : `使用目录默认模型 (catalog)${res.message ? `：${res.message}` : ''}`,
+          ? t('settings.api.modelsLive', { count: res.models.length })
+          : t('settings.api.modelsCatalog', { suffix: res.message ? `: ${res.message}` : '' }),
       );
     } catch (err) {
-      setModelsSource('获取模型失败：' + (err as Error).message);
+      setModelsSource(t('settings.api.modelsFailed', { msg: (err as Error).message }));
     } finally {
       setRefreshingModels(false);
     }
@@ -117,23 +123,28 @@ function APISettings() {
       const res = await api.updateApiSettings(payload as typeof apiSettings);
       // Reflect server's view (api_key_set) and clear the local key input.
       updateApiSettings({ api_key: '', api_key_set: res.settings.api_key_set });
-      setTestResult('Settings saved successfully');
+      setTestOk(true);
+      setTestResult(t('settings.api.saved'));
       setTimeout(() => setTestResult(null), 3000);
     } catch (err) {
-      setTestResult('Failed to save: ' + (err as Error).message);
+      setTestOk(false);
+      setTestResult(t('settings.api.saveFailed', { msg: (err as Error).message }));
     } finally {
       setSaving(false);
     }
   };
 
   const handleTest = async () => {
-    setTestResult('Testing connection...');
+    setTestOk(null);
+    setTestResult(t('settings.api.testing'));
     try {
       const res = await api.testConnection(apiSettings);
-      setTestResult(res.ok ? 'Connection successful!' : `Connection failed: ${res.message}`);
+      setTestOk(res.ok);
+      setTestResult(res.ok ? t('settings.api.testOk') : t('settings.api.testFailed', { msg: res.message }));
       setTimeout(() => setTestResult(null), 5000);
     } catch (err) {
-      setTestResult('Connection failed: ' + (err as Error).message);
+      setTestOk(false);
+      setTestResult(t('settings.api.testFailed', { msg: (err as Error).message }));
       setTimeout(() => setTestResult(null), 5000);
     }
   };
@@ -142,17 +153,17 @@ function APISettings() {
     <div className="card p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
-          LLM API Configuration
+          {t('settings.api.heading')}
         </h2>
         <p className="text-sm text-surface-400 mt-1">
-          Configure the LLM provider used for agent simulation.
+          {t('settings.api.subtitle')}
         </p>
       </div>
 
       {/* Provider */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          Provider
+          {t('settings.api.provider')}
         </label>
         <select
           value={apiSettings.provider}
@@ -181,7 +192,7 @@ function APISettings() {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-            Model
+            {t('settings.api.model')}
           </label>
           {/* Fetch the live model list from the provider's /models endpoint. */}
           <button
@@ -191,7 +202,7 @@ function APISettings() {
             className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />
-            {refreshingModels ? '刷新中...' : '刷新模型'}
+            {refreshingModels ? t('settings.api.refreshingModels') : t('settings.api.refreshModels')}
           </button>
         </div>
         {/* Editable combobox: suggestions from the provider catalog (or the live
@@ -202,7 +213,7 @@ function APISettings() {
           list="model-options"
           value={apiSettings.model}
           onChange={(e) => updateApiSettings({ model: e.target.value })}
-          placeholder="选择或输入模型 id，如 deepseek-v4-flash"
+          placeholder={t('settings.api.modelPlaceholder')}
           className="input"
         />
         <datalist id="model-options">
@@ -216,24 +227,24 @@ function APISettings() {
       {/* API Key */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          API Key
+          {t('settings.api.apiKey')}
         </label>
         <div className="text-xs">
           {apiSettings.api_key_set ? (
-            <span className="text-success">API Key 已配置</span>
+            <span className="text-success">{t('settings.api.keySet')}</span>
           ) : (
-            <span className="text-surface-400">API Key 未配置</span>
+            <span className="text-surface-400">{t('settings.api.keyUnset')}</span>
           )}
         </div>
         <input
           type="password"
           value={apiSettings.api_key || ''}
           onChange={(e) => updateApiSettings({ api_key: e.target.value })}
-          placeholder={apiSettings.api_key_set ? '已配置，留空则保持不变' : 'sk-...'}
+          placeholder={apiSettings.api_key_set ? t('settings.api.keyPlaceholderSet') : 'sk-...'}
           className="input"
         />
         <p className="text-xs text-surface-400">
-          The key is encrypted at rest on the server and is never returned to the browser.
+          {t('settings.api.keyHint')}
         </p>
       </div>
 
@@ -241,7 +252,7 @@ function APISettings() {
       {provider?.requires_base_url && (
         <div className="space-y-2">
           <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-            Base URL
+            {t('settings.api.baseUrl')}
           </label>
           <input
             type="text"
@@ -256,7 +267,7 @@ function APISettings() {
       {/* Temperature */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          Temperature ({apiSettings.temperature})
+          {t('settings.api.temperature', { value: apiSettings.temperature })}
         </label>
         <input
           type="range"
@@ -266,15 +277,15 @@ function APISettings() {
           className="w-full"
         />
         <div className="flex justify-between text-xs text-surface-400">
-          <span>Deterministic (0)</span>
-          <span>Creative (2)</span>
+          <span>{t('settings.api.deterministic')}</span>
+          <span>{t('settings.api.creative')}</span>
         </div>
       </div>
 
       {/* Max Tokens */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          Max Tokens ({apiSettings.max_tokens})
+          {t('settings.api.maxTokens', { value: apiSettings.max_tokens })}
         </label>
         <input
           type="range"
@@ -289,14 +300,14 @@ function APISettings() {
       <div className="flex items-center gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
         <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
           <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? t('settings.api.saving') : t('settings.api.save')}
         </button>
         <button onClick={handleTest} className="btn-secondary flex items-center gap-2">
           <TestTube className="w-4 h-4" />
-          Test Connection
+          {t('settings.api.testConnection')}
         </button>
         {testResult && (
-          <span className={`text-sm ${testResult.includes('success') ? 'text-success' : 'text-danger'}`}>
+          <span className={`text-sm ${testOk === false ? 'text-danger' : testOk === true ? 'text-success' : 'text-surface-400'}`}>
             {testResult}
           </span>
         )}
@@ -306,6 +317,7 @@ function APISettings() {
 }
 
 function KeysSettings() {
+  const { t } = useI18n();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [name, setName] = useState('');
@@ -332,9 +344,9 @@ function KeysSettings() {
 
   const handleAdd = async () => {
     setError(null);
-    if (!name.trim()) { setError('请填写名称'); return; }
-    if (!provider) { setError('请选择 Provider'); return; }
-    if (!apiKey.trim()) { setError('请填写 API Key'); return; }
+    if (!name.trim()) { setError(t('settings.keys.errName')); return; }
+    if (!provider) { setError(t('settings.keys.errProvider')); return; }
+    if (!apiKey.trim()) { setError(t('settings.keys.errKey')); return; }
     setSaving(true);
     try {
       const res = await api.createApiKey({
@@ -351,7 +363,7 @@ function KeysSettings() {
       setBaseUrl('');
       setModel('');
     } catch (err) {
-      setError('保存失败：' + (err as Error).message);
+      setError(t('settings.keys.saveFailed', { msg: (err as Error).message }));
     } finally {
       setSaving(false);
     }
@@ -362,7 +374,7 @@ function KeysSettings() {
       const res = await api.deleteApiKey(id);
       setKeys(res.keys);
     } catch (err) {
-      setError('删除失败：' + (err as Error).message);
+      setError(t('settings.keys.deleteFailed', { msg: (err as Error).message }));
     }
   };
 
@@ -370,17 +382,17 @@ function KeysSettings() {
     <div className="card p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
-          API Keys
+          {t('settings.keys.heading')}
         </h2>
         <p className="text-sm text-surface-400 mt-1">
-          保存多个命名密钥，创建实验时可选择使用其中一个。密钥在服务器端加密存储，不会返回浏览器。
+          {t('settings.keys.subtitle')}
         </p>
       </div>
 
       {/* Stored keys */}
       <div className="space-y-2">
         {keys.length === 0 ? (
-          <p className="text-sm text-surface-400">尚未保存任何密钥。</p>
+          <p className="text-sm text-surface-400">{t('settings.keys.none')}</p>
         ) : (
           keys.map((k) => (
             <div
@@ -402,7 +414,7 @@ function KeysSettings() {
                 className="flex items-center gap-1 text-xs text-danger hover:opacity-80"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                删除
+                {t('settings.keys.delete')}
               </button>
             </div>
           ))
@@ -412,21 +424,21 @@ function KeysSettings() {
       {/* Add new key */}
       <div className="space-y-3 pt-4 border-t border-surface-200 dark:border-surface-700">
         <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
-          新增密钥
+          {t('settings.keys.add')}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-surface-500 mb-1">名称</label>
+            <label className="block text-xs text-surface-500 mb-1">{t('settings.keys.name')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如 我的 DeepSeek key"
+              placeholder={t('settings.keys.namePlaceholder')}
               className="input"
             />
           </div>
           <div>
-            <label className="block text-xs text-surface-500 mb-1">Provider</label>
+            <label className="block text-xs text-surface-500 mb-1">{t('settings.keys.provider')}</label>
             <select
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
@@ -438,7 +450,7 @@ function KeysSettings() {
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className="block text-xs text-surface-500 mb-1">API Key</label>
+            <label className="block text-xs text-surface-500 mb-1">{t('settings.api.apiKey')}</label>
             <input
               type="password"
               value={apiKey}
@@ -449,7 +461,7 @@ function KeysSettings() {
           </div>
           <div>
             <label className="block text-xs text-surface-500 mb-1">
-              Base URL（可选）
+              {t('settings.keys.baseUrlOptional')}
             </label>
             <input
               type="text"
@@ -461,7 +473,7 @@ function KeysSettings() {
           </div>
           <div>
             <label className="block text-xs text-surface-500 mb-1">
-              Model（可选）
+              {t('settings.keys.modelOptional')}
             </label>
             <input
               type="text"
@@ -479,7 +491,7 @@ function KeysSettings() {
             className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            {saving ? '保存中…' : '添加密钥'}
+            {saving ? t('settings.keys.adding') : t('settings.keys.addButton')}
           </button>
           {error && <span className="text-sm text-danger">{error}</span>}
         </div>
@@ -489,6 +501,7 @@ function KeysSettings() {
 }
 
 function GeneralSettings() {
+  const { t, locale, setLocale } = useI18n();
   const darkMode = useSettingsStore((s) => s.darkMode);
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
@@ -496,17 +509,52 @@ function GeneralSettings() {
     <div className="card p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
-          General Settings
+          {t('settings.general.heading')}
         </h2>
       </div>
 
+      {/* Language */}
       <div className="flex items-center justify-between py-3 border-b border-surface-200 dark:border-surface-700">
         <div>
           <div className="text-sm font-medium text-surface-700 dark:text-surface-300">
-            Dark Mode
+            {t('settings.general.language')}
           </div>
           <div className="text-xs text-surface-400">
-            Toggle between light and dark theme
+            {t('settings.general.languageHint')}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-surface-100 dark:bg-surface-800 p-1">
+          <button
+            onClick={() => setLocale('zh')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              locale === 'zh'
+                ? 'bg-white dark:bg-surface-700 text-primary-600 shadow-sm font-medium'
+                : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            }`}
+          >
+            {t('lang.zh')}
+          </button>
+          <button
+            onClick={() => setLocale('en')}
+            className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              locale === 'en'
+                ? 'bg-white dark:bg-surface-700 text-primary-600 shadow-sm font-medium'
+                : 'text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            }`}
+          >
+            {t('lang.en')}
+          </button>
+        </div>
+      </div>
+
+      {/* Dark mode */}
+      <div className="flex items-center justify-between py-3 border-b border-surface-200 dark:border-surface-700">
+        <div>
+          <div className="text-sm font-medium text-surface-700 dark:text-surface-300">
+            {t('settings.general.darkMode')}
+          </div>
+          <div className="text-xs text-surface-400">
+            {t('settings.general.darkModeHint')}
           </div>
         </div>
         <button

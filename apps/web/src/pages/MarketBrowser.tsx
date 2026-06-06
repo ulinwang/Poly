@@ -7,6 +7,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
+import { useI18n } from '../lib/i18n';
 import type { Market } from '../types';
 
 // Icon hints for well-known category labels (falls back to a generic tag icon).
@@ -42,6 +43,7 @@ function deriveCategories(markets: Market[]): string[] {
 }
 
 export default function MarketBrowser() {
+  const { t } = useI18n();
   // `loading` = first-page load (drives skeleton); `loadingMore` = subsequent pages.
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -145,7 +147,7 @@ export default function MarketBrowser() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜索市场…"
+          placeholder={t('nav.searchMarkets')}
           className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none"
         />
       </div>
@@ -166,7 +168,7 @@ export default function MarketBrowser() {
               }`}
             >
               {Icon && <Icon className="w-3.5 h-3.5" />}
-              {cat}
+              {cat === 'All' ? t('market.all') : cat}
             </button>
           );
         })}
@@ -174,13 +176,15 @@ export default function MarketBrowser() {
 
       {/* Section title */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-surface-900 dark:text-white">{category}</h2>
+        <h2 className="text-xl font-bold text-surface-900 dark:text-white">
+          {category === 'All' ? t('market.all') : category}
+        </h2>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-surface-400">{filtered.length} markets</span>
+          <span className="text-sm text-surface-400">{t('market.countMarkets', { count: filtered.length })}</span>
           <button
             onClick={() => setRefreshTick((n) => n + 1)}
             disabled={loading}
-            title="刷新市场数据"
+            title={t('market.refreshMarkets')}
             className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:opacity-50 transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -207,8 +211,8 @@ export default function MarketBrowser() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-surface-400">
-          <p className="text-lg mb-1">No markets found</p>
-          <p className="text-sm">Try adjusting your search or category filter.</p>
+          <p className="text-lg mb-1">{t('market.noneFound')}</p>
+          <p className="text-sm">{t('market.adjustSearch')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -228,11 +232,11 @@ export default function MarketBrowser() {
           {loadingMore && (
             <span className="flex items-center gap-2 text-sm text-surface-400">
               <Loader2 className="w-4 h-4 animate-spin" />
-              加载中…
+              {t('common.loading')}
             </span>
           )}
           {!hasMore && markets.length > 0 && (
-            <span className="text-xs text-surface-400">没有更多市场了</span>
+            <span className="text-xs text-surface-400">{t('common.noMore')}</span>
           )}
         </div>
       )}
@@ -378,6 +382,7 @@ function Thumbnail({
 }
 
 const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
+  const { t } = useI18n();
   const yesCents = toCents(market.yes_price);
   const change = market.price_change_24h;
   const hasChange = change != null && Number.isFinite(change);
@@ -396,10 +401,10 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
           </h3>
           <div className="flex items-center gap-2 mt-1.5">
             <span className={`badge text-[10px] ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
-              {market.is_live ? 'Open' : 'Resolved'}
+              {market.is_live ? t('market.open') : t('market.resolved')}
             </span>
             <span className="text-xs text-surface-400">
-              {formatVol(market.volume)} Vol
+              {formatVol(market.volume)} {t('market.vol')}
             </span>
           </div>
         </div>
@@ -408,13 +413,13 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
       {/* Yes / No prices (real Polymarket quote; — when no live quote) */}
       <div className="flex items-center gap-3">
         <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Yes</div>
+          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('market.yes')}</div>
           <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
             {yesCents == null ? '—' : `${yesCents}¢`}
           </div>
         </div>
         <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
-          <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">No</div>
+          <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t('market.no')}</div>
           <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
             {yesCents == null ? '—' : `${100 - yesCents}¢`}
           </div>
@@ -434,7 +439,7 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
             {change! >= 0
               ? <ArrowUpRight className="w-3.5 h-3.5" />
               : <ArrowDownRight className="w-3.5 h-3.5" />}
-            {change! >= 0 ? '+' : ''}{(change! * 100).toFixed(1)}¢ 24h
+            {change! >= 0 ? '+' : ''}{(change! * 100).toFixed(1)}¢ {t('market.change24h')}
           </span>
         ) : (
           <span className="text-xs text-surface-300 dark:text-surface-600">—</span>
@@ -443,7 +448,7 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
 
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50">
-        <span>{market.n_holders?.toLocaleString() || 0} traders</span>
+        <span>{t('market.traders', { count: market.n_holders?.toLocaleString() || 0 })}</span>
         <span className="font-mono text-[10px]">{market.condition_id.slice(0, 6)}…</span>
       </div>
     </a>
@@ -454,6 +459,7 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
 // a deterministic mini Yes price). Clicking enters the event via its first
 // sub-market's slug — MarketDetail then surfaces the sibling outcomes.
 const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
+  const { t } = useI18n();
   const outcomes = group.markets.slice(0, 4);
   const extra = group.markets.length - outcomes.length;
   const target = group.markets[0]?.slug ?? '';
@@ -475,10 +481,10 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
           <div className="flex items-center gap-2 mt-1.5">
             <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
               <Layers className="w-3 h-3" />
-              {group.markets.length} 个结果
+              {t('market.outcomes', { count: group.markets.length })}
             </span>
             <span className="text-xs text-surface-400">
-              {formatVol(group.volume)} Vol
+              {formatVol(group.volume)} {t('market.vol')}
             </span>
           </div>
         </div>
@@ -503,13 +509,13 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
           );
         })}
         {extra > 0 && (
-          <div className="px-2.5 text-xs text-surface-400">+{extra} 个结果</div>
+          <div className="px-2.5 text-xs text-surface-400">{t('market.moreOutcomes', { count: extra })}</div>
         )}
       </div>
 
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50 mt-auto">
-        <span>多结果事件</span>
+        <span>{t('market.multiOutcomeEvent')}</span>
         <span className="font-mono text-[10px]">{group.eventSlug.slice(0, 10)}…</span>
       </div>
     </a>

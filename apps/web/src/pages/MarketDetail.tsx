@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore, useExperimentStore, useSettingsStore } from '../stores';
+import { useI18n } from '../lib/i18n';
 import type { MarketDetail as MarketDetailType, Experiment, Market, ApiKey } from '../types';
 
 const statusStyle: Record<string, string> = {
@@ -30,6 +31,7 @@ function formatDate(iso: string | null) {
 }
 
 export default function MarketDetail() {
+  const { t } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const [market, setMarket] = useState<MarketDetailType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,7 +97,7 @@ export default function MarketDetail() {
       window.location.hash = `#/experiments/${res.run_id}`;
     } catch (err) {
       console.error('Failed to start experiment:', err);
-      alert('Failed to start experiment: ' + (err as Error).message);
+      alert(t('detail.startFailed', { msg: (err as Error).message }));
     } finally {
       setStarting(false);
     }
@@ -109,7 +111,7 @@ export default function MarketDetail() {
     );
   }
   if (!market) {
-    return <div className="text-center py-20 text-surface-400">Market not found</div>;
+    return <div className="text-center py-20 text-surface-400">{t('detail.notFound')}</div>;
   }
 
   const polymarketUrl = market.event_slug
@@ -121,7 +123,7 @@ export default function MarketDetail() {
       {/* Back link */}
       <a href="#/markets" className="inline-flex items-center gap-1 text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">
         <ArrowLeft className="w-4 h-4" />
-        返回市场列表
+        {t('detail.back')}
       </a>
 
       {/* Market header */}
@@ -146,13 +148,13 @@ export default function MarketDetail() {
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className={`badge ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
-                {market.is_live ? 'Open' : 'Resolved'}
+                {market.is_live ? t('market.open') : t('market.resolved')}
               </span>
               <span className="inline-flex items-center gap-1 text-xs text-surface-500">
-                <BarChart3 className="w-3.5 h-3.5" /> {formatVol(market.volume)} Vol
+                <BarChart3 className="w-3.5 h-3.5" /> {formatVol(market.volume)} {t('market.vol')}
               </span>
               <span className="inline-flex items-center gap-1 text-xs text-surface-500">
-                <CalendarDays className="w-3.5 h-3.5" /> 截止 {formatDate(market.end_date_iso)}
+                <CalendarDays className="w-3.5 h-3.5" /> {t('detail.deadline', { date: formatDate(market.end_date_iso) })}
               </span>
             </div>
           </div>
@@ -164,7 +166,7 @@ export default function MarketDetail() {
               className="btn-secondary flex items-center gap-1.5 flex-shrink-0 text-sm"
             >
               <ExternalLink className="w-4 h-4" />
-              在 Polymarket 查看
+              {t('detail.viewOnPolymarket')}
             </a>
           )}
         </div>
@@ -198,12 +200,12 @@ export default function MarketDetail() {
           <div className="flex items-center gap-2 mb-2">
             <Layers className="w-4 h-4 text-primary-500" />
             <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
-              该事件的其它结果
+              {t('detail.otherOutcomes')}
             </h3>
             <span className="text-xs text-surface-400">({siblings.length})</span>
           </div>
           <p className="text-xs text-surface-400 mb-4">
-            这是一个多结果事件。仿真针对当前选中的单个结果子市场，点击下方结果可切换。
+            {t('detail.multiOutcomeHint')}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {siblings.map((s) => {
@@ -223,7 +225,7 @@ export default function MarketDetail() {
                   </span>
                   {active && (
                     <span className="badge text-[10px] bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 flex-shrink-0">
-                      当前
+                      {t('common.current')}
                     </span>
                   )}
                   <span className="text-xs text-surface-400 flex-shrink-0">{formatVol(s.volume)}</span>
@@ -246,7 +248,7 @@ export default function MarketDetail() {
                   className="flex-1 h-full flex items-end"
                   title={hasPrice
                     ? `${s.group_title || s.slug}: ${cents}¢`
-                    : `${s.group_title || s.slug}: 暂无行情`}
+                    : `${s.group_title || s.slug}: ${t('detail.noQuote')}`}
                 >
                   <div
                     className={`w-full rounded-sm ${
@@ -268,12 +270,12 @@ export default function MarketDetail() {
         <div className="flex items-center gap-2 mb-4">
           <FlaskConical className="w-4 h-4 text-surface-500" />
           <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
-            该市场的实验
+            {t('detail.marketExperiments')}
           </h3>
           <span className="text-xs text-surface-400">({experiments.length})</span>
         </div>
         {experiments.length === 0 ? (
-          <p className="text-sm text-surface-400 py-2">还没有针对该市场的实验，在下方新建一个。</p>
+          <p className="text-sm text-surface-400 py-2">{t('detail.noExperiments')}</p>
         ) : (
           <div className="space-y-1.5 max-h-72 overflow-y-auto">
             {experiments.map((exp) => (
@@ -289,8 +291,8 @@ export default function MarketDetail() {
                     : <XCircle className="w-4 h-4 text-surface-400 flex-shrink-0" />}
                 <span className="text-sm text-surface-700 dark:text-surface-300 font-mono">{exp.id.slice(0, 8)}</span>
                 <span className="text-xs text-surface-400">
-                  {exp.n_agents} agents · {exp.n_ticks} ticks · {exp.persona_set}
-                  {exp.seed != null ? ` · seed ${exp.seed}` : ''}
+                  {exp.n_agents} {t('detail.unitAgents')} · {exp.n_ticks} {t('detail.unitTicks')} · {exp.persona_set}
+                  {exp.seed != null ? ` · ${t('detail.seedLabel', { seed: exp.seed })}` : ''}
                 </span>
                 <span className={`badge text-[10px] ml-auto ${statusStyle[exp.status] || ''}`}>{exp.status}</span>
               </a>
@@ -302,13 +304,13 @@ export default function MarketDetail() {
       {/* New experiment */}
       <div className="card p-6">
         <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
-          新建实验
+          {t('detail.newExperiment')}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-surface-500 mb-1">
               <Users className="w-3 h-3 inline mr-1" />
-              Agent 数量 ({nAgents})
+              {t('detail.agentCount', { count: nAgents })}
             </label>
             <input type="range" min="3" max="100" value={nAgents}
               onChange={(e) => setNAgents(Number(e.target.value))} className="w-full" />
@@ -316,36 +318,36 @@ export default function MarketDetail() {
           <div>
             <label className="block text-xs text-surface-500 mb-1">
               <Clock className="w-3 h-3 inline mr-1" />
-              Tick 数 ({nTicks})
+              {t('detail.tickCount', { count: nTicks })}
             </label>
             <input type="range" min="1" max="48" value={nTicks}
               onChange={(e) => setNTicks(Number(e.target.value))} className="w-full" />
           </div>
           <div>
-            <label className="block text-xs text-surface-500 mb-1">Persona 组</label>
+            <label className="block text-xs text-surface-500 mb-1">{t('detail.personaSet')}</label>
             <select value={personaSet}
               onChange={(e) => setPersonaSet(e.target.value as 'archetype' | 'calibrated' | 'no_signal')}
               className="input">
-              <option value="archetype">Archetype (K-means)</option>
-              <option value="calibrated">Calibrated (Real wallets)</option>
-              <option value="no_signal">No Signal (Ablation)</option>
+              <option value="archetype">{t('detail.persona.archetype')}</option>
+              <option value="calibrated">{t('detail.persona.calibrated')}</option>
+              <option value="no_signal">{t('detail.persona.noSignal')}</option>
             </select>
           </div>
           <div>
             <label className="block text-xs text-surface-500 mb-1">
-              随机种子 (seed)
+              {t('detail.seed')}
             </label>
             <input type="number" min="0" step="1" value={seed}
               onChange={(e) => setSeed(Number.isFinite(e.target.valueAsNumber) ? Math.trunc(e.target.valueAsNumber) : 0)}
               className="input" />
-            <p className="mt-1 text-[10px] text-surface-400">相同种子可复现同一次仿真。</p>
+            <p className="mt-1 text-[10px] text-surface-400">{t('detail.seedHint')}</p>
           </div>
           <div>
-            <label className="block text-xs text-surface-500 mb-1">API Key</label>
+            <label className="block text-xs text-surface-500 mb-1">{t('detail.apiKey')}</label>
             <select value={apiKeyId}
               onChange={(e) => setApiKeyId(e.target.value)}
               className="input">
-              <option value="">使用默认设置</option>
+              <option value="">{t('detail.useDefaultSettings')}</option>
               {apiKeys.map((k) => (
                 <option key={k.id} value={String(k.id)}>
                   {k.name} ({k.provider})
@@ -353,7 +355,7 @@ export default function MarketDetail() {
               ))}
             </select>
             <p className="mt-1 text-[10px] text-surface-400">
-              选择已保存的命名密钥，或使用 Settings 中的默认配置。
+              {t('detail.apiKeyHint')}
             </p>
           </div>
         </div>
@@ -361,10 +363,10 @@ export default function MarketDetail() {
           <button onClick={handleStart} disabled={starting || !market.is_live}
             className="btn-primary flex items-center gap-2">
             <Play className="w-4 h-4" />
-            {starting ? '启动中…' : '开始仿真'}
+            {starting ? t('detail.starting') : t('detail.startSimulation')}
           </button>
           {!market.is_live && (
-            <span className="text-sm text-warning">该市场已结算，无法仿真。</span>
+            <span className="text-sm text-warning">{t('detail.resolvedNoSim')}</span>
           )}
           <span className="text-xs text-surface-400 ml-auto">
             LLM: {apiSettings.provider} / {apiSettings.model}

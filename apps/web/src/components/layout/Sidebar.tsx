@@ -1,13 +1,14 @@
 import { useLocation } from 'react-router-dom';
 import {
   LayoutGrid, FlaskConical, Settings,
-  PanelLeftClose, PanelLeftOpen, Moon, Sun,
+  PanelLeftClose, PanelLeftOpen, Moon, Sun, Languages,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useExperimentStore, useSettingsStore } from '../../stores';
+import { useI18n } from '../../lib/i18n';
 
 interface NavEntry {
-  label: string;
+  labelKey: string;
   href: string;
   icon: LucideIcon;
   /** route prefix used to decide the active state */
@@ -15,9 +16,9 @@ interface NavEntry {
 }
 
 const NAV: NavEntry[] = [
-  { label: '浏览', href: '#/markets', icon: LayoutGrid, match: '/markets' },
-  { label: '实验', href: '#/experiments', icon: FlaskConical, match: '/experiments' },
-  { label: '设置', href: '#/settings/api', icon: Settings, match: '/settings' },
+  { labelKey: 'nav.browse', href: '#/markets', icon: LayoutGrid, match: '/markets' },
+  { labelKey: 'nav.experiments', href: '#/experiments', icon: FlaskConical, match: '/experiments' },
+  { labelKey: 'nav.settings', href: '#/settings/api', icon: Settings, match: '/settings' },
 ];
 
 interface SidebarProps {
@@ -32,6 +33,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
   const darkMode = useSettingsStore((s) => s.darkMode);
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
   const experiments = useExperimentStore((s) => s.experiments);
+  const { t, locale, setLocale } = useI18n();
 
   const runningCount = experiments.filter((e) => e.status === 'running').length;
 
@@ -45,7 +47,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       <div className={`flex items-center h-14 px-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
         <button
           onClick={toggleSidebar}
-          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
           className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700/60"
         >
           {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
@@ -58,12 +60,13 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           const active = location.pathname.startsWith(item.match);
           const Icon = item.icon;
           const showBadge = item.match === '/experiments' && runningCount > 0;
+          const label = t(item.labelKey);
           return (
             <a
               key={item.href}
               href={item.href}
               onClick={onNavigate}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? label : undefined}
               className={`group relative flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
                 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 active
@@ -80,13 +83,13 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
                   </span>
                 )}
               </span>
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span>{label}</span>}
 
               {/* tooltip when collapsed */}
               {collapsed && (
                 <span className="absolute left-full ml-2 px-2 py-1 bg-surface-800 text-white text-xs
                   rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
-                  {item.label}
+                  {label}
                 </span>
               )}
             </a>
@@ -94,17 +97,27 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      {/* Bottom: dark mode toggle */}
-      <div className="px-2 pb-3 border-t border-surface-200 dark:border-surface-700 pt-2">
+      {/* Bottom: language switcher + dark mode toggle */}
+      <div className="px-2 pb-3 border-t border-surface-200 dark:border-surface-700 pt-2 space-y-1">
+        <button
+          onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
+          title={t('lang.label')}
+          className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
+            px-3 py-2.5 rounded-lg text-sm font-medium text-surface-600 dark:text-surface-400
+            hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors`}
+        >
+          <Languages className="w-5 h-5 flex-shrink-0" />
+          {!collapsed && <span>{locale === 'zh' ? t('lang.en') : t('lang.zh')}</span>}
+        </button>
         <button
           onClick={toggleDarkMode}
-          title={darkMode ? '浅色模式' : '深色模式'}
+          title={darkMode ? t('theme.light') : t('theme.dark')}
           className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
             px-3 py-2.5 rounded-lg text-sm font-medium text-surface-600 dark:text-surface-400
             hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors`}
         >
           {darkMode ? <Sun className="w-5 h-5 flex-shrink-0" /> : <Moon className="w-5 h-5 flex-shrink-0" />}
-          {!collapsed && <span>{darkMode ? '浅色模式' : '深色模式'}</span>}
+          {!collapsed && <span>{darkMode ? t('theme.light') : t('theme.dark')}</span>}
         </button>
       </div>
     </aside>

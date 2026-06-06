@@ -5,6 +5,7 @@ import {
   RefreshCw, Search, ChevronLeft, ChevronRight, Filter, ArrowLeft, LayoutGrid,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import type { Experiment } from '../types';
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -57,6 +58,7 @@ export default function ExperimentManager() {
 // Grid view: one card per market (slug), aggregated from all experiments.
 // ---------------------------------------------------------------------------
 function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
+  const { t } = useI18n();
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [questions, setQuestions] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState('');
@@ -71,11 +73,11 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
       const res = await api.listExperiments({ limit: AGGREGATE_LIMIT });
       setExperiments(res.experiments);
     } catch (err) {
-      setError('Failed to load experiments: ' + (err as Error).message);
+      setError(t('exp.loadFailed', { msg: (err as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -124,14 +126,14 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FlaskConical className="w-5 h-5 text-primary-600" />
-          <h1 className="text-xl font-bold text-surface-900 dark:text-white">Experiments</h1>
-          <span className="text-sm text-surface-400">({groups.length} markets)</span>
+          <h1 className="text-xl font-bold text-surface-900 dark:text-white">{t('exp.title')}</h1>
+          <span className="text-sm text-surface-400">({t('exp.marketCount', { count: groups.length })})</span>
         </div>
         <button
           onClick={load}
           disabled={loading}
           className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-          title="Refresh"
+          title={t('common.refresh')}
         >
           <RefreshCw className={`w-4 h-4 text-surface-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -145,7 +147,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search markets by slug or question..."
+            placeholder={t('exp.searchPlaceholder')}
             className="input pl-9 w-full"
           />
         </div>
@@ -156,11 +158,11 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="input py-2"
           >
-            <option value="">All Status</option>
-            <option value="running">Running</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="error">Error</option>
+            <option value="">{t('exp.allStatus')}</option>
+            <option value="running">{t('exp.status.running')}</option>
+            <option value="completed">{t('exp.status.completed')}</option>
+            <option value="cancelled">{t('exp.status.cancelled')}</option>
+            <option value="error">{t('exp.status.error')}</option>
           </select>
         </div>
       </div>
@@ -176,10 +178,10 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
         <div className="card p-12 text-center">
           <FlaskConical className="w-12 h-12 text-surface-300 mx-auto mb-3" />
           <p className="text-surface-500 dark:text-surface-400">
-            {searchQuery || statusFilter ? 'No matching markets.' : 'No experiments yet.'}
+            {searchQuery || statusFilter ? t('exp.noMatchingMarkets') : t('exp.noExperimentsYet')}
           </p>
           <p className="text-sm text-surface-400 mt-1">
-            Select a market and start a simulation to see it here.
+            {t('exp.selectMarketHint')}
           </p>
         </div>
       ) : (
@@ -195,7 +197,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
                   {g.question || g.slug}
                 </span>
                 <span className="badge text-[10px] bg-surface-100 dark:bg-surface-800 text-surface-500 flex-shrink-0">
-                  {g.total} run{g.total === 1 ? '' : 's'}
+                  {g.total === 1 ? t('exp.runsOne', { count: g.total }) : t('exp.runsMany', { count: g.total })}
                 </span>
               </div>
               {g.question && (
@@ -208,7 +210,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
                     className={`badge text-[10px] inline-flex items-center gap-1 ${statusColors[s] || ''}`}
                   >
                     {statusIcons[s]}
-                    {g.statusCounts[s]} {s}
+                    {g.statusCounts[s]} {t(`exp.status.${s}`)}
                   </span>
                 ))}
               </div>
@@ -224,6 +226,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
 // List view: experiments for a single market (slug), paginated server-side.
 // ---------------------------------------------------------------------------
 function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => void }) {
+  const { t } = useI18n();
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -251,11 +254,11 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
       setExperiments(res.experiments);
       setTotal(res.total);
     } catch (err) {
-      setError('Failed to load experiments: ' + (err as Error).message);
+      setError(t('exp.loadFailed', { msg: (err as Error).message }));
     } finally {
       setLoading(false);
     }
-  }, [slug, statusFilter, offset]);
+  }, [slug, statusFilter, offset, t]);
 
   useEffect(() => {
     load();
@@ -281,7 +284,7 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
       >
         <ArrowLeft className="w-4 h-4" />
         <LayoutGrid className="w-4 h-4" />
-        All markets
+        {t('exp.allMarkets')}
       </button>
 
       {/* Header */}
@@ -300,7 +303,7 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
           onClick={load}
           disabled={loading}
           className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors flex-shrink-0"
-          title="Refresh"
+          title={t('common.refresh')}
         >
           <RefreshCw className={`w-4 h-4 text-surface-500 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -314,11 +317,11 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
           onChange={(e) => { setStatusFilter(e.target.value); setOffset(0); }}
           className="input py-2"
         >
-          <option value="">All Status</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="error">Error</option>
+          <option value="">{t('exp.allStatus')}</option>
+          <option value="running">{t('exp.status.running')}</option>
+          <option value="completed">{t('exp.status.completed')}</option>
+          <option value="cancelled">{t('exp.status.cancelled')}</option>
+          <option value="error">{t('exp.status.error')}</option>
         </select>
       </div>
 
@@ -333,7 +336,7 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
         <div className="card p-12 text-center">
           <FlaskConical className="w-12 h-12 text-surface-300 mx-auto mb-3" />
           <p className="text-surface-500 dark:text-surface-400">
-            {statusFilter ? 'No matching experiments.' : 'No experiments for this market.'}
+            {statusFilter ? t('exp.noMatchingExperiments') : t('exp.noExperimentsForMarket')}
           </p>
         </div>
       ) : (
@@ -354,11 +357,11 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
                       {exp.slug}
                     </span>
                     <span className={`badge text-[10px] ${statusColors[exp.status] || ''}`}>
-                      {exp.status}
+                      {t(`exp.status.${exp.status}`)}
                     </span>
                   </div>
                   <div className="text-xs text-surface-400 mt-0.5">
-                    {exp.n_agents} agents · {exp.n_ticks} ticks · {exp.persona_set}
+                    {exp.n_agents} {t('detail.unitAgents')} · {exp.n_ticks} {t('detail.unitTicks')} · {exp.persona_set}
                   </div>
                 </div>
                 <div className="text-right text-xs text-surface-400">
@@ -373,7 +376,7 @@ function MarketExperimentList({ slug, onBack }: { slug: string; onBack: () => vo
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-2">
               <div className="text-sm text-surface-400">
-                Page {currentPage} of {totalPages}
+                {t('exp.pageOf', { current: currentPage, total: totalPages })}
               </div>
               <div className="flex items-center gap-2">
                 <button
