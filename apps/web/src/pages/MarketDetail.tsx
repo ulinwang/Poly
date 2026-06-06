@@ -119,12 +119,17 @@ export default function MarketDetail() {
     : null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Back link */}
       <a href="#/markets" className="inline-flex items-center gap-1 text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300">
         <ArrowLeft className="w-4 h-4" />
         {t('detail.back')}
       </a>
+
+      {/* Two-column layout: market info (left) · experiments + new run (right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      {/* Left column: market */}
+      <div className="space-y-6">
 
       {/* Market header */}
       <div className="card p-6">
@@ -265,6 +270,11 @@ export default function MarketDetail() {
         </div>
       )}
 
+      </div>{/* end left column */}
+
+      {/* Right column: experiments + new experiment */}
+      <div className="space-y-6">
+
       {/* This market's experiments */}
       <div className="card p-6">
         <div className="flex items-center gap-2 mb-4">
@@ -373,6 +383,9 @@ export default function MarketDetail() {
           </span>
         </div>
       </div>
+
+      </div>{/* end right column */}
+      </div>{/* end two-column grid */}
     </div>
   );
 }
