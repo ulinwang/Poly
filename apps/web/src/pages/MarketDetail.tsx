@@ -38,6 +38,11 @@ export default function MarketDetail() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   // Sibling sub-markets when this market belongs to a multi-market event.
   const [siblings, setSiblings] = useState<Market[]>([]);
+  // In-page selected outcome (multi-market event). null = show the event view
+  // (event title/image/description). Clicking an outcome focuses that sub-market
+  // — header, experiments and the new-run form all switch to it, without a
+  // full navigation. Reset whenever the URL market changes.
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [nAgents, setNAgents] = useState(20);
   const [nTicks, setNTicks] = useState(12);
   const [seed, setSeed] = useState(0);
@@ -51,17 +56,26 @@ export default function MarketDetail() {
   const setActiveId = useExperimentStore((s) => s.setActiveId);
   const apiSettings = useSettingsStore((s) => s.apiSettings);
 
+  // The market actually shown/targeted: the in-page selected outcome if any,
+  // otherwise the URL market.
+  const effectiveSlug = selectedSlug ?? slug;
+
+  // Reset the in-page selection (and sibling cache) when the URL market changes.
   useEffect(() => {
-    if (!slug) return;
-    selectMarket(slug);
-    setLoading(true);
+    setSelectedSlug(null);
     setSiblings([]);
-    api.getMarket(slug)
+  }, [slug]);
+
+  // Load market detail + experiments for the effective (selected or URL) market.
+  useEffect(() => {
+    if (!effectiveSlug) return;
+    selectMarket(effectiveSlug);
+    setLoading(true);
+    api.getMarket(effectiveSlug)
       .then((res) => {
         setMarket(res.market);
-        // If this market is part of a multi-market event, load its siblings so
-        // the user can switch between outcomes. Single-market events return one
-        // entry, which we treat as "no siblings".
+        // Load sibling outcomes for multi-market events so the user can switch
+        // between them in-page. Single-market events return one entry → none.
         const ev = res.market.event_slug;
         if (ev) {
           api.getEventMarkets(ev)
@@ -71,20 +85,24 @@ export default function MarketDetail() {
       })
       .catch((err) => console.error('Failed to load market:', err))
       .finally(() => setLoading(false));
-    api.listExperiments({ slug, limit: 50 })
+    api.listExperiments({ slug: effectiveSlug, limit: 50 })
       .then((res) => setExperiments(res.experiments))
       .catch((err) => console.error('Failed to load market experiments:', err));
+  }, [effectiveSlug, selectMarket]);
+
+  // API keys are global; load once.
+  useEffect(() => {
     api.listApiKeys()
       .then((res) => setApiKeys(res.keys))
       .catch((err) => console.error('Failed to load API keys:', err));
-  }, [slug, selectMarket]);
+  }, []);
 
   const handleStart = async () => {
-    if (!slug) return;
+    if (!effectiveSlug) return;
     setStarting(true);
     try {
       const res = await api.createExperiment({
-        slug,
+        slug: effectiveSlug,
         n_agents: nAgents,
         n_ticks: nTicks,
         persona_set: personaSet,
@@ -122,10 +140,13 @@ export default function MarketDetail() {
   // description by default; the individual sub-market's title & image appear in
   // the outcomes list below (the selected one highlighted). Single-market
   // events fall back to the market's own fields.
+  // Event header only when nothing is selected; once an outcome is chosen the
+  // market has been refetched to that sub-market, so show its own fields.
   const isMultiEvent = siblings.length > 1;
-  const headerTitle = (isMultiEvent && market.event_title) || market.question || market.slug;
-  const headerImage = (isMultiEvent && market.event_icon) ? market.event_icon : market.icon_url;
-  const headerDesc = (isMultiEvent && market.event_description) ? market.event_description : market.description;
+  const showEventHeader = isMultiEvent && selectedSlug == null;
+  const headerTitle = (showEventHeader && market.event_title) || market.question || market.slug;
+  const headerImage = (showEventHeader && market.event_icon) ? market.event_icon : market.icon_url;
+  const headerDesc = (showEventHeader && market.event_description) ? market.event_description : market.description;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -223,12 +244,13 @@ export default function MarketDetail() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {siblings.map((s) => {
-              const active = s.slug === market.slug;
+              const active = s.slug === effectiveSlug;
               return (
-                <a
+                <button
                   key={s.slug}
-                  href={`#/markets/${s.slug}`}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                  type="button"
+                  onClick={() => setSelectedSlug(s.slug)}
+                  className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
                     active
                       ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-600'
                       : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700/50'
@@ -250,7 +272,7 @@ export default function MarketDetail() {
                     </span>
                   )}
                   <span className="text-xs text-surface-400 flex-shrink-0">{formatVol(s.volume)}</span>
-                </a>
+                </button>
               );
             })}
           </div>
