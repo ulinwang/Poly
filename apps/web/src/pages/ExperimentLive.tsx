@@ -147,7 +147,10 @@ export default function ExperimentLive() {
               <span className={`badge ${running ? 'badge-live' : paused ? 'badge-warn' : 'badge-resolved'}`}>
                 {running ? 'Running' : paused ? 'Paused' : experiment?.status || 'Done'}
               </span>
-              <span>{experiment?.n_agents} agents · {experiment?.n_ticks} ticks</span>
+              <span>
+                {experiment?.n_agents} agents · {experiment?.n_ticks} ticks
+                {experiment?.seed != null ? ` · seed ${experiment.seed}` : ''}
+              </span>
             </div>
           </div>
         </div>

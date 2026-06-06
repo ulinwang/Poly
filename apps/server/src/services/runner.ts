@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 import { config } from '../config';
 // import type { ExperimentRow } from '../types'; // available when needed
 
@@ -9,6 +11,10 @@ export interface RunHandle {
   nAgents: number;
   nTicks: number;
   personaSet: string;
+  /** RNG seed for this run (reproducibility). Defaults to 0. */
+  seed: number;
+  /** LLM sampling temperature for this run. Defaults to 0. */
+  temperature: number;
   queue: Array<{ kind: string; data: Record<string, unknown> }>;
   history: Array<{ kind: string; data: Record<string, unknown> }>;
   cancel: boolean;
@@ -35,6 +41,8 @@ export function createRunHandle(
   nAgents: number,
   nTicks: number,
   personaSet: string,
+  seed = 0,
+  temperature = 0,
 ): RunHandle {
   return {
     runId,
@@ -42,6 +50,8 @@ export function createRunHandle(
     nAgents,
     nTicks,
     personaSet,
+    seed,
+    temperature,
     queue: [],
     history: [],
     cancel: false,
@@ -62,10 +72,30 @@ export function checkpointPathFor(runId: string): string {
   return `${config.DATA_DIR}/checkpoints/${runId}.pkl`;
 }
 
+/**
+ * NDJSON event-log location for a run id (under DATA_DIR/runs). Every emitted
+ * event is appended here as one JSON object per line so the full history
+ * survives the in-memory HISTORY_CAP truncation and server restarts. Resumed
+ * runs append to the same file.
+ */
+export function eventLogPathFor(runId: string): string {
+  return path.join(config.DATA_DIR, 'runs', `${runId}.ndjson`);
+}
+
 export function emitEvent(handle: RunHandle, kind: string, data: Record<string, unknown>): void {
   handle.queue.push({ kind, data });
   if (handle.history.length < HISTORY_CAP) {
     handle.history.push({ kind, data });
+  }
+  // Persist every event to NDJSON so the full history is durable (not capped,
+  // survives restart). Synchronous append is fine: event volume is modest and
+  // ordering must match the in-memory queue. Failures must not crash the run.
+  try {
+    const logPath = eventLogPathFor(handle.runId);
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.appendFileSync(logPath, JSON.stringify({ kind, data }) + '\n');
+  } catch (err) {
+    console.error('[runner] failed to append event log', err);
   }
   if (kind === 'settled') {
     handle.finalMetrics = data;
@@ -110,8 +140,8 @@ export function spawnRun(
     n_agents: handle.nAgents,
     n_ticks: handle.nTicks,
     persona_set: handle.personaSet,
-    seed: 0,
-    temperature: 0.0,
+    seed: handle.seed,
+    temperature: handle.temperature,
     data_dir: 'data',
   };
   if (checkpointOut) payload.checkpoint_out = checkpointOut;

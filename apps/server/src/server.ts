@@ -12,10 +12,18 @@ import marketsRoutes from './routes/markets';
 import experimentsRoutes from './routes/experiments';
 import settingsRoutes from './routes/settings';
 import providersRoutes from './routes/providers';
+import { repairOrphanedRuns } from './db/experiments';
 
 const isDev = process.env.NODE_ENV === 'development';
 
 export async function buildServer() {
+  // Repair zombie runs left as 'running' by a previous process that died
+  // without finishing them. Paused (resumable) runs are left alone.
+  const repaired = repairOrphanedRuns();
+  if (repaired > 0) {
+    console.warn(`[startup] marked ${repaired} orphaned running experiment(s) as error`);
+  }
+
   const app = Fastify({
     logger: isDev,
   });

@@ -58,6 +58,8 @@ const expectedCols = [
   // Path to the pickle checkpoint written when a run is paused; used by
   // POST /:id/resume to continue the simulation. NULL unless paused.
   ['checkpoint_path', 'TEXT'],
+  // RNG seed used for the run (reproducibility). NULL for legacy rows.
+  ['seed', 'INTEGER'],
 ];
 const existingCols = db
   .prepare("PRAGMA table_info(experiments)")

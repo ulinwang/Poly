@@ -38,6 +38,10 @@ export interface ExperimentConfig {
   n_ticks: number;
   persona_set: 'archetype' | 'calibrated' | 'no_signal';
   api_settings_id?: number;
+  /** RNG seed handed to the sim core for reproducible runs. Defaults to 0. */
+  seed?: number;
+  /** LLM sampling temperature. Defaults to 0. */
+  temperature?: number;
 }
 
 export interface ExperimentRow {
@@ -58,6 +62,8 @@ export interface ExperimentRow {
   avg_tick_time_ms?: number | null;
   /** Pickle checkpoint path written on pause; consumed on resume. */
   checkpoint_path?: string | null;
+  /** RNG seed used for the run; null for legacy rows predating this column. */
+  seed?: number | null;
 }
 
 export interface Experiment {
@@ -71,6 +77,8 @@ export interface Experiment {
   finished_at?: string | null;
   elapsed_s?: number;
   result_summary?: Record<string, unknown> | null;
+  /** RNG seed used for the run, when known. */
+  seed?: number | null;
 }
 
 export interface ApiSettings {

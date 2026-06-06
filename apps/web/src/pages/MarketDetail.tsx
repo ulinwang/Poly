@@ -38,6 +38,7 @@ export default function MarketDetail() {
   const [siblings, setSiblings] = useState<Market[]>([]);
   const [nAgents, setNAgents] = useState(20);
   const [nTicks, setNTicks] = useState(12);
+  const [seed, setSeed] = useState(0);
   const [personaSet, setPersonaSet] = useState<'archetype' | 'calibrated' | 'no_signal'>('archetype');
   const [starting, setStarting] = useState(false);
 
@@ -79,6 +80,7 @@ export default function MarketDetail() {
         n_agents: nAgents,
         n_ticks: nTicks,
         persona_set: personaSet,
+        seed,
       });
       setActiveId(res.run_id);
       window.location.hash = `#/experiments/${res.run_id}`;
@@ -277,7 +279,10 @@ export default function MarketDetail() {
                     ? <CheckCircle2 className="w-4 h-4 text-primary-500 flex-shrink-0" />
                     : <XCircle className="w-4 h-4 text-surface-400 flex-shrink-0" />}
                 <span className="text-sm text-surface-700 dark:text-surface-300 font-mono">{exp.id.slice(0, 8)}</span>
-                <span className="text-xs text-surface-400">{exp.n_agents} agents · {exp.n_ticks} ticks · {exp.persona_set}</span>
+                <span className="text-xs text-surface-400">
+                  {exp.n_agents} agents · {exp.n_ticks} ticks · {exp.persona_set}
+                  {exp.seed != null ? ` · seed ${exp.seed}` : ''}
+                </span>
                 <span className={`badge text-[10px] ml-auto ${statusStyle[exp.status] || ''}`}>{exp.status}</span>
               </a>
             ))}
@@ -290,7 +295,7 @@ export default function MarketDetail() {
         <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
           新建实验
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-surface-500 mb-1">
               <Users className="w-3 h-3 inline mr-1" />
@@ -316,6 +321,15 @@ export default function MarketDetail() {
               <option value="calibrated">Calibrated (Real wallets)</option>
               <option value="no_signal">No Signal (Ablation)</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">
+              随机种子 (seed)
+            </label>
+            <input type="number" min="0" step="1" value={seed}
+              onChange={(e) => setSeed(Number.isFinite(e.target.valueAsNumber) ? Math.trunc(e.target.valueAsNumber) : 0)}
+              className="input" />
+            <p className="mt-1 text-[10px] text-surface-400">相同种子可复现同一次仿真。</p>
           </div>
         </div>
         <div className="mt-4 flex items-center gap-3 flex-wrap">

@@ -13,13 +13,43 @@ import {
   spawnRun,
   pauseRun,
   checkpointPathFor,
+  eventLogPathFor,
 } from '../services/runner';
 import type { ExperimentConfig, ExperimentRow } from '../types';
 import { getApiSettingsDecrypted } from '../db/settings';
+import fs from 'fs';
+import readline from 'readline';
 
 import type { RunHandle } from '../services/runner';
 
 const runs = new Map<string, RunHandle>();
+
+/**
+ * Replay a run's full NDJSON event log to an open SSE response, one line at a
+ * time so memory stays bounded regardless of history size. `__end__` sentinels
+ * are skipped (the caller decides when to emit the SSE `end` event). Returns
+ * true if a log file existed and was replayed, false if none was found.
+ */
+async function replayEventLog(
+  runId: string,
+  reply: { raw: { write: (chunk: string) => void } },
+): Promise<boolean> {
+  const logPath = eventLogPathFor(runId);
+  if (!fs.existsSync(logPath)) return false;
+  const stream = fs.createReadStream(logPath, { encoding: 'utf8' });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const ev = JSON.parse(line) as { kind: string; data: Record<string, unknown> };
+      if (ev.kind === '__end__') continue;
+      reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+    } catch {
+      // ignore malformed lines
+    }
+  }
+  return true;
+}
 
 function rowToExperiment(row: ExperimentRow): Record<string, unknown> {
   return {
@@ -35,6 +65,7 @@ function rowToExperiment(row: ExperimentRow): Record<string, unknown> {
       ? Math.round(Date.now() / 1000 - new Date(row.started_at).getTime() / 1000)
       : 0,
     result_summary: row.result_summary ? JSON.parse(row.result_summary) : null,
+    seed: row.seed ?? null,
   };
 }
 
@@ -86,6 +117,7 @@ export default async function experimentsRoutes(app: FastifyInstance) {
           finished_at: handle.finished ? new Date().toISOString() : null,
           elapsed_s: Math.round(Date.now() / 1000 - handle.startedAt),
           result_summary: null,
+          seed: handle.seed,
         },
       };
     }
@@ -143,12 +175,18 @@ export default async function experimentsRoutes(app: FastifyInstance) {
   app.post('', async (req) => {
     const body = req.body as ExperimentConfig;
     const runId = crypto.randomBytes(12).toString('hex').slice(0, 12);
+    const seed = Number.isFinite(body.seed as number) ? Number(body.seed) : 0;
+    const temperature = Number.isFinite(body.temperature as number)
+      ? Number(body.temperature)
+      : 0;
     const handle = createRunHandle(
       runId,
       body.slug,
       body.n_agents,
       body.n_ticks,
       body.persona_set,
+      seed,
+      temperature,
     );
     runs.set(runId, handle);
 
@@ -162,6 +200,7 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       started_at: new Date().toISOString(),
       finished_at: null,
       result_summary: null,
+      seed,
     });
 
     spawnRun(handle, makeOnEvent(runId, handle), {
@@ -237,6 +276,7 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       row.n_agents,
       row.n_ticks,
       row.persona_set,
+      row.seed ?? 0,
     );
     runs.set(expId, handle);
 
@@ -269,14 +309,22 @@ export default async function experimentsRoutes(app: FastifyInstance) {
         Connection: 'keep-alive',
       });
 
+      // Snapshot the queue length now: everything currently queued is also in
+      // the NDJSON log (or in-memory history fallback), so after replay we
+      // resume live streaming from this index to avoid duplicates.
+      let idx = handle.queue.length;
       if (wantReplay) {
-        for (const ev of handle.history) {
-          if (ev.kind === '__end__') continue;
-          reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+        const replayed = await replayEventLog(expId, reply);
+        if (!replayed) {
+          // No NDJSON file (e.g. legacy run) — fall back to capped in-memory
+          // history.
+          for (const ev of handle.history) {
+            if (ev.kind === '__end__') continue;
+            reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+          }
         }
       }
 
-      let idx = handle.history.length;
       const timer = setInterval(() => {
         while (idx < handle.queue.length) {
           const ev = handle.queue[idx++];
@@ -304,8 +352,22 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    // Fallback: check SQLite for completed experiments
+    // Fallback: no live handle in memory (e.g. after a restart). Prefer the
+    // durable NDJSON log so the full event history is replayed; otherwise fall
+    // back to the stored settled summary.
     const row = getExperiment(expId);
+    const hasLog = fs.existsSync(eventLogPathFor(expId));
+    if (hasLog && wantReplay) {
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      await replayEventLog(expId, reply);
+      reply.raw.write(`event: end\ndata: {}\n\n`);
+      reply.raw.end();
+      return reply;
+    }
     if (row && row.result_summary) {
       reply.raw.writeHead(200, {
         'Content-Type': 'text/event-stream',
