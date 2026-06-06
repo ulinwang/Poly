@@ -118,6 +118,15 @@ export default function MarketDetail() {
     ? `https://polymarket.com/event/${market.event_slug}`
     : null;
 
+  // For a multi-market event, the left header shows the EVENT's title / image /
+  // description by default; the individual sub-market's title & image appear in
+  // the outcomes list below (the selected one highlighted). Single-market
+  // events fall back to the market's own fields.
+  const isMultiEvent = siblings.length > 1;
+  const headerTitle = (isMultiEvent && market.event_title) || market.question || market.slug;
+  const headerImage = (isMultiEvent && market.event_icon) ? market.event_icon : market.icon_url;
+  const headerDesc = (isMultiEvent && market.event_description) ? market.event_description : market.description;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Back link */}
@@ -134,9 +143,9 @@ export default function MarketDetail() {
       {/* Market header */}
       <div className="card p-6">
         <div className="flex items-start gap-4">
-          {market.icon_url ? (
+          {headerImage ? (
             <img
-              src={market.icon_url}
+              src={headerImage}
               alt=""
               className="w-14 h-14 rounded-xl object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-700"
             />
@@ -149,7 +158,7 @@ export default function MarketDetail() {
           )}
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-surface-900 dark:text-white leading-snug">
-              {market.question || market.slug}
+              {headerTitle}
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span className={`badge ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
@@ -176,10 +185,10 @@ export default function MarketDetail() {
           )}
         </div>
 
-        {/* Description */}
-        {market.description && (
+        {/* Description (event-level for multi-market events) */}
+        {headerDesc && (
           <p className="mt-4 text-sm text-surface-600 dark:text-surface-400 leading-relaxed line-clamp-4">
-            {market.description}
+            {headerDesc}
           </p>
         )}
 
@@ -225,6 +234,13 @@ export default function MarketDetail() {
                       : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700/50'
                   }`}
                 >
+                  {s.icon_url && (
+                    <img
+                      src={s.icon_url}
+                      alt=""
+                      className="w-6 h-6 rounded object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-700"
+                    />
+                  )}
                   <span className="text-sm text-surface-700 dark:text-surface-200 truncate flex-1">
                     {s.group_title || s.question || s.slug}
                   </span>

@@ -26,7 +26,7 @@ export interface GammaMarket {
   outcomePrices?: string;
   oneDayPriceChange?: number;
   tags?: GammaTag[];
-  events?: Array<{ slug?: string; title?: string; image?: string }>;
+  events?: Array<{ slug?: string; title?: string; image?: string; description?: string }>;
   markets?: Array<{
     minimumTickSize?: number;
     takerBaseFee?: number;
@@ -179,6 +179,7 @@ function normalizeMarket(m: GammaMarket): Market {
     icon_url: m.image || m.icon || undefined,
     // Parent event image, used as the event-card thumbnail.
     event_icon: m.events?.[0]?.image || null,
+    event_description: m.events?.[0]?.description || null,
     // Live YES probability (0..1) or null when no quote is available.
     yes_price: deriveYesPrice(m),
     // 24h YES price change from Gamma, or null.
@@ -230,6 +231,7 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     categories: extractCategories(m),
     icon_url: m.image || m.icon || undefined,
     event_icon: m.events?.[0]?.image || null,
+    event_description: m.events?.[0]?.description || null,
     yes_price: deriveYesPrice(m),
     price_change_24h: m.oneDayPriceChange ?? null,
     // Polymarket groups markets under an event; the event slug is what the

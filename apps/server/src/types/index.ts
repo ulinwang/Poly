@@ -19,6 +19,7 @@ export interface Market {
   // this sub-market's outcome label (e.g. "50+ bps decrease"). Null otherwise.
   event_slug?: string | null;
   event_title?: string | null;
+  event_description?: string | null;
   group_title?: string | null;
 }
 
