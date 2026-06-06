@@ -29,19 +29,25 @@ interface GammaMarket {
 type Cached = { data: GammaMarket[]; ts: number };
 
 const CACHE_TTL_MS = 30_000;
-let cache: Cached | null = null;
+// Cache keyed by (offset,limit) so each page is cached independently.
+const cache = new Map<string, Cached>();
 
-async function fetchGammaMarkets(): Promise<GammaMarket[]> {
+async function fetchGammaMarkets(offset = 0, limit = 100): Promise<GammaMarket[]> {
   const now = Date.now();
-  if (cache && now - cache.ts < CACHE_TTL_MS) return cache.data;
+  const key = `${offset}:${limit}`;
+  const hit = cache.get(key);
+  if (hit && now - hit.ts < CACHE_TTL_MS) return hit.data;
   try {
-    const resp = await fetch('https://gamma-api.polymarket.com/markets?limit=100&include_tag=true');
+    const url =
+      `https://gamma-api.polymarket.com/markets?limit=${limit}&offset=${offset}` +
+      '&include_tag=true&closed=false&order=volume24hr&ascending=false';
+    const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = (await resp.json()) as GammaMarket[];
-    cache = { data: json, ts: now };
+    cache.set(key, { data: json, ts: now });
     return json;
   } catch (err) {
-    if (cache) return cache.data;
+    if (hit) return hit.data;
     throw err;
   }
 }
@@ -78,8 +84,9 @@ export async function listPolymarketMarkets(
   q = '',
   limit = 30,
   liveOnly = false,
+  offset = 0,
 ): Promise<Market[]> {
-  const markets = await fetchGammaMarkets();
+  const markets = await fetchGammaMarkets(offset, limit);
   const qlower = q.toLowerCase();
   const filtered = markets.filter((m) => {
     const slug = (m.slug || '').toLowerCase();

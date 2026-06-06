@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo, memo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
-  Globe, Droplets, Vote, Search, Tag, RefreshCw,
+  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
@@ -23,6 +23,7 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
 };
 
 const MAX_TABS = 11;
+const PAGE_SIZE = 30;
 
 // Derive category tabs from the loaded markets, ranked by how many markets
 // carry each tag. Guarantees every tab actually has content when clicked.
@@ -40,26 +41,83 @@ function deriveCategories(markets: Market[]): string[] {
 }
 
 export default function MarketBrowser() {
+  // `loading` = first-page load (drives skeleton); `loadingMore` = subsequent pages.
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const markets = useMarketStore((s) => s.markets);
   const setMarkets = useMarketStore((s) => s.setMarkets);
+  const appendMarkets = useMarketStore((s) => s.appendMarkets);
   const category = useMarketStore((s) => s.category);
   const setCategory = useMarketStore((s) => s.setCategory);
   const searchQuery = useMarketStore((s) => s.searchQuery);
   const setSearchQuery = useMarketStore((s) => s.setSearchQuery);
 
+  // Next page offset, kept in a ref so the IntersectionObserver callback always
+  // reads the current value without needing to re-subscribe.
+  const offsetRef = useRef(0);
+  const loadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // First page: replace. Resets whenever the search query or refresh changes.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.listMarkets({ q: searchQuery, live_only: true, limit: 50 })
+    setHasMore(true);
+    hasMoreRef.current = true;
+    loadingRef.current = true;
+    offsetRef.current = 0;
+    api.listMarkets({ q: searchQuery, live_only: true, limit: PAGE_SIZE, offset: 0 })
       .then((res) => {
-        if (!cancelled) setMarkets(res.markets);
+        if (cancelled) return;
+        setMarkets(res.markets);
+        offsetRef.current = PAGE_SIZE;
+        const more = res.hasMore ?? res.markets.length >= PAGE_SIZE;
+        setHasMore(more);
+        hasMoreRef.current = more;
       })
       .catch((err) => console.error('Failed to load markets:', err))
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        loadingRef.current = false;
+      });
     return () => { cancelled = true; };
   }, [searchQuery, setMarkets, refreshTick]);
+
+  // Subsequent pages: append.
+  const loadMore = useCallback(() => {
+    if (loadingRef.current || !hasMoreRef.current) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    const offset = offsetRef.current;
+    api.listMarkets({ q: searchQuery, live_only: true, limit: PAGE_SIZE, offset })
+      .then((res) => {
+        appendMarkets(res.markets);
+        offsetRef.current = offset + PAGE_SIZE;
+        const more = res.hasMore ?? res.markets.length >= PAGE_SIZE;
+        setHasMore(more);
+        hasMoreRef.current = more;
+      })
+      .catch((err) => console.error('Failed to load more markets:', err))
+      .finally(() => {
+        setLoadingMore(false);
+        loadingRef.current = false;
+      });
+  }, [searchQuery, appendMarkets]);
+
+  // Bottom sentinel: trigger the next page when it scrolls into view.
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) loadMore();
+    }, { rootMargin: '400px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   const categories = useMemo(() => deriveCategories(markets), [markets]);
 
@@ -150,6 +208,23 @@ export default function MarketBrowser() {
           {filtered.map((market) => (
             <MarketCard key={market.slug} market={market} />
           ))}
+        </div>
+      )}
+
+      {/* Infinite-scroll sentinel + load-more indicator. The category tabs are a
+          client-side filter on already-loaded markets, so the sentinel keeps
+          fetching the underlying unfiltered list as long as the server has more. */}
+      {!loading && (
+        <div ref={sentinelRef} className="h-10 flex items-center justify-center">
+          {loadingMore && (
+            <span className="flex items-center gap-2 text-sm text-surface-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              加载中…
+            </span>
+          )}
+          {!hasMore && markets.length > 0 && (
+            <span className="text-xs text-surface-400">没有更多市场了</span>
+          )}
         </div>
       )}
     </div>

@@ -12,6 +12,7 @@ interface MarketState {
   loading: boolean;
   error: string | null;
   setMarkets: (markets: Market[]) => void;
+  appendMarkets: (markets: Market[]) => void;
   selectMarket: (slug: string | null) => void;
   setCategory: (category: string) => void;
   setSearchQuery: (q: string) => void;
@@ -27,6 +28,13 @@ export const useMarketStore = create<MarketState>((set) => ({
   loading: false,
   error: null,
   setMarkets: (markets) => set({ markets }),
+  appendMarkets: (markets) => set((s) => {
+    // De-dup by slug so overlapping/repeated Gamma pages don't create
+    // duplicate cards (and duplicate React keys).
+    const seen = new Set(s.markets.map((m) => m.slug));
+    const fresh = markets.filter((m) => !seen.has(m.slug));
+    return { markets: [...s.markets, ...fresh] };
+  }),
   selectMarket: (slug) => set({ selectedSlug: slug }),
   setCategory: (category) => set({ category }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),

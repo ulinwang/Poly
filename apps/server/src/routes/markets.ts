@@ -8,13 +8,20 @@ const CATEGORIES = [
 
 export default async function marketsRoutes(app: FastifyInstance) {
   app.get('', async (req, _reply) => {
-    const { q = '', limit = '30', live_only = '' } = req.query as Record<string, string>;
+    const {
+      q = '', limit = '30', live_only = '', offset = '0',
+    } = req.query as Record<string, string>;
+    const limitNum = parseInt(limit, 10) || 30;
+    const offsetNum = parseInt(offset, 10) || 0;
     const markets = await listPolymarketMarkets(
       q,
-      parseInt(limit, 10) || 30,
+      limitNum,
       live_only === '1' || live_only === 'true',
+      offsetNum,
     );
-    return { markets };
+    // Approximate: if the page is full there is likely another page.
+    const hasMore = markets.length >= limitNum;
+    return { markets, offset: offsetNum, limit: limitNum, hasMore };
   });
 
   app.get('/categories', async () => {
