@@ -148,6 +148,35 @@ _TOOL_UPDATE_BELIEF = {
     },
 }
 
+_TOOL_GET_INFORMATION = {
+    "type": "function",
+    "function": {
+        "name": "get_information",
+        "description": (
+            "Run a live web search for information relevant to THIS market "
+            "to inform your decision (recent news, facts, context). Returns "
+            "the top results as title + snippet + url. This is a READ action: "
+            "it returns information and does NOT place a trade — after reading "
+            "you must still choose a trading action (or HOLD). Call it when "
+            "you want up-to-date context before deciding. Available in the "
+            "trade stage only."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "The web-search query, e.g. the market question or a "
+                        "specific fact you want to check."
+                    ),
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
 _TOOL_MERGE = {
     "type": "function",
     "function": {
@@ -177,17 +206,30 @@ TOOL_SCHEMAS = [
     _TOOL_SPLIT,
     _TOOL_MERGE,
     _TOOL_UPDATE_BELIEF,
+    _TOOL_GET_INFORMATION,
 ]
 
+# The information tool is a *read* tool: it is offered only in the trade
+# stage (never the belief stage). The runtime runs a live web search for the
+# requested query and feeds the results back to the LLM (bounded multi-turn
+# loop). It is NOT an order, so it is absent from NAME_TO_ORDER_TYPE.
+INFO_TOOL_NAME = "get_information"
 
-def select_tools(*, belief_update_enabled: bool = True) -> list[dict]:
-    """v13 (B4): return TOOL_SCHEMAS, optionally without the belief tool.
 
-    Used by the runner to honour ExperimentConfig.agent.belief_update_enabled.
+def select_tools(
+    *, belief_update_enabled: bool = True, info_enabled: bool = True,
+) -> list[dict]:
+    """Return TOOL_SCHEMAS, optionally without the belief and/or info tools.
+
+    Used by the runner to honour ExperimentConfig.agent.belief_update_enabled
+    and to toggle the `get_information` read tool (default on).
     """
-    if belief_update_enabled:
-        return TOOL_SCHEMAS
-    return [t for t in TOOL_SCHEMAS if t["function"]["name"] != "update_belief"]
+    tools = list(TOOL_SCHEMAS)
+    if not belief_update_enabled:
+        tools = [t for t in tools if t["function"]["name"] != "update_belief"]
+    if not info_enabled:
+        tools = [t for t in tools if t["function"]["name"] != INFO_TOOL_NAME]
+    return tools
 
 
 # Map function name → engine `order_type`. Used by parser.parse_tool_call.

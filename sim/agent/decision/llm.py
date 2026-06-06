@@ -139,6 +139,53 @@ def call_deepseek_with_tools(
         kwargs["extra_body"] = {
             "thinking": {"type": "enabled" if thinking else "disabled"}
         }
+    return _complete_with_tools(kwargs)
+
+
+def continue_with_tools(
+    base_url: str,
+    api_key: str,
+    model: str,
+    messages: list[dict],
+    tools: list[dict],
+    temperature: float = 0.0,
+    timeout: float = 60.0,
+    tool_choice: str | dict = "auto",
+    thinking: Optional[bool] = None,
+) -> dict:
+    """Continue an in-progress tool-calling conversation.
+
+    Unlike :func:`call_deepseek_with_tools`, the caller supplies the full
+    ``messages`` list (system + user + any prior assistant tool_calls +
+    their tool-result messages), so a multi-turn read-tool loop can append
+    the LLM's tool call and the tool's result and ask it to continue.
+
+    The ``messages`` are sent verbatim, so callers must format the
+    assistant tool_calls message and the corresponding ``role: "tool"``
+    result messages per the OpenAI spec (see ``runtime`` helpers).
+
+    Returns the same dict shape as :func:`call_deepseek_with_tools`.
+    """
+    kwargs: dict[str, Any] = {
+        "model": _route(model),
+        "api_key": api_key,
+        "temperature": temperature,
+        "timeout": timeout,
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": tool_choice,
+    }
+    if base_url:
+        kwargs["api_base"] = base_url
+    if thinking is not None:
+        kwargs["extra_body"] = {
+            "thinking": {"type": "enabled" if thinking else "disabled"}
+        }
+    return _complete_with_tools(kwargs)
+
+
+def _complete_with_tools(kwargs: dict) -> dict:
+    """Shared litellm call + response normalisation for tool-mode requests."""
     resp = litellm.completion(**kwargs)
     msg = resp.choices[0].message
     usage = resp.usage
