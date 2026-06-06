@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore, useExperimentStore, useSettingsStore } from '../stores';
-import type { MarketDetail as MarketDetailType, Experiment, Market } from '../types';
+import type { MarketDetail as MarketDetailType, Experiment, Market, ApiKey } from '../types';
 
 const statusStyle: Record<string, string> = {
   running: 'bg-success/15 text-success',
@@ -40,6 +40,9 @@ export default function MarketDetail() {
   const [nTicks, setNTicks] = useState(12);
   const [seed, setSeed] = useState(0);
   const [personaSet, setPersonaSet] = useState<'archetype' | 'calibrated' | 'no_signal'>('archetype');
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  // Empty string = use the default API settings (no api_key_id sent).
+  const [apiKeyId, setApiKeyId] = useState('');
   const [starting, setStarting] = useState(false);
 
   const selectMarket = useMarketStore((s) => s.selectMarket);
@@ -69,6 +72,9 @@ export default function MarketDetail() {
     api.listExperiments({ slug, limit: 50 })
       .then((res) => setExperiments(res.experiments))
       .catch((err) => console.error('Failed to load market experiments:', err));
+    api.listApiKeys()
+      .then((res) => setApiKeys(res.keys))
+      .catch((err) => console.error('Failed to load API keys:', err));
   }, [slug, selectMarket]);
 
   const handleStart = async () => {
@@ -81,6 +87,9 @@ export default function MarketDetail() {
         n_ticks: nTicks,
         persona_set: personaSet,
         seed,
+        // Only send api_key_id when a stored key is chosen; otherwise the
+        // backend falls back to the default API settings.
+        ...(apiKeyId ? { api_key_id: Number(apiKeyId) } : {}),
       });
       setActiveId(res.run_id);
       window.location.hash = `#/experiments/${res.run_id}`;
@@ -330,6 +339,22 @@ export default function MarketDetail() {
               onChange={(e) => setSeed(Number.isFinite(e.target.valueAsNumber) ? Math.trunc(e.target.valueAsNumber) : 0)}
               className="input" />
             <p className="mt-1 text-[10px] text-surface-400">相同种子可复现同一次仿真。</p>
+          </div>
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">API Key</label>
+            <select value={apiKeyId}
+              onChange={(e) => setApiKeyId(e.target.value)}
+              className="input">
+              <option value="">使用默认设置</option>
+              {apiKeys.map((k) => (
+                <option key={k.id} value={String(k.id)}>
+                  {k.name} ({k.provider})
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-surface-400">
+              选择已保存的命名密钥，或使用 Settings 中的默认配置。
+            </p>
           </div>
         </div>
         <div className="mt-4 flex items-center gap-3 flex-wrap">

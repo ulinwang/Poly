@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 import marketsRoutes from './routes/markets';
 import experimentsRoutes from './routes/experiments';
 import settingsRoutes from './routes/settings';
+import keysRoutes from './routes/keys';
 import providersRoutes from './routes/providers';
 import { repairOrphanedRuns } from './db/experiments';
 
@@ -36,6 +37,7 @@ export async function buildServer() {
   await app.register(marketsRoutes, { prefix: '/api/v1/markets' });
   await app.register(experimentsRoutes, { prefix: '/api/v1/experiments' });
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
+  await app.register(keysRoutes, { prefix: '/api/v1/keys' });
   await app.register(providersRoutes, { prefix: '/api/v1/providers' });
 
   const distPath = path.resolve(__dirname, '../../web/dist');

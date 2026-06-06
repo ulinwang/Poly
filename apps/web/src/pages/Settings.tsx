@@ -1,8 +1,9 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Key, Palette, RefreshCw, Save, TestTube } from 'lucide-react';
+import { Key, KeyRound, Palette, Plus, RefreshCw, Save, TestTube, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
 import { api } from '../lib/api';
+import type { ApiKey, ProviderInfo } from '../types';
 
 export default function Settings() {
   return (
@@ -11,11 +12,13 @@ export default function Settings() {
 
       <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
         <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label="API" />
+        <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label="API Keys" />
         <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label="General" />
       </div>
 
       <Routes>
         <Route path="api" element={<APISettings />} />
+        <Route path="keys" element={<KeysSettings />} />
         <Route path="general" element={<GeneralSettings />} />
       </Routes>
     </div>
@@ -297,6 +300,189 @@ function APISettings() {
             {testResult}
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+function KeysSettings() {
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [name, setName] = useState('');
+  const [provider, setProvider] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.listApiKeys()
+      .then((res) => setKeys(res.keys))
+      .catch(() => { /* keep empty list on failure */ });
+    api.listProviders()
+      .then((res) => {
+        setProviders(res.providers);
+        if (res.providers.length > 0) setProvider((p) => p || res.providers[0].id);
+      })
+      .catch(() => { /* dropdown stays empty */ });
+  }, []);
+
+  const selectedProvider = providers.find((p) => p.id === provider);
+
+  const handleAdd = async () => {
+    setError(null);
+    if (!name.trim()) { setError('请填写名称'); return; }
+    if (!provider) { setError('请选择 Provider'); return; }
+    if (!apiKey.trim()) { setError('请填写 API Key'); return; }
+    setSaving(true);
+    try {
+      const res = await api.createApiKey({
+        name: name.trim(),
+        provider,
+        api_key: apiKey.trim(),
+        base_url: baseUrl.trim() || undefined,
+        model: model.trim() || undefined,
+      });
+      setKeys(res.keys);
+      // Reset the form (keep the chosen provider for quick repeat entry).
+      setName('');
+      setApiKey('');
+      setBaseUrl('');
+      setModel('');
+    } catch (err) {
+      setError('保存失败：' + (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      const res = await api.deleteApiKey(id);
+      setKeys(res.keys);
+    } catch (err) {
+      setError('删除失败：' + (err as Error).message);
+    }
+  };
+
+  return (
+    <div className="card p-6 space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
+          API Keys
+        </h2>
+        <p className="text-sm text-surface-400 mt-1">
+          保存多个命名密钥，创建实验时可选择使用其中一个。密钥在服务器端加密存储，不会返回浏览器。
+        </p>
+      </div>
+
+      {/* Stored keys */}
+      <div className="space-y-2">
+        {keys.length === 0 ? (
+          <p className="text-sm text-surface-400">尚未保存任何密钥。</p>
+        ) : (
+          keys.map((k) => (
+            <div
+              key={k.id}
+              className="flex items-center justify-between gap-3 rounded-lg border border-surface-200 dark:border-surface-700 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-surface-800 dark:text-surface-100 truncate">
+                  {k.name}
+                </div>
+                <div className="text-xs text-surface-400 truncate">
+                  {k.provider} · {k.key_masked}
+                  {k.model ? ` · ${k.model}` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDelete(k.id)}
+                className="flex items-center gap-1 text-xs text-danger hover:opacity-80"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                删除
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Add new key */}
+      <div className="space-y-3 pt-4 border-t border-surface-200 dark:border-surface-700">
+        <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+          新增密钥
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">名称</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="如 我的 DeepSeek key"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">Provider</label>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="input"
+            >
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs text-surface-500 mb-1">API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">
+              Base URL（可选）
+            </label>
+            <input
+              type="text"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={selectedProvider?.base_url || 'https://api.example.com/v1'}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-surface-500 mb-1">
+              Model（可选）
+            </label>
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder={selectedProvider?.models[0] || 'model id'}
+              className="input"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleAdd}
+            disabled={saving}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            {saving ? '保存中…' : '添加密钥'}
+          </button>
+          {error && <span className="text-sm text-danger">{error}</span>}
+        </div>
       </div>
     </div>
   );

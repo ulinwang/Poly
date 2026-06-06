@@ -80,6 +80,34 @@ describe('experiments routes', () => {
     await app.inject({ method: 'POST', url: `/api/v1/experiments/${runId}/cancel` });
   });
 
+  it('persists api_key_id chosen for a run', async () => {
+    const app = await buildServer();
+    // Create a named key to reference.
+    const keyRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/keys',
+      payload: { name: 'exp-key', provider: 'openai', api_key: 'sk-exp' },
+    });
+    const keyId = JSON.parse(keyRes.body).id as number;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      payload: {
+        slug: 'keyed-market',
+        n_agents: 4,
+        n_ticks: 2,
+        persona_set: 'archetype',
+        api_key_id: keyId,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const runId = JSON.parse(res.body).run_id as string;
+    expect(getExperiment(runId)?.api_key_id).toBe(keyId);
+
+    await app.inject({ method: 'POST', url: `/api/v1/experiments/${runId}/cancel` });
+  });
+
   it('repairOrphanedRuns flips running -> error but leaves paused alone', () => {
     const runningId = crypto.randomBytes(8).toString('hex');
     const pausedId = crypto.randomBytes(8).toString('hex');

@@ -125,6 +125,28 @@ export const api = {
       body: JSON.stringify(settings),
     }),
 
+  // API Keys (named, multi-key store). Responses never include plaintext keys.
+  listApiKeys: () =>
+    fetchJson<{ keys: import('../types').ApiKey[] }>('/api/v1/keys'),
+
+  createApiKey: (input: {
+    name: string;
+    provider: string;
+    api_key: string;
+    base_url?: string;
+    model?: string;
+  }) =>
+    fetchJson<{ id: number; keys: import('../types').ApiKey[] }>('/api/v1/keys', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  deleteApiKey: (id: number) =>
+    fetchJson<{ deleted: boolean; keys: import('../types').ApiKey[] }>(
+      `/api/v1/keys/${id}`,
+      { method: 'DELETE' },
+    ),
+
   // Providers
   listProviders: () =>
     fetchJson<{ providers: import('../types').ProviderInfo[] }>('/api/v1/providers'),
