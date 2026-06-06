@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { listPolymarketMarkets, getPolymarketMarket } from '../services/polymarket';
+import {
+  listPolymarketMarkets,
+  getPolymarketMarket,
+  getPolymarketEventMarkets,
+} from '../services/polymarket';
 
 const CATEGORIES = [
   'Trending', 'Breaking', 'Politics', 'Sports', 'Crypto',
@@ -26,6 +30,14 @@ export default async function marketsRoutes(app: FastifyInstance) {
 
   app.get('/categories', async () => {
     return { categories: CATEGORIES };
+  });
+
+  // Sibling sub-markets that share an event. Registered before /:slug so the
+  // literal "events" segment isn't captured as a market slug.
+  app.get('/events/:slug', async (req) => {
+    const { slug } = req.params as { slug: string };
+    const markets = await getPolymarketEventMarkets(slug);
+    return { markets };
   });
 
   app.get('/:slug', async (req, reply) => {

@@ -34,6 +34,12 @@ export const api = {
   getMarket: (slug: string) =>
     fetchJson<{ market: import('../types').MarketDetail }>(`/api/v1/markets/${slug}`),
 
+  // Sibling sub-markets sharing an event (for multi-market event detail views).
+  getEventMarkets: (eventSlug: string) =>
+    fetchJson<{ markets: import('../types').Market[] }>(
+      `/api/v1/markets/events/${encodeURIComponent(eventSlug)}`,
+    ),
+
   getCategories: () =>
     fetchJson<{ categories: string[] }>('/api/v1/markets/categories'),
 
