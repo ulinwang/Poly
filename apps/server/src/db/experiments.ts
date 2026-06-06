@@ -6,7 +6,7 @@ const allowedCols = new Set([
   'api_settings_id', 'status', 'started_at', 'finished_at',
   'result_summary', 'created_at',
   'final_yes_mid', 'total_fills', 'total_actions', 'avg_tick_time_ms',
-  'checkpoint_path',
+  'checkpoint_path', 'seed',
 ]);
 
 export function saveExperiment(exp: Partial<ExperimentRow>): void {
@@ -94,4 +94,21 @@ export function getExperimentStats(): {
 
 export function getExperiment(expId: string): ExperimentRow | undefined {
   return db.prepare('SELECT * FROM experiments WHERE id = ?').get(expId) as ExperimentRow | undefined;
+}
+
+/**
+ * On server startup, any experiment still marked 'running' in the DB is a
+ * zombie: the in-memory run state and its Python child died with the previous
+ * process. Flag those as 'error' so the UI no longer shows them as live.
+ *
+ * Paused runs are deliberately left untouched — they have a checkpoint on disk
+ * and remain resumable. Returns the number of rows repaired.
+ */
+export function repairOrphanedRuns(): number {
+  const result = db
+    .prepare(
+      "UPDATE experiments SET status = 'error', finished_at = ? WHERE status = 'running'",
+    )
+    .run(new Date().toISOString());
+  return result.changes;
 }

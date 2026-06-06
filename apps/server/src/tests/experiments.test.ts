@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import crypto from 'crypto';
 import { buildServer } from '../server';
+import {
+  saveExperiment,
+  getExperiment,
+  repairOrphanedRuns,
+} from '../db/experiments';
 
 describe('experiments routes', () => {
   it('GET /api/v1/experiments returns list and stats shape', async () => {
@@ -49,5 +55,57 @@ describe('experiments routes', () => {
     const body = JSON.parse(res.body);
     expect(typeof body.total_runs).toBe('number');
     expect(typeof body.running_count).toBe('number');
+  });
+
+  it('persists seed on POST and surfaces it on GET', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      payload: {
+        slug: 'seed-market',
+        n_agents: 5,
+        n_ticks: 3,
+        persona_set: 'archetype',
+        seed: 1234,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const runId = JSON.parse(res.body).run_id as string;
+
+    const getRes = await app.inject({ method: 'GET', url: `/api/v1/experiments/${runId}` });
+    const exp = JSON.parse(getRes.body).experiment;
+    expect(exp.seed).toBe(1234);
+
+    await app.inject({ method: 'POST', url: `/api/v1/experiments/${runId}/cancel` });
+  });
+
+  it('repairOrphanedRuns flips running -> error but leaves paused alone', () => {
+    const runningId = crypto.randomBytes(8).toString('hex');
+    const pausedId = crypto.randomBytes(8).toString('hex');
+    saveExperiment({
+      id: runningId,
+      slug: 'orphan',
+      n_agents: 3,
+      n_ticks: 2,
+      persona_set: 'archetype',
+      status: 'running',
+      started_at: new Date().toISOString(),
+    });
+    saveExperiment({
+      id: pausedId,
+      slug: 'orphan',
+      n_agents: 3,
+      n_ticks: 2,
+      persona_set: 'archetype',
+      status: 'paused',
+      checkpoint_path: '/tmp/x.pkl',
+      started_at: new Date().toISOString(),
+    });
+
+    repairOrphanedRuns();
+
+    expect(getExperiment(runningId)?.status).toBe('error');
+    expect(getExperiment(pausedId)?.status).toBe('paused');
   });
 });

@@ -70,6 +70,14 @@ describe('spawnRun', () => {
     expect(mockChild.stdin.end).toHaveBeenCalled();
   });
 
+  it('passes a configured seed and temperature through to the payload', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype', 42, 0.7);
+    spawnRun(handle, vi.fn());
+
+    const config = JSON.parse(mockChild.stdin.write.mock.calls[0][0] as string);
+    expect(config).toMatchObject({ seed: 42, temperature: 0.7 });
+  });
+
   it('parses stdout JSON lines and calls onEvent', () => {
     const onEvent = vi.fn();
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
