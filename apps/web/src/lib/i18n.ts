@@ -141,6 +141,17 @@ const zh: Dict = {
   'live.noSnapshot': '该智能体暂无快照。',
   'live.thinking': '思考过程 ({count})',
   'live.noDecisions': '该智能体暂无决策记录。',
+  // ── Replay player ──────────────────────────────────────────────────
+  'replay.badge': '回放',
+  'replay.loading': '正在加载回放记录…',
+  'replay.empty': '该实验无可回放的记录。',
+  'replay.play': '播放',
+  'replay.pause': '暂停',
+  'replay.restart': '重头开始',
+  'replay.skipToEnd': '跳到末尾',
+  'replay.speed': '速度',
+  'replay.tickOf': 'Tick {current} / {total}',
+  'replay.progress': '进度',
 
   // ── Settings ───────────────────────────────────────────────────────
   'settings.title': '设置',
@@ -327,6 +338,17 @@ const en: Dict = {
   'live.noSnapshot': 'No snapshot for this agent yet.',
   'live.thinking': 'Thinking ({count})',
   'live.noDecisions': 'No decisions recorded for this agent.',
+  // ── Replay player ──────────────────────────────────────────────────
+  'replay.badge': 'Replay',
+  'replay.loading': 'Loading replay…',
+  'replay.empty': 'No recorded events to replay for this experiment.',
+  'replay.play': 'Play',
+  'replay.pause': 'Pause',
+  'replay.restart': 'Restart',
+  'replay.skipToEnd': 'Skip to end',
+  'replay.speed': 'Speed',
+  'replay.tickOf': 'Tick {current} / {total}',
+  'replay.progress': 'Progress',
 
   // ── Settings ───────────────────────────────────────────────────────
   'settings.title': 'Settings',
