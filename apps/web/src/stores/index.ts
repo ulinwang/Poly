@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   Market, Experiment, ApiSettings, SimulationEvent,
   AgentDecision, TickLogEntry, SimulationMetrics,
+  TickMetrics, AgentSnapshot,
 } from '../types';
 
 interface MarketState {
@@ -49,6 +50,10 @@ interface ExperimentState {
   decisions: AgentDecision[];
   tickLog: TickLogEntry[];
   metrics: SimulationMetrics;
+  /** Macro per-tick metrics, accumulated in arrival order (for the macro chart). */
+  tickMetrics: TickMetrics[];
+  /** Per-agent micro snapshots, keyed by agent_id, each a tick-ordered history. */
+  agentSnapshots: Record<number, AgentSnapshot[]>;
   running: boolean;
   error: string | null;
   setExperiments: (experiments: Experiment[]) => void;
@@ -57,6 +62,10 @@ interface ExperimentState {
   addDecision: (decision: AgentDecision) => void;
   addTickLog: (entry: TickLogEntry) => void;
   setMetrics: (metrics: Partial<SimulationMetrics>) => void;
+  /** Append one macro tick row (from a `tick_metrics` event). */
+  addTickMetrics: (m: TickMetrics) => void;
+  /** Append a batch of agent rows for one tick (from an `agent_snapshots` event). */
+  addAgentSnapshots: (snapshots: AgentSnapshot[]) => void;
   setRunning: (v: boolean) => void;
   setError: (e: string | null) => void;
   resetSimulation: () => void;
@@ -77,6 +86,8 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     totalTicks: 0,
     lastTickElapsed: 0,
   },
+  tickMetrics: [],
+  agentSnapshots: {},
   running: false,
   error: null,
   setExperiments: (experiments) => set({ experiments }),
@@ -93,6 +104,22 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     return { tickLog: next };
   }),
   setMetrics: (metrics) => set((s) => ({ metrics: { ...s.metrics, ...metrics } })),
+  addTickMetrics: (m) => set((s) => {
+    const next = [...s.tickMetrics, m];
+    if (next.length > 1000) next.shift();
+    return { tickMetrics: next };
+  }),
+  addAgentSnapshots: (snapshots) => set((s) => {
+    if (snapshots.length === 0) return {};
+    const byAgent = { ...s.agentSnapshots };
+    for (const snap of snapshots) {
+      const prev = byAgent[snap.agent_id];
+      const hist = prev ? [...prev, snap] : [snap];
+      if (hist.length > 1000) hist.shift();
+      byAgent[snap.agent_id] = hist;
+    }
+    return { agentSnapshots: byAgent };
+  }),
   setRunning: (running) => set({ running }),
   setError: (error) => set({ error }),
   resetSimulation: () => set({
@@ -108,6 +135,8 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
       totalTicks: 0,
       lastTickElapsed: 0,
     },
+    tickMetrics: [],
+    agentSnapshots: {},
     running: false,
     error: null,
   }),
@@ -133,13 +162,27 @@ const defaultApiSettings: ApiSettings = {
 };
 
 // Lightweight localStorage persistence for UI preferences (no extra deps).
+// Guarded with feature checks + try/catch so the module also imports cleanly in
+// non-browser runtimes (e.g. Node test runner, where `localStorage` may exist as
+// a partial stub that throws on access).
 function readBool(key: string, fallback: boolean): boolean {
-  if (typeof localStorage === 'undefined') return fallback;
-  const raw = localStorage.getItem(key);
-  return raw === null ? fallback : raw === '1';
+  try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'function') {
+      return fallback;
+    }
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : raw === '1';
+  } catch {
+    return fallback;
+  }
 }
 function writeBool(key: string, value: boolean): void {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(key, value ? '1' : '0');
+  try {
+    if (typeof localStorage === 'undefined' || typeof localStorage.setItem !== 'function') return;
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // ignore persistence failures (private mode, quota, non-browser env)
+  }
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({

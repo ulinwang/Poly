@@ -104,4 +104,41 @@ describe('Experiment store', () => {
     store.addEvent({ event: 'tick_finished', data: { tick: 1 } });
     expect(useExperimentStore.getState().events.length).toBe(2);
   });
+
+  it('accumulates tick metrics in arrival order', () => {
+    const store = useExperimentStore.getState();
+    store.addTickMetrics({ tick: 0, yes_mid: 0.5, no_mid: 0.5, parity_gap: 0, n_fills: 2, ret: 0 });
+    store.addTickMetrics({ tick: 1, yes_mid: 0.6, no_mid: 0.4, parity_gap: 0, n_fills: 3, ret: 0.1 });
+    const tm = useExperimentStore.getState().tickMetrics;
+    expect(tm.length).toBe(2);
+    expect(tm[1].yes_mid).toBe(0.6);
+  });
+
+  it('groups agent snapshots by agent id into tick-ordered histories', () => {
+    const store = useExperimentStore.getState();
+    const snap = (tick: number, agent_id: number, pnl: number): import('../types').AgentSnapshot => ({
+      tick, agent_id, persona: 'alpha', cash: 1000, cash_reserved: 0,
+      pos_yes: 0, pos_no: 0, belief_yes: null, belief_conf: null, pnl,
+    });
+    store.addAgentSnapshots([snap(0, 0, 1), snap(0, 1, -2)]);
+    store.addAgentSnapshots([snap(1, 0, 3), snap(1, 1, -1)]);
+    const snaps = useExperimentStore.getState().agentSnapshots;
+    expect(Object.keys(snaps).length).toBe(2);
+    expect(snaps[0].length).toBe(2);
+    expect(snaps[0][1].pnl).toBe(3);
+    expect(snaps[1][1].pnl).toBe(-1);
+  });
+
+  it('clears tick metrics and snapshots on reset', () => {
+    const store = useExperimentStore.getState();
+    store.addTickMetrics({ tick: 0, yes_mid: 0.5, no_mid: 0.5, parity_gap: 0, n_fills: 0, ret: 0 });
+    store.addAgentSnapshots([{
+      tick: 0, agent_id: 0, persona: 'a', cash: 0, cash_reserved: 0,
+      pos_yes: 0, pos_no: 0, belief_yes: null, belief_conf: null, pnl: 0,
+    }]);
+    store.resetSimulation();
+    const s = useExperimentStore.getState();
+    expect(s.tickMetrics.length).toBe(0);
+    expect(Object.keys(s.agentSnapshots).length).toBe(0);
+  });
 });
