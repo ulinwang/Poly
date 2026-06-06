@@ -31,6 +31,22 @@ export const api = {
     }>(url.pathname + url.search);
   },
 
+  // Events feed for the browse page: Polymarket events grouped server-side so
+  // multi-result events render as a single card and pagination works across
+  // pages (the flat listMarkets feed is kept for detail/analysis views).
+  listEvents: (params?: { q?: string; limit?: number; offset?: number }) => {
+    const url = new URL('/api/v1/events', window.location.origin);
+    if (params?.q) url.searchParams.set('q', params.q);
+    if (params?.limit) url.searchParams.set('limit', String(params.limit));
+    if (params?.offset) url.searchParams.set('offset', String(params.offset));
+    return fetchJson<{
+      events: import('../types').EventSummary[];
+      offset?: number;
+      limit?: number;
+      hasMore?: boolean;
+    }>(url.pathname + url.search);
+  },
+
   getMarket: (slug: string) =>
     fetchJson<{ market: import('../types').MarketDetail }>(`/api/v1/markets/${slug}`),
 

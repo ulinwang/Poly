@@ -3,6 +3,7 @@ import {
   deriveYesPrice,
   deriveOutcomes,
   isBinaryMarket,
+  eventToSummary,
   type GammaMarket,
 } from '../services/polymarket';
 
@@ -117,5 +118,110 @@ describe('isBinaryMarket', () => {
 
   it('is false when outcomes are missing', () => {
     expect(isBinaryMarket(deriveOutcomes({}))).toBe(false);
+  });
+});
+
+describe('eventToSummary', () => {
+  it('maps a multi-market event to is_single=false with one outcome per sub-market', () => {
+    const summary = eventToSummary({
+      slug: 'world-cup-winner',
+      title: 'World Cup Winner',
+      image: 'https://example.com/wc.png',
+      tags: [{ label: 'Sports' }, { label: 'Trending' }],
+      markets: [
+        {
+          slug: 'wc-brazil',
+          groupItemTitle: 'Brazil',
+          outcomes: '["Yes","No"]',
+          outcomePrices: '["0.30","0.70"]',
+          volumeNum: 500,
+        },
+        {
+          slug: 'wc-argentina',
+          groupItemTitle: 'Argentina',
+          outcomes: '["Yes","No"]',
+          outcomePrices: '["0.25","0.75"]',
+          volumeNum: 800,
+        },
+        {
+          slug: 'wc-france',
+          groupItemTitle: 'France',
+          outcomes: '["Yes","No"]',
+          outcomePrices: '["0.20","0.80"]',
+          volumeNum: 300,
+        },
+      ],
+    });
+
+    expect(summary.is_single).toBe(false);
+    expect(summary.n_outcomes).toBe(3);
+    expect(summary.outcomes).toEqual([
+      { label: 'Brazil', price: 0.30, slug: 'wc-brazil' },
+      { label: 'Argentina', price: 0.25, slug: 'wc-argentina' },
+      { label: 'France', price: 0.20, slug: 'wc-france' },
+    ]);
+    // primary_slug is the highest-volume sub-market (Argentina, 800).
+    expect(summary.primary_slug).toBe('wc-argentina');
+    expect(summary.categories).toEqual(['Sports']); // "Trending" filtered out.
+    expect(summary.icon_url).toBe('https://example.com/wc.png');
+  });
+
+  it('falls back to the question and first sub-market when titles/volume are absent', () => {
+    const summary = eventToSummary({
+      slug: 'multi-no-titles',
+      title: 'Multi event',
+      markets: [
+        { slug: 'a', question: 'Will A happen?', outcomes: '["Yes","No"]', outcomePrices: '["0.5","0.5"]' },
+        { slug: 'b', question: 'Will B happen?', outcomes: '["Yes","No"]', outcomePrices: '["0.4","0.6"]' },
+      ],
+    });
+    expect(summary.is_single).toBe(false);
+    expect(summary.outcomes[0]).toEqual({ label: 'Will A happen?', price: 0.5, slug: 'a' });
+    // No per-market volume → primary falls back to the first sub-market.
+    expect(summary.primary_slug).toBe('a');
+  });
+
+  it('sums sub-market volume when the event has no event-level volume', () => {
+    const summary = eventToSummary({
+      slug: 'sum-vol',
+      title: 'Sum vol',
+      markets: [
+        { slug: 'a', groupItemTitle: 'A', outcomes: '["Yes","No"]', volumeNum: 100 },
+        { slug: 'b', groupItemTitle: 'B', outcomes: '["Yes","No"]', volumeNum: 250 },
+      ],
+    });
+    expect(summary.volume).toBe(350);
+  });
+
+  it('marks a single binary market event as is_single=true', () => {
+    const summary = eventToSummary({
+      slug: 'will-it-rain',
+      title: 'Will it rain tomorrow?',
+      volumeNum: 1234,
+      markets: [
+        {
+          slug: 'will-it-rain',
+          question: 'Will it rain tomorrow?',
+          outcomes: '["Yes","No"]',
+          outcomePrices: '["0.62","0.38"]',
+        },
+      ],
+    });
+    expect(summary.is_single).toBe(true);
+    expect(summary.n_outcomes).toBe(1);
+    expect(summary.outcomes[0]).toEqual({ label: 'Will it rain tomorrow?', price: 0.62, slug: 'will-it-rain' });
+    expect(summary.primary_slug).toBe('will-it-rain');
+    expect(summary.volume).toBe(1234);
+  });
+
+  it('treats a single non-binary (multi-result) market event as not single', () => {
+    const summary = eventToSummary({
+      slug: 'match',
+      title: 'G2 vs Monte',
+      markets: [
+        { slug: 'match', groupItemTitle: 'G2 vs Monte', outcomes: '["G2","Monte"]', outcomePrices: '["0.6","0.4"]' },
+      ],
+    });
+    expect(summary.is_single).toBe(false);
   });
 });
