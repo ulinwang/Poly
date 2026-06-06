@@ -8,6 +8,10 @@ export interface Market {
   n_holders: number | null;
   categories?: string[];
   icon_url?: string;
+  // Shared event slug for multi-market events; group_title is this sub-market's
+  // outcome label (e.g. "50+ bps decrease"). Null for standalone markets.
+  event_slug?: string | null;
+  group_title?: string | null;
 }
 
 export interface MarketDetail extends Market {

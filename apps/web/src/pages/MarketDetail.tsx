@@ -2,11 +2,11 @@ import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
   Play, Users, Clock, ArrowLeft, ExternalLink, FlaskConical,
-  CalendarDays, BarChart3, CheckCircle2, XCircle, Loader2,
+  CalendarDays, BarChart3, CheckCircle2, XCircle, Loader2, Layers,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore, useExperimentStore, useSettingsStore } from '../stores';
-import type { MarketDetail as MarketDetailType, Experiment } from '../types';
+import type { MarketDetail as MarketDetailType, Experiment, Market } from '../types';
 
 const statusStyle: Record<string, string> = {
   running: 'bg-success/15 text-success',
@@ -22,6 +22,15 @@ function formatVol(v: number) {
   return `$${v.toFixed(0)}`;
 }
 
+// Deterministic hash for the placeholder multi-outcome chart heights.
+function hashSlug(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
 function formatDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -34,6 +43,8 @@ export default function MarketDetail() {
   const [market, setMarket] = useState<MarketDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  // Sibling sub-markets when this market belongs to a multi-market event.
+  const [siblings, setSiblings] = useState<Market[]>([]);
   const [nAgents, setNAgents] = useState(20);
   const [nTicks, setNTicks] = useState(12);
   const [personaSet, setPersonaSet] = useState<'archetype' | 'calibrated' | 'no_signal'>('archetype');
@@ -47,8 +58,20 @@ export default function MarketDetail() {
     if (!slug) return;
     selectMarket(slug);
     setLoading(true);
+    setSiblings([]);
     api.getMarket(slug)
-      .then((res) => setMarket(res.market))
+      .then((res) => {
+        setMarket(res.market);
+        // If this market is part of a multi-market event, load its siblings so
+        // the user can switch between outcomes. Single-market events return one
+        // entry, which we treat as "no siblings".
+        const ev = res.market.event_slug;
+        if (ev) {
+          api.getEventMarkets(ev)
+            .then((r) => setSiblings(r.markets.length > 1 ? r.markets : []))
+            .catch((err) => console.error('Failed to load event outcomes:', err));
+        }
+      })
       .catch((err) => console.error('Failed to load market:', err))
       .finally(() => setLoading(false));
     api.listExperiments({ slug, limit: 50 })
@@ -165,6 +188,59 @@ export default function MarketDetail() {
           </span>
         </div>
       </div>
+
+      {/* Sibling outcomes (multi-market event). Each links to its own detail
+          page; the simulation always targets the single selected sub-market. */}
+      {siblings.length > 1 && (
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Layers className="w-4 h-4 text-primary-500" />
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+              该事件的其它结果
+            </h3>
+            <span className="text-xs text-surface-400">({siblings.length})</span>
+          </div>
+          <p className="text-xs text-surface-400 mb-4">
+            这是一个多结果事件。仿真针对当前选中的单个结果子市场，点击下方结果可切换。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {siblings.map((s) => {
+              const active = s.slug === market.slug;
+              return (
+                <a
+                  key={s.slug}
+                  href={`#/markets/${s.slug}`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    active
+                      ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-600'
+                      : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700/50'
+                  }`}
+                >
+                  <span className="text-sm text-surface-700 dark:text-surface-200 truncate flex-1">
+                    {s.group_title || s.question || s.slug}
+                  </span>
+                  {active && (
+                    <span className="badge text-[10px] bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300 flex-shrink-0">
+                      当前
+                    </span>
+                  )}
+                  <span className="text-xs text-surface-400 flex-shrink-0">{formatVol(s.volume)}</span>
+                </a>
+              );
+            })}
+          </div>
+          {/* Simplified multi-line placeholder — real multi-outcome pricing not wired. */}
+          <div className="mt-4 h-12 flex items-end gap-[3px]" aria-hidden="true">
+            {siblings.slice(0, 24).map((s) => (
+              <div
+                key={s.slug}
+                className="flex-1 rounded-sm bg-primary-200/70 dark:bg-primary-800/40"
+                style={{ height: `${20 + (Math.abs(hashSlug(s.slug)) % 70)}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* This market's experiments */}
       <div className="card p-6">

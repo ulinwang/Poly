@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
-  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2,
+  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
@@ -127,6 +127,12 @@ export default function MarketBrowser() {
       : markets.filter((m) => (m.categories ?? []).includes(category))
   ), [markets, category]);
 
+  // Group the (filtered) markets by event_slug. An event with multiple
+  // sub-markets renders as a single multi-outcome card; events with one market
+  // (or no event_slug) render as ordinary market cards. Order is preserved from
+  // the underlying volume-sorted feed (anchored on each event's first market).
+  const displayItems = useMemo(() => groupByEvent(filtered), [filtered]);
+
   const tabs = ['All', ...categories];
 
   return (
@@ -205,8 +211,10 @@ export default function MarketBrowser() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((market) => (
-            <MarketCard key={market.slug} market={market} />
+          {displayItems.map((item) => (
+            item.kind === 'event'
+              ? <EventCard key={`event:${item.eventSlug}`} group={item} />
+              : <MarketCard key={item.market.slug} market={item.market} />
           ))}
         </div>
       )}
@@ -235,6 +243,75 @@ function formatVol(v: number) {
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}k`;
   return `$${v.toFixed(0)}`;
+}
+
+// A browser row is either a standalone market card or a grouped event card.
+type SingleItem = { kind: 'single'; market: Market };
+type EventItem = {
+  kind: 'event';
+  eventSlug: string;
+  title: string;
+  markets: Market[];
+  volume: number;
+};
+type DisplayItem = SingleItem | EventItem;
+
+// Strip a trailing " - <group_title>" / " <group_title>" suffix so the event
+// card shows the shared question rather than one sub-market's outcome.
+function eventTitle(market: Market): string {
+  const q = market.question || market.slug;
+  const g = market.group_title;
+  if (g && q.endsWith(g)) {
+    return q.slice(0, q.length - g.length).replace(/[\s\-–—:|]+$/, '').trim() || q;
+  }
+  return q;
+}
+
+// Group markets by event_slug, preserving feed order. Events with 2+ markets
+// become a single EventItem; everything else stays a SingleItem.
+function groupByEvent(markets: Market[]): DisplayItem[] {
+  const order: string[] = [];
+  const groups = new Map<string, Market[]>();
+  const singles: SingleItem[] = [];
+
+  for (const m of markets) {
+    const ev = m.event_slug;
+    if (!ev) {
+      // No event slug — always standalone. Key by index implicitly via push.
+      singles.push({ kind: 'single', market: m });
+      order.push(`single:${m.slug}`);
+      continue;
+    }
+    if (!groups.has(ev)) {
+      groups.set(ev, []);
+      order.push(`event:${ev}`);
+    }
+    groups.get(ev)!.push(m);
+  }
+
+  const singleBySlug = new Map(singles.map((s) => [`single:${s.market.slug}`, s]));
+  const items: DisplayItem[] = [];
+  for (const key of order) {
+    if (key.startsWith('single:')) {
+      const s = singleBySlug.get(key);
+      if (s) items.push(s);
+      continue;
+    }
+    const ev = key.slice('event:'.length);
+    const ms = groups.get(ev)!;
+    if (ms.length <= 1) {
+      items.push({ kind: 'single', market: ms[0] });
+    } else {
+      items.push({
+        kind: 'event',
+        eventSlug: ev,
+        title: eventTitle(ms[0]),
+        markets: ms,
+        volume: ms.reduce((sum, m) => sum + (m.volume || 0), 0),
+      });
+    }
+  }
+  return items;
 }
 
 function hashString(str: string): number {
@@ -334,6 +411,74 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
       <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50">
         <span>{market.n_holders?.toLocaleString() || 0} traders</span>
         <span className="font-mono text-[10px]">{market.condition_id.slice(0, 6)}…</span>
+      </div>
+    </a>
+  );
+});
+
+// Multi-outcome event card: lists up to 4 sub-market outcomes (group_title +
+// a deterministic mini Yes price). Clicking enters the event via its first
+// sub-market's slug — MarketDetail then surfaces the sibling outcomes.
+const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
+  const outcomes = group.markets.slice(0, 4);
+  const extra = group.markets.length - outcomes.length;
+  const icon = marketIcon(group.eventSlug);
+  const iconBg = marketIconBg(group.eventSlug);
+  const target = group.markets[0]?.slug ?? '';
+
+  return (
+    <a
+      href={`#/markets/${target}`}
+      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
+    >
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl ${iconBg}`}>
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
+            {group.title}
+          </h3>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
+              <Layers className="w-3 h-3" />
+              {group.markets.length} 个结果
+            </span>
+            <span className="text-xs text-surface-400">
+              {formatVol(group.volume)} Vol
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Outcome list with mini Yes prices */}
+      <div className="space-y-1.5">
+        {outcomes.map((m) => {
+          const yesPrice = hashString(m.slug + 'yes') % 100;
+          return (
+            <div
+              key={m.slug}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-700/40"
+            >
+              <span className="text-xs text-surface-700 dark:text-surface-200 truncate flex-1">
+                {m.group_title || m.question || m.slug}
+              </span>
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                {yesPrice}¢
+              </span>
+            </div>
+          );
+        })}
+        {extra > 0 && (
+          <div className="px-2.5 text-xs text-surface-400">+{extra} 个结果</div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50 mt-auto">
+        <span>多结果事件</span>
+        <span className="font-mono text-[10px]">{group.eventSlug.slice(0, 10)}…</span>
       </div>
     </a>
   );
