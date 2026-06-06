@@ -129,7 +129,7 @@ describe('settings routes', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.ok).toBe(true);
-    expect(body.message).toContain('not yet implemented');
+    expect(body.message).toContain('litellm');
   });
 
   it('POST /api/v1/settings/test calls LLM endpoint for openai-compatible provider', async () => {

@@ -1,12 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getApiSettings, getApiSettingsDecrypted, saveApiSettings } from '../db/settings';
+import { providerBaseUrl } from '../providers';
 import type { ApiSettings } from '../types';
-
-const PROVIDER_DEFAULTS: Record<string, { base_url: string }> = {
-  deepseek: { base_url: 'https://api.deepseek.com/v1' },
-  kimi: { base_url: 'https://api.moonshot.cn/v1' },
-  openai: { base_url: 'https://api.openai.com/v1' },
-};
 
 export default async function settingsRoutes(app: FastifyInstance) {
   app.get('/api', async () => {
@@ -50,21 +45,18 @@ export default async function settingsRoutes(app: FastifyInstance) {
     // (decrypted) key so "Test" works without re-entering the key.
     const apiKey = body.api_key || getApiSettingsDecrypted()?.api_key || '';
     const model = body.model;
-    const baseUrl = body.base_url || PROVIDER_DEFAULTS[provider]?.base_url;
+    const baseUrl = body.base_url || providerBaseUrl(provider);
 
     if (!apiKey) {
       return { ok: false, message: 'API key is required' };
     }
-    if (!baseUrl) {
-      return { ok: false, message: 'Base URL is required for this provider' };
-    }
     if (!model) {
       return { ok: false, message: 'Model is required' };
     }
-
-    // Anthropic uses a different API format; skip live test for now
-    if (provider === 'anthropic') {
-      return { ok: true, message: 'Anthropic provider selected (live test not yet implemented)' };
+    // litellm-native providers (no OpenAI-compatible base URL) — skip the
+    // OpenAI-style live probe; the agent runner reaches them via litellm.
+    if (provider === 'anthropic' || !baseUrl) {
+      return { ok: true, message: `${provider} selected (routed via litellm; live test skipped)` };
     }
 
     try {

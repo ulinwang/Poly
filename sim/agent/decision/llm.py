@@ -66,7 +66,6 @@ def call_deepseek(
     kwargs: dict[str, Any] = {
         "model": _route(model),
         "api_key": api_key,
-        "api_base": base_url,
         "temperature": temperature,
         "timeout": timeout,
         "messages": [
@@ -74,6 +73,10 @@ def call_deepseek(
             {"role": "user", "content": user_prompt},
         ],
     }
+    # Only pin api_base for OpenAI-compatible endpoints; litellm-native,
+    # provider-prefixed models (e.g. "anthropic/…") use the provider default.
+    if base_url:
+        kwargs["api_base"] = base_url
     if response_format is not None:
         kwargs["response_format"] = response_format
     resp = litellm.completion(**kwargs)
@@ -118,7 +121,6 @@ def call_deepseek_with_tools(
     kwargs: dict[str, Any] = {
         "model": _route(model),
         "api_key": api_key,
-        "api_base": base_url,
         "temperature": temperature,
         "timeout": timeout,
         "messages": [
@@ -128,6 +130,8 @@ def call_deepseek_with_tools(
         "tools": tools,
         "tool_choice": tool_choice,
     }
+    if base_url:
+        kwargs["api_base"] = base_url
     # `thinking` toggles DeepSeek's hybrid reasoning mode. None keeps the API
     # default; True/False force enabled/disabled. Forwarded as a provider-
     # specific extra param (dropped for providers that don't support it).

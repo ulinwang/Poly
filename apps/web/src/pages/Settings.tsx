@@ -40,19 +40,19 @@ function SettingsTab({ to, icon, label }: { to: string; icon: React.ReactNode; l
   );
 }
 
-const PROVIDERS = [
-  { id: 'deepseek', name: 'DeepSeek', models: ['deepseek-chat', 'deepseek-reasoner'], requiresBaseUrl: false },
-  { id: 'kimi', name: 'Kimi (Moonshot)', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'], requiresBaseUrl: false },
-  { id: 'openai', name: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1-preview'], requiresBaseUrl: false },
-  { id: 'anthropic', name: 'Anthropic', models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'], requiresBaseUrl: false },
-  { id: 'custom', name: 'Custom (OpenAI-compatible)', models: [], requiresBaseUrl: true },
-];
-
 function APISettings() {
   const apiSettings = useSettingsStore((s) => s.apiSettings);
   const updateApiSettings = useSettingsStore((s) => s.updateApiSettings);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  // Provider catalog comes from the backend (single source of truth, litellm).
+  const [providers, setProviders] = useState<import('../types').ProviderInfo[]>([]);
+
+  useEffect(() => {
+    api.listProviders()
+      .then((res) => setProviders(res.providers))
+      .catch(() => { /* ignore; dropdown just stays empty */ });
+  }, []);
 
   // Load stored settings (without plaintext key) so we can show whether a key
   // is configured. The api_key input stays empty / user-controlled.
@@ -76,7 +76,7 @@ function APISettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const provider = PROVIDERS.find((p) => p.id === apiSettings.provider);
+  const provider = providers.find((p) => p.id === apiSettings.provider);
   const models = provider?.models || [];
 
   const handleSave = async () => {
@@ -129,15 +129,18 @@ function APISettings() {
         <select
           value={apiSettings.provider}
           onChange={(e) => {
-            const p = PROVIDERS.find((p) => p.id === e.target.value);
+            const p = providers.find((p) => p.id === e.target.value);
             updateApiSettings({
               provider: e.target.value as import('../types').ApiSettings['provider'],
               model: p?.models[0] || '',
+              // Auto-fill the OpenAI-compatible base URL; blank for custom /
+              // litellm-native providers so the user/litellm supplies it.
+              base_url: p?.base_url || '',
             });
           }}
           className="input"
         >
-          {PROVIDERS.map((p) => (
+          {providers.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
@@ -195,7 +198,7 @@ function APISettings() {
       </div>
 
       {/* Base URL (for custom) */}
-      {provider?.requiresBaseUrl && (
+      {provider?.requires_base_url && (
         <div className="space-y-2">
           <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
             Base URL

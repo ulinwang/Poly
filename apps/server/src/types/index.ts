@@ -80,4 +80,5 @@ export interface ProviderInfo {
   name: string;
   models: string[];
   requires_base_url: boolean;
+  base_url?: string;
 }
