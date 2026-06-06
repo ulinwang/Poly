@@ -123,10 +123,20 @@ const defaultApiSettings: ApiSettings = {
   max_tokens: 2048,
 };
 
+// Lightweight localStorage persistence for UI preferences (no extra deps).
+function readBool(key: string, fallback: boolean): boolean {
+  if (typeof localStorage === 'undefined') return fallback;
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : raw === '1';
+}
+function writeBool(key: string, value: boolean): void {
+  if (typeof localStorage !== 'undefined') localStorage.setItem(key, value ? '1' : '0');
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   apiSettings: defaultApiSettings,
-  darkMode: false,
-  sidebarCollapsed: false,
+  darkMode: readBool('poly.darkMode', false),
+  sidebarCollapsed: readBool('poly.sidebarCollapsed', false),
   setApiSettings: (apiSettings) => set({ apiSettings }),
   updateApiSettings: (partial) => set((s) => ({
     apiSettings: { ...s.apiSettings, ...partial },
@@ -134,13 +144,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   toggleDarkMode: () => set((s) => {
     const next = !s.darkMode;
     if (typeof document !== 'undefined') {
-      if (next) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      document.documentElement.classList.toggle('dark', next);
     }
+    writeBool('poly.darkMode', next);
     return { darkMode: next };
   }),
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  toggleSidebar: () => set((s) => {
+    const next = !s.sidebarCollapsed;
+    writeBool('poly.sidebarCollapsed', next);
+    return { sidebarCollapsed: next };
+  }),
 }));
