@@ -8,9 +8,11 @@ export interface Market {
   n_holders: number | null;
   categories?: string[];
   icon_url?: string;
-  // Shared event slug for multi-market events; group_title is this sub-market's
-  // outcome label (e.g. "50+ bps decrease"). Null for standalone markets.
+  // Multi-market events: event_slug is the shared event id, event_title is the
+  // parent event name (e.g. "What will happen before GTA VI?"), group_title is
+  // this sub-market's outcome label (e.g. "50+ bps decrease"). Null otherwise.
   event_slug?: string | null;
+  event_title?: string | null;
   group_title?: string | null;
 }
 

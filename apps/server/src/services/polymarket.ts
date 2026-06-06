@@ -19,7 +19,7 @@ interface GammaMarket {
   image?: string;
   icon?: string;
   tags?: GammaTag[];
-  events?: Array<{ slug?: string }>;
+  events?: Array<{ slug?: string; title?: string }>;
   markets?: Array<{
     minimumTickSize?: number;
     takerBaseFee?: number;
@@ -134,9 +134,11 @@ function normalizeMarket(m: GammaMarket): Market {
     n_holders: null,
     categories: extractCategories(m),
     // Polymarket groups several binary sub-markets under one event. event_slug
-    // is the shared event identifier; group_title is this sub-market's label
-    // (e.g. "50+ bps decrease"). Both are used to group cards in the browser.
+    // is the shared event identifier; event_title is the parent event's name
+    // (e.g. "What will happen before GTA VI?"); group_title is this sub-market's
+    // label (e.g. "50+ bps decrease"). Used to group/label cards in the browser.
     event_slug: m.events?.[0]?.slug || null,
+    event_title: m.events?.[0]?.title || null,
     group_title: m.groupItemTitle || null,
   };
 }
@@ -187,6 +189,7 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     // Polymarket groups markets under an event; the event slug is what the
     // public site routes on (polymarket.com/event/<event_slug>).
     event_slug: m.events?.[0]?.slug || null,
+    event_title: m.events?.[0]?.title || null,
     group_title: m.groupItemTitle || null,
   };
 }

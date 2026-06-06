@@ -151,26 +151,20 @@ function APISettings() {
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
           Model
         </label>
-        <select
+        {/* Editable combobox: suggestions from the provider catalog, but any
+            model id can be typed (the endpoint forwards it as-is), so newer
+            models that aren't in the list still work. */}
+        <input
+          type="text"
+          list="model-options"
           value={apiSettings.model}
           onChange={(e) => updateApiSettings({ model: e.target.value })}
+          placeholder="选择或输入模型 id，如 deepseek-v4-flash"
           className="input"
-        >
-          {models.length > 0 ? (
-            models.map((m) => <option key={m} value={m}>{m}</option>)
-          ) : (
-            <option value="">Enter custom model below</option>
-          )}
-        </select>
-        {models.length === 0 && (
-          <input
-            type="text"
-            value={apiSettings.model}
-            onChange={(e) => updateApiSettings({ model: e.target.value })}
-            placeholder="e.g. gpt-4o"
-            className="input mt-2"
-          />
-        )}
+        />
+        <datalist id="model-options">
+          {models.map((m) => <option key={m} value={m} />)}
+        </datalist>
       </div>
 
       {/* API Key */}

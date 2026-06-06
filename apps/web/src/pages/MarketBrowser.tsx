@@ -305,7 +305,9 @@ function groupByEvent(markets: Market[]): DisplayItem[] {
       items.push({
         kind: 'event',
         eventSlug: ev,
-        title: eventTitle(ms[0]),
+        // Prefer the real parent event name from the API; fall back to the
+        // suffix-strip heuristic only if it's missing.
+        title: ms[0].event_title || eventTitle(ms[0]),
         markets: ms,
         volume: ms.reduce((sum, m) => sum + (m.volume || 0), 0),
       });

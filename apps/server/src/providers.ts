@@ -19,14 +19,15 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     id: 'deepseek',
     name: 'DeepSeek',
     base_url: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
+    // Authoritative per the endpoint's /models (api.deepseek.com).
+    models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     requires_base_url: false,
   },
   {
     id: 'kimi',
     name: 'Kimi (Moonshot)',
     base_url: 'https://api.moonshot.cn/v1',
-    models: ['kimi-k2-0905-preview', 'kimi-latest', 'moonshot-v1-128k', 'moonshot-v1-32k', 'moonshot-v1-8k'],
+    models: ['kimi-k2.6', 'kimi-k2.6-turbo', 'kimi-latest', 'moonshot-v1-128k'],
     requires_base_url: false,
   },
   {
