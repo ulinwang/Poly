@@ -1,13 +1,50 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* class 策略暗色模式：让 dark: 工具类响应 <html class="dark">，
+   而不是 v4 默认的 prefers-color-scheme 媒体查询 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 自定义调色板（原 tailwind.config.js theme.extend.colors 迁移而来） */
+@theme {
+  --color-primary-50: #f0fdf9;
+  --color-primary-100: #ccfbf1;
+  --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4;
+  --color-primary-400: #2dd4bf;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+
+  --color-surface-0: #ffffff;
+  --color-surface-50: #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+  --color-surface-400: #94a3b8;
+  --color-surface-500: #64748b;
+  --color-surface-600: #475569;
+  --color-surface-700: #334155;
+  --color-surface-800: #1e293b;
+  --color-surface-900: #0f172a;
+
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
 
 @layer base {
   html {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent font size inflation on iOS Safari */
     -webkit-text-size-adjust: 100%;
   }
 
@@ -17,10 +54,6 @@
     background-color: #0f172a;
     color: #f8fafc;
   }
-
-  /* Hide scrollbar by default, show on hover (cross-browser) */
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 @layer components {
@@ -88,6 +121,7 @@
   .dark .input {
     background-color: #1e293b;
     border-color: #475569;
+    color: #f8fafc;
   }
 
   .input:focus {
