@@ -407,6 +407,58 @@ def _init_agents_random_baseline(
 import math
 
 
+# Synthetic archetypes used by the data-free fallback population. Each entry is
+# (persona label, profile_text, capital_decades_range, base_accuracy). The
+# capital is drawn as 10 * 10^U(lo,hi) so it spans a heavy-tailed $ range
+# without any on-chain data.
+_SYNTHETIC_ARCHETYPES = [
+    ("Momentum",   "A momentum trader who chases recent price strength and exits on reversals; medium conviction.", (1.0, 2.5), 0.52),
+    ("Value",      "A contrarian value trader who fades extremes and buys outcomes they judge underpriced; patient.", (1.0, 3.0), 0.55),
+    ("Informed",   "A well-informed trader with a private estimate of the true probability who trades toward it.", (1.5, 3.0), 0.62),
+    ("Noise",      "A low-conviction noise trader who trades on hunches and herd sentiment with little analysis.", (0.5, 2.0), 0.48),
+    ("Whale",      "A large-capital, risk-tolerant trader who posts patient maker orders and can move the book.", (3.0, 4.0), 0.58),
+]
+
+
+def build_synthetic_population(
+    priors: dict, *, n_agents: int = 20, seed: int = 0,
+) -> list[AgentInit]:
+    """Build a population from synthetic archetypes, requiring NO on-chain data.
+
+    Used as a fallback when the requested persona_set has no ingested data for
+    the market (no wallet_features / no cluster_profiles.json). Capital, private
+    signals and behavioural variety are derived deterministically from the seed
+    and the market's consensus prior (`priors['signal_mu']`), so any market can
+    be simulated. Not empirically calibrated — for the calibrated/archetype
+    populations the corresponding data must be ingested first.
+    """
+    rng = random.Random(seed)
+    consensus_mu = float(priors.get("signal_mu", 0.5))
+    out: list[AgentInit] = []
+    for i in range(max(1, int(n_agents))):
+        label, profile, (lo, hi), base_acc = _SYNTHETIC_ARCHETYPES[i % len(_SYNTHETIC_ARCHETYPES)]
+        capital = 10.0 * (10.0 ** rng.uniform(lo, hi))
+        # Vary per-agent accuracy a little around the archetype's base.
+        past_acc = min(0.95, max(0.05, base_acc + rng.uniform(-0.08, 0.08)))
+        sigma = derive_signal_sigma(past_acc)
+        signal = draw_private_signal(consensus_mu, sigma, rng)
+        tx_count = rng.randint(5, 500)
+        out.append(AgentInit(
+            wallet_addr=f"synthetic-{i:04d}",
+            persona_type=f"Synthetic-{label}",
+            capital_initial=round(capital, 2),
+            profile_text=profile,
+            private_signal_mu=signal,
+            private_signal_sigma=sigma,
+            risk_aversion=0.5,
+            src_tx_count=tx_count,
+            src_maker_ratio=round(rng.uniform(0.0, 1.0), 2),
+            src_avg_position_usd=round(capital / max(tx_count, 1), 2),
+            src_asset_diversity=rng.randint(1, 40),
+        ))
+    return out
+
+
 def main() -> None:
     """CLI: `python -m agent.factory --slug <slug> --dry-run`."""
     import argparse

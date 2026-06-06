@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from agent.decision import decide
-from agent.factory import init_agents
+from agent.factory import init_agents, build_synthetic_population
 from agent.features.market import derive_priors
 from data.query.markets import get_market_meta
 from data.store.config import get_settings
@@ -136,15 +136,35 @@ def run_stream(
         "bootstrap_source": priors["bootstrap"]["source"],
     })
 
-    # 3. Init agents.
-    pop, _ = init_agents(
-        slug, persona_set=persona_set, n_agents=n_agents, seed=seed,
-    )
+    # 3. Init agents. The calibrated/archetype/random persona sets need ingested
+    # on-chain data (wallet_features / cluster_profiles.json). For an arbitrary
+    # live market that data usually isn't present, so fall back to a synthetic,
+    # data-free population (deterministic by seed) and warn — this lets ANY
+    # market be simulated instead of hard-failing.
+    pop = []
+    try:
+        pop, _ = init_agents(
+            slug, persona_set=persona_set, n_agents=n_agents, seed=seed,
+        )
+    except Exception as exc:        # noqa: BLE001
+        on_event("warn", {
+            "where": "init_agents",
+            "message": f"persona_set {persona_set!r} unavailable ({exc}); "
+                       f"falling back to synthetic personas",
+        })
+    if not pop:
+        pop = build_synthetic_population(priors, n_agents=n_agents, seed=seed)
+        on_event("persona_fallback", {
+            "requested": persona_set,
+            "used": "synthetic",
+            "n_agents": len(pop),
+            "reason": "no ingested on-chain data for this market; "
+                      "using synthetic (uncalibrated) personas",
+        })
     if not pop:
         on_event("error", {
             "where": "init_agents",
-            "message": "empty population; calibrated path requires "
-                       "wallet_features rows for this market",
+            "message": "could not build any agent population",
         })
         return
     on_event("population_built", {
