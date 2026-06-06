@@ -10,6 +10,7 @@ export function useSSE(runId: string | null, replay: number = 1) {
   const addTickMetrics = useExperimentStore((s) => s.addTickMetrics);
   const addAgentSnapshots = useExperimentStore((s) => s.addAgentSnapshots);
   const setRunning = useExperimentStore((s) => s.setRunning);
+  const setPaused = useExperimentStore((s) => s.setPaused);
   const setError = useExperimentStore((s) => s.setError);
 
   const nowStr = useCallback(() => {
@@ -34,6 +35,7 @@ export function useSSE(runId: string | null, replay: number = 1) {
     es.addEventListener('run_started', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
       addEvent({ event: 'run_started', data });
+      setPaused(false);
       addTickLog({ id: Date.now(), time: nowStr(), label: 'start', msg: `Run started: ${data.slug}`, kind: 'info' });
     });
 
@@ -193,6 +195,23 @@ export function useSSE(runId: string | null, replay: number = 1) {
       es.close();
     });
 
+    es.addEventListener('paused', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      addEvent({ event: 'paused', data });
+      setRunning(false);
+      setPaused(true);
+      addTickLog({ id: Date.now(), time: nowStr(), label: 'pause', msg: `Paused at tick ${data.tick ?? '?'} (checkpointed)`, kind: 'warn' });
+      es.close();
+    });
+
+    es.addEventListener('run_resumed', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      addEvent({ event: 'run_resumed', data });
+      setPaused(false);
+      setRunning(true);
+      addTickLog({ id: Date.now(), time: nowStr(), label: 'resume', msg: `Resumed from tick ${data.resume_tick ?? '?'}`, kind: 'info' });
+    });
+
     es.addEventListener('end', () => {
       setRunning(false);
       es.close();
@@ -211,7 +230,7 @@ export function useSSE(runId: string | null, replay: number = 1) {
     return () => {
       es.close();
     };
-  }, [runId, replay, addEvent, addDecision, addTickLog, setMetrics, addTickMetrics, addAgentSnapshots, setRunning, setError, nowStr]);
+  }, [runId, replay, addEvent, addDecision, addTickLog, setMetrics, addTickMetrics, addAgentSnapshots, setRunning, setPaused, setError, nowStr]);
 }
 
 export function useDebounce<T>(value: T, delay: number = 300): T {

@@ -50,6 +50,8 @@ export interface ExperimentRow {
   total_fills?: number | null;
   total_actions?: number | null;
   avg_tick_time_ms?: number | null;
+  /** Pickle checkpoint path written on pause; consumed on resume. */
+  checkpoint_path?: string | null;
 }
 
 export interface Experiment {

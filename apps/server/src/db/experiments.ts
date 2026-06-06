@@ -6,6 +6,7 @@ const allowedCols = new Set([
   'api_settings_id', 'status', 'started_at', 'finished_at',
   'result_summary', 'created_at',
   'final_yes_mid', 'total_fills', 'total_actions', 'avg_tick_time_ms',
+  'checkpoint_path',
 ]);
 
 export function saveExperiment(exp: Partial<ExperimentRow>): void {

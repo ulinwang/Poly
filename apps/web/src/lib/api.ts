@@ -90,6 +90,21 @@ export const api = {
   cancelExperiment: (id: string) =>
     fetchJson<{ cancelled: boolean }>(`/api/v1/experiments/${id}/cancel`, { method: 'POST' }),
 
+  // Pause a running experiment: the backend checkpoints at the next tick
+  // boundary and flips status to 'paused'.
+  pauseExperiment: (id: string) =>
+    fetchJson<{ paused: boolean; checkpoint_path?: string | null; message?: string }>(
+      `/api/v1/experiments/${id}/pause`,
+      { method: 'POST' },
+    ),
+
+  // Resume a paused experiment from its stored checkpoint (same id).
+  resumeExperiment: (id: string) =>
+    fetchJson<{ run_id: string; resumed: boolean }>(
+      `/api/v1/experiments/${id}/resume`,
+      { method: 'POST' },
+    ),
+
   // Settings
   // Response carries api_key_set (boolean) and never the plaintext api_key.
   getApiSettings: () =>

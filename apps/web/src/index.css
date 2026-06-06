@@ -153,4 +153,9 @@
     background-color: #334155;
     color: #94a3b8;
   }
+
+  .badge-warn {
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+  }
 }

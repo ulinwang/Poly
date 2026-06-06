@@ -55,6 +55,9 @@ const expectedCols = [
   ['total_fills', 'INTEGER'],
   ['total_actions', 'INTEGER'],
   ['avg_tick_time_ms', 'REAL'],
+  // Path to the pickle checkpoint written when a run is paused; used by
+  // POST /:id/resume to continue the simulation. NULL unless paused.
+  ['checkpoint_path', 'TEXT'],
 ];
 const existingCols = db
   .prepare("PRAGMA table_info(experiments)")

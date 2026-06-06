@@ -55,6 +55,8 @@ interface ExperimentState {
   /** Per-agent micro snapshots, keyed by agent_id, each a tick-ordered history. */
   agentSnapshots: Record<number, AgentSnapshot[]>;
   running: boolean;
+  /** True between a `paused` event and the next resume. */
+  paused: boolean;
   error: string | null;
   setExperiments: (experiments: Experiment[]) => void;
   setActiveId: (id: string | null) => void;
@@ -67,6 +69,7 @@ interface ExperimentState {
   /** Append a batch of agent rows for one tick (from an `agent_snapshots` event). */
   addAgentSnapshots: (snapshots: AgentSnapshot[]) => void;
   setRunning: (v: boolean) => void;
+  setPaused: (v: boolean) => void;
   setError: (e: string | null) => void;
   resetSimulation: () => void;
 }
@@ -89,6 +92,7 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
   tickMetrics: [],
   agentSnapshots: {},
   running: false,
+  paused: false,
   error: null,
   setExperiments: (experiments) => set({ experiments }),
   setActiveId: (activeId) => set({ activeId }),
@@ -121,6 +125,7 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     return { agentSnapshots: byAgent };
   }),
   setRunning: (running) => set({ running }),
+  setPaused: (paused) => set({ paused }),
   setError: (error) => set({ error }),
   resetSimulation: () => set({
     events: [],
@@ -138,6 +143,7 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     tickMetrics: [],
     agentSnapshots: {},
     running: false,
+    paused: false,
     error: null,
   }),
 }));

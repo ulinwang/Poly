@@ -7,7 +7,13 @@ import {
   getExperimentStats,
   getExperiment,
 } from '../db/experiments';
-import { createRunHandle, emitEvent, spawnRun } from '../services/runner';
+import {
+  createRunHandle,
+  emitEvent,
+  spawnRun,
+  pauseRun,
+  checkpointPathFor,
+} from '../services/runner';
 import type { ExperimentConfig, ExperimentRow } from '../types';
 import { getApiSettingsDecrypted } from '../db/settings';
 
@@ -87,6 +93,53 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     return { message: 'Experiment not found' };
   });
 
+  // Build the per-run event handler. Persists final metrics on `__end__`,
+  // distinguishing three terminal states: paused (checkpointed, resumable),
+  // cancelled, and completed.
+  function makeOnEvent(runId: string, handle: RunHandle) {
+    return (kind: string, data: Record<string, unknown>) => {
+      emitEvent(handle, kind, data);
+      if (kind === '__end__') {
+        if (handle.paused) {
+          // Paused mid-run: keep result_summary/metrics untouched, record
+          // the checkpoint and flip status to 'paused' for later resume.
+          saveExperiment({
+            id: runId,
+            status: 'paused',
+            checkpoint_path: handle.checkpointPath,
+            finished_at: null,
+          });
+          return;
+        }
+        const metrics = handle.finalMetrics;
+        const payload: Partial<ExperimentRow> = {
+          id: runId,
+          finished_at: new Date().toISOString(),
+          result_summary: metrics ? JSON.stringify(metrics) : null,
+          final_yes_mid: metrics.yes_mid_final as number | undefined,
+          total_fills: metrics.n_fills as number | undefined,
+          total_actions: metrics.n_actions as number | undefined,
+          avg_tick_time_ms: handle.tickCount
+            ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
+            : undefined,
+        };
+        if (!handle.cancel) {
+          payload.status = 'completed';
+        }
+        saveExperiment(payload);
+      }
+    };
+  }
+
+  function currentApiSettings() {
+    // Decrypt the stored key only here, kept in memory and handed to the
+    // Python subprocess; never persisted or returned to the client.
+    const settings = getApiSettingsDecrypted();
+    return settings
+      ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
+      : undefined;
+  }
+
   app.post('', async (req) => {
     const body = req.body as ExperimentConfig;
     const runId = crypto.randomBytes(12).toString('hex').slice(0, 12);
@@ -111,38 +164,10 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       result_summary: null,
     });
 
-    // Decrypt the stored key only here, kept in memory and handed to the
-    // Python subprocess; never persisted or returned to the client.
-    const settings = getApiSettingsDecrypted();
-    const apiSettings = settings
-      ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
-      : undefined;
-
-    spawnRun(
-      handle,
-      (kind: string, data: Record<string, unknown>) => {
-        emitEvent(handle, kind, data);
-        if (kind === '__end__') {
-          const metrics = handle.finalMetrics;
-          const payload: Partial<ExperimentRow> = {
-            id: runId,
-            finished_at: new Date().toISOString(),
-            result_summary: metrics ? JSON.stringify(metrics) : null,
-            final_yes_mid: metrics.yes_mid_final as number | undefined,
-            total_fills: metrics.n_fills as number | undefined,
-            total_actions: metrics.n_actions as number | undefined,
-            avg_tick_time_ms: handle.tickCount
-              ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
-              : undefined,
-          };
-          if (!handle.cancel) {
-            payload.status = 'completed';
-          }
-          saveExperiment(payload);
-        }
-      },
-      apiSettings,
-    );
+    spawnRun(handle, makeOnEvent(runId, handle), {
+      apiSettings: currentApiSettings(),
+      checkpointOut: checkpointPathFor(runId),
+    });
 
     return { run_id: runId };
   });
@@ -161,6 +186,73 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       finished_at: new Date().toISOString(),
     });
     return { cancelled: true };
+  });
+
+  // Pause a running experiment: request a checkpoint, then wait (briefly)
+  // for the Python side to emit `paused` at the next tick boundary.
+  app.post('/:expId/pause', async (req, reply) => {
+    const { expId } = req.params as { expId: string };
+    const handle = runs.get(expId);
+    if (!handle || handle.finished) {
+      reply.status(404);
+      return { message: 'No running experiment to pause' };
+    }
+    if (!pauseRun(handle)) {
+      reply.status(409);
+      return { message: 'Experiment is not pausable' };
+    }
+    // Wait up to ~30s for the current tick to finish and the checkpoint
+    // to land. The pause fires at a tick boundary, so this bounds at one
+    // tick's worth of LLM calls.
+    const deadline = Date.now() + 30_000;
+    while (!handle.paused && !handle.finished && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    if (handle.paused) {
+      return { paused: true, checkpoint_path: handle.checkpointPath };
+    }
+    // Timed out or the run ended for another reason.
+    reply.status(202);
+    return { paused: false, message: 'Pause requested; checkpoint pending' };
+  });
+
+  // Resume a paused experiment from its stored checkpoint.
+  app.post('/:expId/resume', async (req, reply) => {
+    const { expId } = req.params as { expId: string };
+    const row = getExperiment(expId);
+    if (!row) {
+      reply.status(404);
+      return { message: 'Experiment not found' };
+    }
+    if (row.status !== 'paused' || !row.checkpoint_path) {
+      reply.status(409);
+      return { message: 'Experiment is not paused / has no checkpoint' };
+    }
+
+    // Reuse the same expId so the client keeps observing one run; build a
+    // fresh RunHandle (the prior one's child has exited).
+    const handle = createRunHandle(
+      expId,
+      row.slug,
+      row.n_agents,
+      row.n_ticks,
+      row.persona_set,
+    );
+    runs.set(expId, handle);
+
+    saveExperiment({
+      id: expId,
+      status: 'running',
+      finished_at: null,
+    });
+
+    spawnRun(handle, makeOnEvent(expId, handle), {
+      apiSettings: currentApiSettings(),
+      resumeCheckpoint: row.checkpoint_path,
+      checkpointOut: checkpointPathFor(expId),
+    });
+
+    return { run_id: expId, resumed: true };
   });
 
   app.get('/:expId/events', async (req, reply) => {
