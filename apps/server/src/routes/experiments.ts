@@ -9,7 +9,7 @@ import {
 } from '../db/experiments';
 import { createRunHandle, emitEvent, spawnRun } from '../services/runner';
 import type { ExperimentConfig, ExperimentRow } from '../types';
-import { getApiSettings } from '../db/settings';
+import { getApiSettingsDecrypted } from '../db/settings';
 
 import type { RunHandle } from '../services/runner';
 
@@ -111,7 +111,9 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       result_summary: null,
     });
 
-    const settings = getApiSettings();
+    // Decrypt the stored key only here, kept in memory and handed to the
+    // Python subprocess; never persisted or returned to the client.
+    const settings = getApiSettingsDecrypted();
     const apiSettings = settings
       ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
       : undefined;

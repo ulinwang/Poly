@@ -119,6 +119,7 @@ const defaultApiSettings: ApiSettings = {
   provider: 'deepseek',
   model: 'deepseek-chat',
   api_key: '',
+  api_key_set: false,
   temperature: 0.7,
   max_tokens: 2048,
 };

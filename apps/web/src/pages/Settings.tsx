@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { Key, Palette, Save, TestTube } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
 import { api } from '../lib/api';
 
@@ -54,13 +54,41 @@ function APISettings() {
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
+  // Load stored settings (without plaintext key) so we can show whether a key
+  // is configured. The api_key input stays empty / user-controlled.
+  useEffect(() => {
+    api
+      .getApiSettings()
+      .then((res) => {
+        const s = res.settings;
+        updateApiSettings({
+          provider: s.provider,
+          model: s.model,
+          base_url: s.base_url,
+          temperature: s.temperature,
+          max_tokens: s.max_tokens,
+          api_key_set: s.api_key_set,
+        });
+      })
+      .catch(() => {
+        /* keep defaults on failure */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const provider = PROVIDERS.find((p) => p.id === apiSettings.provider);
   const models = provider?.models || [];
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.updateApiSettings(apiSettings);
+      // Only include the plaintext api_key when the user actually entered one;
+      // otherwise omit it so the server keeps the existing stored key.
+      const { api_key, ...rest } = apiSettings;
+      const payload = api_key && api_key.length > 0 ? { ...rest, api_key } : rest;
+      const res = await api.updateApiSettings(payload as typeof apiSettings);
+      // Reflect server's view (api_key_set) and clear the local key input.
+      updateApiSettings({ api_key: '', api_key_set: res.settings.api_key_set });
       setTestResult('Settings saved successfully');
       setTimeout(() => setTestResult(null), 3000);
     } catch (err) {
@@ -147,15 +175,22 @@ function APISettings() {
         <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
           API Key
         </label>
+        <div className="text-xs">
+          {apiSettings.api_key_set ? (
+            <span className="text-success">API Key 已配置</span>
+          ) : (
+            <span className="text-surface-400">API Key 未配置</span>
+          )}
+        </div>
         <input
           type="password"
-          value={apiSettings.api_key}
+          value={apiSettings.api_key || ''}
           onChange={(e) => updateApiSettings({ api_key: e.target.value })}
-          placeholder="sk-..."
+          placeholder={apiSettings.api_key_set ? '已配置，留空则保持不变' : 'sk-...'}
           className="input"
         />
         <p className="text-xs text-surface-400">
-          Your API key is stored locally and never sent to our servers except for LLM calls.
+          The key is encrypted at rest on the server and is never returned to the browser.
         </p>
       </div>
 

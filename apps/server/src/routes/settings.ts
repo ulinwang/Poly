@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getApiSettings, saveApiSettings } from '../db/settings';
+import { getApiSettings, getApiSettingsDecrypted, saveApiSettings } from '../db/settings';
 import type { ApiSettings } from '../types';
 
 const PROVIDER_DEFAULTS: Record<string, { base_url: string }> = {
@@ -15,13 +15,14 @@ export default async function settingsRoutes(app: FastifyInstance) {
       const defaults: ApiSettings = {
         provider: 'deepseek',
         model: 'deepseek-chat',
-        api_key: '',
         base_url: undefined,
         temperature: 0.7,
         max_tokens: 2048,
+        api_key_set: false,
       };
       return { settings: defaults };
     }
+    // getApiSettings() already excludes the plaintext key and sets api_key_set.
     return { settings: row };
   });
 
@@ -30,19 +31,24 @@ export default async function settingsRoutes(app: FastifyInstance) {
     const payload: Omit<ApiSettings, 'id'> & { id?: number } = {
       provider: body.provider,
       model: body.model,
+      // Pass through whatever the client sent; saveApiSettings preserves the
+      // existing key when this is empty/undefined.
       api_key: body.api_key,
       base_url: body.base_url,
       temperature: body.temperature,
       max_tokens: body.max_tokens,
     };
     saveApiSettings(payload);
-    return { settings: body };
+    // Respond with the safe view (no plaintext key).
+    return { settings: getApiSettings() };
   });
 
   app.post('/test', async (req) => {
     const body = req.body as ApiSettings;
     const provider = body.provider;
-    const apiKey = body.api_key;
+    // Use the supplied key if present; otherwise fall back to the stored
+    // (decrypted) key so "Test" works without re-entering the key.
+    const apiKey = body.api_key || getApiSettingsDecrypted()?.api_key || '';
     const model = body.model;
     const baseUrl = body.base_url || PROVIDER_DEFAULTS[provider]?.base_url;
 

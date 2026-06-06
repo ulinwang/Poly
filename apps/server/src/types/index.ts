@@ -62,7 +62,13 @@ export interface ApiSettings {
   id?: number;
   provider: 'openai' | 'anthropic' | 'deepseek' | 'kimi' | 'custom';
   model: string;
-  api_key: string;
+  /**
+   * Plaintext API key. Optional: present on incoming requests and on the
+   * internal decrypted view, but never included in responses to the client.
+   */
+  api_key?: string;
+  /** Whether an API key is stored. Used in responses instead of the key. */
+  api_key_set?: boolean;
   base_url?: string;
   temperature: number;
   max_tokens: number;

@@ -14,9 +14,11 @@ describe('settings routes', () => {
     const body = JSON.parse(res.body);
     expect(body.settings).toBeDefined();
     expect(body.settings.provider).toBe('deepseek');
+    expect(body.settings.api_key_set).toBe(false);
+    expect(body.settings.api_key).toBeUndefined();
   });
 
-  it('PUT /api/v1/settings/api updates settings', async () => {
+  it('PUT /api/v1/settings/api updates settings and never returns plaintext key', async () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'PUT',
@@ -32,6 +34,62 @@ describe('settings routes', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.settings.provider).toBe('openai');
+    // Response must not include the plaintext key, only a boolean flag.
+    expect(body.settings.api_key).toBeUndefined();
+    expect(body.settings.api_key_set).toBe(true);
+  });
+
+  it('PUT without api_key preserves the previously stored key', async () => {
+    const app = await buildServer();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        api_key: 'sk-original',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    });
+    // Update other fields without supplying a key.
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        api_key: '',
+        temperature: 0.9,
+        max_tokens: 2048,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.settings.model).toBe('gpt-4o-mini');
+    // Key should still be set even though none was sent in the second request.
+    expect(body.settings.api_key_set).toBe(true);
+  });
+
+  it('api_key is stored encrypted, not as plaintext', async () => {
+    const app = await buildServer();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        api_key: 'sk-secret-plaintext',
+        temperature: 0.5,
+        max_tokens: 1024,
+      },
+    });
+    const row = db
+      .prepare('SELECT api_key FROM api_settings ORDER BY updated_at DESC, id DESC LIMIT 1')
+      .get() as { api_key: string };
+    expect(row.api_key).not.toBe('sk-secret-plaintext');
+    expect(row.api_key).not.toContain('sk-secret-plaintext');
+    expect(row.api_key.length).toBeGreaterThan(0);
   });
 
   it('POST /api/v1/settings/test rejects missing api_key', async () => {

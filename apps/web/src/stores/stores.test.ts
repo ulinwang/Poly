@@ -5,7 +5,7 @@ import { useSettingsStore, useMarketStore, useExperimentStore } from './index';
 describe('Settings store', () => {
   beforeEach(() => {
     useSettingsStore.setState({
-      apiSettings: { provider: 'deepseek', model: 'deepseek-chat', api_key: '', temperature: 0.7, max_tokens: 2048 },
+      apiSettings: { provider: 'deepseek', model: 'deepseek-chat', api_key: '', api_key_set: false, temperature: 0.7, max_tokens: 2048 },
       darkMode: false,
       sidebarCollapsed: false,
     });

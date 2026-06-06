@@ -77,9 +77,12 @@ export const api = {
     fetchJson<{ cancelled: boolean }>(`/api/v1/experiments/${id}/cancel`, { method: 'POST' }),
 
   // Settings
+  // Response carries api_key_set (boolean) and never the plaintext api_key.
   getApiSettings: () =>
     fetchJson<{ settings: import('../types').ApiSettings }>('/api/v1/settings/api'),
 
+  // Send the plaintext api_key only when the user entered a new one; omit it to
+  // keep the existing stored key unchanged.
   updateApiSettings: (settings: import('../types').ApiSettings) =>
     fetchJson<{ settings: import('../types').ApiSettings }>('/api/v1/settings/api', {
       method: 'PUT',
