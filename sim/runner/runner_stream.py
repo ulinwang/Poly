@@ -32,6 +32,8 @@ from data.query.markets import get_market_meta
 from data.store.config import get_settings
 from environment.env import PolyEnv
 from environment.seeders.from_clob_history import seed as seed_from_clob
+from evaluation.metrics.macro import compute_tick_metrics
+from evaluation.metrics.micro import snapshot_all
 
 
 log = logging.getLogger(__name__)
@@ -181,6 +183,7 @@ def run_stream(
             "message": "LLM API key not set; configure provider in Settings or set POLYMETL_DEEPSEEK_API_KEY",
         })
         return
+    prev_yes_mid: Optional[float] = float(sim.yes_mid)
     for tick in range(n_ticks):
         if cancel is not None and cancel.is_set():
             on_event("cancelled", {"tick": tick})
@@ -243,6 +246,19 @@ def run_stream(
             "elapsed_s": round(time.time() - tick_started, 2),
             **_market_snapshot_dict(sim),
         })
+
+        # Eval layer: macro tick metrics + micro per-agent snapshots, streamed
+        # for the live observation page (see sim/evaluation/schema.py).
+        tm = compute_tick_metrics(
+            tick, sim.yes_mid, sim.no_mid, int(info["n_fills"]), prev_yes_mid,
+        )
+        on_event("tick_metrics", asdict(tm))
+        on_event("agent_snapshots", {
+            "tick": tick,
+            "agents": [asdict(s) for s in
+                       snapshot_all(tick, sim.agents, sim.yes_mid, sim.no_mid)],
+        })
+        prev_yes_mid = float(sim.yes_mid)
 
     # 6. Settle (no-op for unresolved markets) + final summary.
     pnl = env.settle()

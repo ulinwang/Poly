@@ -46,5 +46,5 @@ build-backend = "setuptools.build_meta"
 # no import statements needed rewriting during the reorg.
 [tool.setuptools.packages.find]
 where = ["sim", "research", "."]
-include = ["agent*", "environment*", "experiments*", "viz*", "scripts*", "data*"]
+include = ["agent*", "environment*", "evaluation*", "experiments*", "viz*", "scripts*", "data*"]
 exclude = ["tests*", "docs*", "output*", "figures*", "tables*", "apps*", "legacy*"]
