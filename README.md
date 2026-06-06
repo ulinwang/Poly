@@ -1,287 +1,178 @@
-# PolyMetl
+# Poly
 
-[![Build Status](https://img.shields.io/badge/build-TBD-blue)](https://github.com/username/polymetl/actions)
-[![Tests](https://img.shields.io/badge/tests-TBD-blue)](https://github.com/username/polymetl/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## What is PolyMetl?
+*[中文文档 → README_CN.md](README_CN.md)*
 
-PolyMetl is an agent-based simulation platform for prediction markets (e.g., Polymarket). It simulates autonomous trading agents whose decisions are powered by large language models (LLMs), allowing researchers to study market dynamics, trader behavior emergence, and price formation under controlled, reproducible conditions.
+## What is Poly?
+
+Poly is a multi-agent simulation platform for prediction markets (e.g. Polymarket).
+Autonomous trading agents — each driven by a large language model — trade in a
+simulated central-limit order book, so researchers can study price formation,
+trader-behavior emergence, and market dynamics under controlled, reproducible
+conditions.
 
 Key features:
 
-* **LLM-Powered Agents** — Each trader is an autonomous agent with a configurable persona, memory, and reasoning pipeline grounded in real on-chain wallet history.
-* **Empirically Calibrated** — Agent priors and population mixes are derived from SQL queries against real Polymarket trade and holder data (no hand-tuned magic constants).
-* **Full CLOB Simulation** — Gym-style central-limit order book environment with CTF mechanics, fees, settlement, and multiple observation modes.
-* **Reproducible Experiments** — YAML-driven experiment configs produce fully traceable output trees with deterministic `exp_id` naming.
-* **Live Web Dashboard** — React 19 frontend with real-time SSE streaming of simulation ticks, market explorer, and experiment management UI.
-* **Modular Architecture** — Strict package boundaries (data / agent / environment / experiments) prevent look-ahead leakage and enforce clean dependencies.
-
-> **Screenshot placeholder** — *Add a dashboard screenshot here once the UI is finalized.*
+* **LLM-powered agents** — each trader has a configurable persona, memory, and
+  reasoning pipeline grounded in real on-chain wallet history.
+* **Multi-provider via litellm** — one interface over OpenAI, DeepSeek, Kimi
+  (Moonshot), xAI, Gemini, Mistral, Anthropic, and any OpenAI-compatible
+  endpoint; pick the provider/model in the Settings page.
+* **Empirically calibrated** — agent priors and population mixes derive from
+  queries against real Polymarket trade/holder data.
+* **Full CLOB simulation** — a Gym-style order-book environment with CTF
+  mechanics, fees, and settlement.
+* **Eval layer** — macro (market price) and micro (per-agent) metrics streamed
+  live to the web UI and summarized into post-hoc scorecards.
+* **Live web dashboard** — a React 19 SPA: browse markets → open a market → run
+  an experiment → watch it tick in real time (SSE).
 
 ## Architecture
 
+A monorepo with a clean split between the web app, the Python simulation core,
+and the offline research pipeline:
+
 ```text
-+------------------+       +------------------+       +------------------+
-|   experiments/   |       |   backend/       |       |  webapp/frontend |
-|   runner.py      |       |   Fastify + SSE  |       |  React 19 SPA    |
-|   parquet_sink   |       |   SQLite + TS    |       |  Vite + Tailwind |
-|   analysis/      |       |                  |       |  Zustand + Charts|
-+--------+---------+       +--------+---------+       +--------+---------+
-         |                          |                          |
-    reads features            serves API                 live tick UI
-    writes parquet            spawns Python              market explorer
-         |                     runner via CLI             experiment mgr
-+--------v---------+          +--------v---------+        +--------v---------+
-|     agent/       |          |  webapp/runner_  |        |   environment/   |
-|  factory.py      |          |   stream.py      |        |  PolyEnv (CLOB)  |
-|  features/*.py   |          |   (LLM sim core) |        |  orderbook.py    |
-|  personas/*.py   |          +------------------+        |  tools/*.py      |
-|  prompt/*.py     |                                      |  observers/*.py  |
-|  decision/*.py   |                                      |  ctf/fees/settle |
-|  memory/*.py     |                                      |  seeders/*.py    |
-+--------+---------+                                      +--------+---------+
-         |                                                         |
-         |              data.query.* only                          |  priors
-         +---------------------------+-----------------------------+
-                                     |
-                          +----------v----------+
-                          |       data/         |
-                          |  sources/{gamma_api,|
-                          |          clob_api,  |
-                          |          data_api}  |
-                          |  store/clickhouse   |
-                          |  query/*.py         |
-                          +----------+----------+
-                                     |
-                          +----------v----------+
-                          |    ClickHouse DB    |
-                          |  (canonical market  |
-                          |   + trade data)     |
-                          +---------------------+
+Poly/                         (outer folder)
+├── polymetl/                 ← git repo
+│   ├── apps/
+│   │   ├── web/              React 19 + Vite + Tailwind v4 frontend
+│   │   └── server/           TypeScript Fastify backend (API + serves the SPA)
+│   ├── sim/                  Python simulation core
+│   │   ├── agent/            personas, features, prompt, decision (LLM), memory
+│   │   ├── environment/      PolyEnv CLOB engine, order book, tools, seeders
+│   │   ├── runner/           runner_cli.py + runner_stream.py (spawned by server)
+│   │   └── evaluation/       metrics + eval schema (macro/micro)
+│   ├── research/             offline analysis (thesis pipeline)
+│   │   ├── experiments/      batch runner, analysis, plots
+│   │   ├── comparison/  viz/  scripts/
+│   ├── data/                 ETL + query layer (ClickHouse optional) — shared pkg
+│   ├── legacy/               deprecated old python webapp (kept for reference)
+│   ├── pyproject.toml        Python deps (uv); multi-root packages (sim, research, .)
+│   └── package.json          npm workspaces (apps/web, apps/server)
+└── thesis/                   paper artifacts (docx / ppt / refs) — outside the repo
 ```
 
-* **Frontend** — React 19 + Vite + Tailwind CSS + Recharts + Zustand
-* **Backend** — TypeScript Fastify with modular routers, SQLite persistence, and Server-Sent Events (SSE) for live simulation streaming
-* **Simulation Core** — Python LLM agents with configurable personas, empirically calibrated from real wallet behavior; spawned via CLI wrapper from the TS backend
-* **Data Layer** — ClickHouse (historical Polymarket data, optional) + SQLite (experiments, settings, results)
-* **Provider Support** — DeepSeek (default), Kimi (Moonshot), OpenAI, Anthropic, and any OpenAI-compatible custom endpoint
+Data flow at runtime:
+
+```text
+React SPA (:5173 dev, served at :8765)
+      │  REST /api/v1/*  +  SSE
+      ▼
+TS Fastify server (apps/server, :8765)
+      │  spawns  .venv/bin/python3 sim/runner/runner_cli.py  (JSON over stdin/stdout)
+      ▼
+Python sim core (sim/runner → environment + agent → litellm)
+      │  streams events: tick_started, agent_decision, tick_finished,
+      │  tick_metrics, agent_snapshots, settled …
+      ▼
+relayed back over SSE to the live observation page
+```
+
+* **Frontend** — React 19, Vite 8, Tailwind CSS v4, Recharts, Zustand.
+* **Backend** — TypeScript Fastify; better-sqlite3 for experiments/settings; SSE
+  for live streaming; serves the built SPA.
+* **Sim core** — Python; LLM calls routed through litellm; API keys passed in
+  from the server (encrypted at rest, never returned to the browser).
+* **Data** — ClickHouse (optional, historical Polymarket data) + SQLite
+  (experiments, settings).
 
 ## Quick Start
 
 ### Prerequisites
 
 * Node.js 20+
-* Python 3.12+ (with `uv` recommended)
-* ClickHouse (local or remote) for historical data ingestion
-* A DeepSeek or OpenAI API key for LLM-powered agent decisions
+* Python 3.11+ with [`uv`](https://github.com/astral-sh/uv)
+* An API key for at least one LLM provider (DeepSeek / OpenAI / Kimi / …)
 
-### Option 1: Docker (Recommended)
-
-```bash
-git clone https://github.com/username/polymetl.git
-cd polymetl
-docker-compose up
-```
-
-*Access the dashboard at `http://localhost:80`* (frontend nginx proxies `/api` to backend on `:8000`)
-
-### Option 2: Manual
+### Run it
 
 ```bash
-# 1. Clone & install Python dependencies
+# 1. Python deps (creates .venv, installs the multi-root packages editable)
 uv sync
-# or: pip install -e .
+uv pip install -e .
 
-# 2. Install Node.js dependencies
-cd backend && npm install
-cd ../webapp/frontend && npm install
+# 2. Node deps
+cd apps/server && npm install
+cd ../web && npm install
+cd ../..
 
-# 3. Configure environment
-cp .env.example .env
-# Edit .env — set your LLM API key and ClickHouse host (optional)
+# 3. Configure
+cp .env.example .env        # set your LLM key(s); ClickHouse host is optional
 
-# 4. Build the frontend
-cd webapp/frontend
-npm run build
+# 4a. Dev (hot reload): two terminals
+cd apps/server && npm run dev      # API + sim on http://localhost:8765
+cd apps/web    && npm run dev      # Vite dev server on http://localhost:5173 (proxies /api → 8765)
+# open http://localhost:5173
 
-# 5. Start the TypeScript backend (from project root)
-cd backend
-npm run dev          # dev mode with hot reload (port 8765)
-# or: npm run build && npm start   # production mode
-
-# 6. Open the dashboard
-open http://localhost:8765
+# 4b. Or production-style (server serves the built SPA)
+cd apps/web && npm run build
+cd ../server && npm run dev        # open http://localhost:8765
 ```
 
-*The TS backend serves the built frontend statically and proxies API requests. No separate frontend dev server is required in production.*
+You can also set the provider, model, and API key at runtime in the **Settings**
+page — no restart needed.
+
+> **Ports** — dev frontend **5173**, backend/API + production SPA **8765**.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the required values.
+Copy `.env.example` to `.env`. LLM keys can be set here or entered in the
+Settings page (where they are encrypted at rest).
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `POLYMETL_DEEPSEEK_API_KEY` | DeepSeek API key (default) | `sk-...` |
-| `POLYMETL_KIMI_API_KEY` | Kimi (Moonshot) API key | `sk-...` |
-| `POLYMETL_OPENAI_API_KEY` | OpenAI API key | `sk-...` |
-| `POLYMETL_DEEPSEEK_BASE_URL` | DeepSeek-compatible endpoint | `https://api.deepseek.com/v1` |
-| `POLYMETL_KIMI_BASE_URL` | Kimi-compatible endpoint | `https://api.moonshot.cn/v1` |
-| `POLYMETL_DEEPSEEK_MODEL` | Default model for agent decisions | `deepseek-v4-flash` |
-| `POLYMETL_KIMI_MODEL` | Default Kimi model | `moonshot-v1-8k` |
-| `POLYMETL_CLICKHOUSE_HOST` | ClickHouse host (optional) | `localhost` |
-| `POLYMETL_CLICKHOUSE_PORT` | ClickHouse native port | `9000` |
-| `POLYMETL_CLICKHOUSE_USER` | ClickHouse user | `default` |
-| `POLYMETL_CLICKHOUSE_PASSWORD` | ClickHouse password | *(empty)* |
-| `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database name | `polymetl` |
-| `POLYMETL_RPC_URL` | Polygon RPC for on-chain data | `https://1rpc.io/matic` |
+| Variable | Description |
+|----------|-------------|
+| `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek (default) |
+| `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
+| `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
+| `POLY_ROOT` | override repo root used when spawning the Python sim |
+| `POLYMETL_CLICKHOUSE_*` | ClickHouse connection (optional) |
 
-> **Provider selection at runtime** — The web dashboard's Settings page lets you switch between DeepSeek, Kimi, OpenAI, Anthropic, or any custom OpenAI-compatible endpoint without restarting the server.
-
-> **Security note** — Never commit `.env`. The `.env.example` file contains only safe defaults.
+> Never commit `.env`.
 
 ## Development
 
-### Project Structure
-
-```text
-polymetl/
-├── backend/             # TypeScript Fastify backend (NEW)
-│   ├── src/
-│   │   ├── server.ts    # Fastify app factory
-│   │   ├── routes/      # markets, experiments, settings, providers
-│   │   ├── services/    # Polymarket API fetcher, runner spawner
-│   │   ├── db/          # better-sqlite3 persistence
-│   │   └── types/       # Shared TypeScript interfaces
-│   ├── Dockerfile       # TS backend container image
-│   └── tests/           # Vitest unit + integration tests
-├── data/                # ETL pipelines, ClickHouse schemas, query layer
-│   ├── sources/         # API pullers (Gamma, CLOB, Data API)
-│   ├── store/           # ClickHouse + config connections
-│   ├── query/           # Canonical read-only queries
-│   └── exports/         # Data export utilities
-├── agent/               # Agent lifecycle: features, personas, prompt, LLM decision
-│   ├── features/        # Wallet + market feature engineering
-│   ├── personas/        # Persona generation (calibrated, archetype, random)
-│   ├── prompt/          # Prompt builder + token accounting
-│   ├── decision/        # LLM call loop, parsing, retry logic
-│   ├── memory/          # Episodic memory
-│   └── factory.py       # init_agents(slug)
-├── environment/         # CLOB simulation engine
-│   ├── env.py           # PolyEnv (Gym-style interface)
-│   ├── orderbook.py     # Limit-order book implementation
-│   ├── tools/           # Agent-facing actions (place, cancel, split, merge, redeem, observe)
-│   ├── observers/       # Observation modes (quote-only, tape, full book)
-│   └── seeders/         # Bootstrap orderbook from historical data
-├── experiments/         # Experiment runner, analysis, plotting
-│   ├── runner.py        # YAML-driven experiment orchestration
-│   ├── config.py        # Pydantic config validation
-│   ├── configs/         # YAML experiment definitions
-│   ├── analysis/        # Post-hoc metrics + SERD clustering
-│   └── plots/           # Matplotlib / Plotly figure generation
-├── webapp/              # Full-stack dashboard
-│   ├── runner_stream.py # Python simulation streaming entry point
-│   ├── runner_cli.py    # CLI wrapper (stdin JSON → stdout JSONL events)
-│   ├── backend/         # Legacy FastAPI server (deprecated, kept for reference)
-│   └── frontend/        # React 19 SPA
-│       ├── src/pages/   # Dashboard, Market Explorer, Experiment Builder
-│       ├── src/components/
-│       └── src/stores/  # Zustand state management
-├── tests/               # Python unit + integration tests
-├── output/              # Per-experiment artifact trees (gitignored, see ../thesis-assets/)
-└── docs/                # Thesis manuscripts (gitignored, see ../thesis-assets/)
-```
-
-### Running Tests
+### Tests
 
 ```bash
-# TypeScript backend tests (vitest)
-cd backend
-npm test
+# Backend (vitest)
+cd apps/server && npm test && npm run lint
 
-# Python tests (~240 tests)
-python -m unittest discover -s tests -t .
-# Or with uv
-uv run python -m unittest discover -s tests -t .
+# Frontend (build + lint; vitest for hooks/stores)
+cd apps/web && npm run build && npm run lint && npx vitest run
 ```
 
-### Adding New Agent Personas
+> The Python `sim/` packages keep their historical top-level import names
+> (`import agent`, `environment`, `experiments`, `data`, `evaluation`, …) via a
+> multi-root `pyproject` config — after moving Python files, re-run
+> `uv pip install -e .` to refresh the editable install.
 
-1. Create a new persona generator under `agent/personas/` (e.g., `my_persona.py`).
-2. Implement the persona-building logic (see `calibrated.py` or `archetype.py` for reference).
-3. Register it in `agent/personas/library.py`.
-4. Add a corresponding YAML config under `experiments/configs/` referencing the new persona set.
-5. Run the experiment: `python -m experiments run experiments/configs/my_exp.yaml`
-
-## Deployment
-
-### Docker
-
-`docker-compose.yml` orchestrates two services:
-
-* `frontend` — Nginx serving the built React SPA (`webapp/frontend/dist`)
-* `backend` — TypeScript Fastify server (`backend/Dockerfile`)
-
-Build and run:
-
-```bash
-# 1. Build frontend first (needed by backend static file serving)
-cd webapp/frontend && npm install && npm run build
-
-# 2. Start everything
-cd ../..
-docker-compose up
-```
-
-The backend container:
-- Serves API on port `8000`
-- Serves built frontend SPA with fallback to `index.html`
-- Persists SQLite data via volume mount `./backend/data:/app/backend/data`
-
-### Environment-Specific Configs
-
-* `.env` — local development overrides
-* Production secrets should be injected via Docker secrets, K8s config maps, or your cloud provider's secret manager (never committed to the repo).
-
-## API Documentation
-
-The backend exposes a REST API under `/api/v1`.
+### REST API (`/api/v1`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/settings/api` | `GET` / `PUT` | Read / update LLM provider settings |
-| `/api/v1/settings/general` | `GET` / `PUT` | Read / update general app settings |
-| `/api/v1/markets` | `GET` | List live Polymarket markets |
-| `/api/v1/markets/{slug}` | `GET` | Get market details by slug |
-| `/api/v1/markets/categories` | `GET` | List market categories |
-| `/api/v1/experiments` | `GET` | List all experiments |
-| `/api/v1/experiments` | `POST` | Create and start a new experiment |
-| `/api/v1/experiments/{id}` | `GET` | Get experiment details |
-| `/api/v1/experiments/{id}/cancel` | `POST` | Cancel a running experiment |
-| `/api/v1/experiments/{id}/stream` | `GET` | SSE stream of live simulation ticks |
-| `/api/v1/experiments/search` | `GET` | Search experiments by query string |
-
-Interactive docs (Swagger UI) are available at `/docs` when the backend is running.
-
-## Contributing
-
-Contributions are welcome! Please open an issue first to discuss significant changes.
-
-1. **Fork** the repository and create a feature branch (`git checkout -b feat/my-feature`).
-2. **Code style** — Follow PEP 8 for Python and the existing Prettier/ESLint config for TypeScript/React. Keep changes minimal and focused.
-3. **Tests** — Add or update tests for any new functionality. Ensure the existing test suite passes.
-4. **Documentation** — Update `docs/` and this README if your change affects architecture, setup, or public APIs.
-5. **Pull Request** — Open a PR with a clear description, referencing any related issues. PRs require at least one review before merge.
+| `/markets` | GET | List live markets (supports `q`, `category`, `limit`, `offset`) |
+| `/markets/:slug` | GET | Market detail (fetched by slug; includes `event_slug`) |
+| `/experiments` | GET / POST | List / create-and-start experiments |
+| `/experiments/:id` | GET | Experiment detail |
+| `/experiments/:id/cancel` | POST | Cancel a run |
+| `/experiments/:id/events` | GET | SSE stream of live simulation events |
+| `/settings/api` | GET / PUT | LLM settings (key never returned; `api_key_set` flag) |
+| `/settings/test` | POST | Test the LLM connection |
+| `/providers` | GET | litellm provider/model catalog |
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE).
 
 ## Acknowledgments
 
-* **Polymarket** — For providing the public API and on-chain data that powers the empirical calibration layer.
-* **Academic context** — This software was originally developed as part of a graduation thesis on decentralized finance trader behavior. The thesis manuscript, figures, and defense materials are maintained in a separate repository and are not part of this open-source codebase.
+* **Polymarket** — for the public API and on-chain data behind the calibration layer.
+* Originally developed for a graduation thesis on decentralized-finance trader
+  behavior; the manuscript and figures live outside this codebase (`../thesis/`).
 
 ---
 
-*PolyMetl is an independent research project and is not affiliated with or endorsed by Polymarket.*
+*Poly is an independent research project, not affiliated with or endorsed by Polymarket.*
