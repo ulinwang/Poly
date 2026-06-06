@@ -4,7 +4,8 @@ from __future__ import annotations
 import unittest
 
 from agent.decision.tool_schemas import (
-    INFO_TOOL_NAME, NAME_TO_ORDER_TYPE, TOOL_SCHEMAS, select_tools,
+    INFO_TOOL_NAME, FORUM_TOOL_NAMES, NAME_TO_ORDER_TYPE, TOOL_SCHEMAS,
+    select_tools,
 )
 
 
@@ -33,17 +34,18 @@ class SelectToolsTest(unittest.TestCase):
 
 
 class ToolSchemaShapeTest(unittest.TestCase):
-    def test_has_seven_tools(self):
-        # v13 (AGT-4) added `update_belief` (→6); the web-search
-        # `get_information` read tool added it to 7.
-        self.assertEqual(len(TOOL_SCHEMAS), 7)
+    def test_tool_count(self):
+        # 5 order tools + update_belief (6) + get_information (7) + 4 forum
+        # tools (read/post/comment/follow) = 11.
+        self.assertEqual(len(TOOL_SCHEMAS), 11)
 
     def test_names_match_dispatcher(self):
-        # `get_information` is a READ tool, not an order, so it is
-        # intentionally absent from NAME_TO_ORDER_TYPE.
+        # `get_information` and the forum tools are READ/social tools, not
+        # orders, so they are intentionally absent from NAME_TO_ORDER_TYPE.
         names = {t["function"]["name"] for t in TOOL_SCHEMAS}
-        self.assertEqual(names - {INFO_TOOL_NAME}, set(NAME_TO_ORDER_TYPE))
-        self.assertNotIn(INFO_TOOL_NAME, NAME_TO_ORDER_TYPE)
+        non_order = {INFO_TOOL_NAME} | set(FORUM_TOOL_NAMES)
+        self.assertEqual(names - non_order, set(NAME_TO_ORDER_TYPE))
+        self.assertTrue(non_order.isdisjoint(NAME_TO_ORDER_TYPE))
 
     def test_order_types_are_engine_compatible(self):
         # Every order_type the parser maps to must be one the engine accepts.
