@@ -14,13 +14,21 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   // Markets
-  listMarkets: (params?: { q?: string; live_only?: boolean; limit?: number; category?: string }) => {
+  listMarkets: (params?: {
+    q?: string; live_only?: boolean; limit?: number; category?: string; offset?: number;
+  }) => {
     const url = new URL('/api/v1/markets', window.location.origin);
     if (params?.q) url.searchParams.set('q', params.q);
     if (params?.live_only) url.searchParams.set('live_only', '1');
     if (params?.limit) url.searchParams.set('limit', String(params.limit));
     if (params?.category) url.searchParams.set('category', params.category);
-    return fetchJson<{ markets: import('../types').Market[] }>(url.pathname + url.search);
+    if (params?.offset) url.searchParams.set('offset', String(params.offset));
+    return fetchJson<{
+      markets: import('../types').Market[];
+      offset?: number;
+      limit?: number;
+      hasMore?: boolean;
+    }>(url.pathname + url.search);
   },
 
   getMarket: (slug: string) =>
