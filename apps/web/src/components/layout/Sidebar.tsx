@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import {
-  LayoutGrid, FlaskConical, Settings,
+  LayoutGrid, FlaskConical, Bot, BarChart3, Settings,
   PanelLeftClose, PanelLeftOpen, Moon, Sun, Languages,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -18,6 +18,8 @@ interface NavEntry {
 const NAV: NavEntry[] = [
   { labelKey: 'nav.browse', href: '#/markets', icon: LayoutGrid, match: '/markets' },
   { labelKey: 'nav.experiments', href: '#/experiments', icon: FlaskConical, match: '/experiments' },
+  { labelKey: 'nav.agent', href: '#/agent', icon: Bot, match: '/agent' },
+  { labelKey: 'nav.analysis', href: '#/analysis', icon: BarChart3, match: '/analysis' },
   { labelKey: 'nav.settings', href: '#/settings/api', icon: Settings, match: '/settings' },
 ];
 

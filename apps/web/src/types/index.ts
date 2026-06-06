@@ -178,3 +178,79 @@ export interface SimulationMetrics {
   totalTicks: number;
   lastTickElapsed: number;
 }
+
+// ── Agent introspection (Agent tab) ──────────────────────────────────
+export interface AgentToolParamProperty {
+  type?: string;
+  description?: string;
+  enum?: string[];
+  minimum?: number;
+  maximum?: number;
+  maxLength?: number;
+}
+
+export interface AgentTool {
+  name: string;
+  description: string;
+  parameters: {
+    type?: string;
+    properties?: Record<string, AgentToolParamProperty>;
+    required?: string[];
+  };
+}
+
+export interface AgentPromptTemplate {
+  title: string;
+  description: string;
+  source: string;
+  template: string;
+}
+
+export interface AgentInfo {
+  tools: AgentTool[];
+  prompt_templates: Record<string, AgentPromptTemplate>;
+  /** Present only when the introspection spawn failed. */
+  message?: string;
+}
+
+// ── On-chain market analysis (Data analysis tab) ─────────────────────
+export interface AnalysisVolumePoint {
+  date: string;
+  volume: number;
+  trades: number;
+}
+
+export interface AnalysisTopWallet {
+  wallet: string;
+  notional: number;
+  share: number;
+}
+
+export interface MarketAnalysis {
+  available: boolean;
+  message?: string;
+  slug?: string;
+  condition_id?: string;
+  question?: string;
+  outcomes?: string[];
+  winning_idx?: number;
+  metrics?: {
+    n_trades: number;
+    total_notional: number;
+    unique_wallets: number;
+    first_trade_ts: number | null;
+    last_trade_ts: number | null;
+  };
+  volume_series?: AnalysisVolumePoint[];
+  top_wallets?: AnalysisTopWallet[];
+  concentration?: {
+    top1_share: number;
+    top5_share: number;
+    top10_share: number;
+  };
+  holders?: {
+    n_holders: number;
+    yes_holders: number;
+    no_holders: number;
+  } | null;
+}
