@@ -49,6 +49,16 @@ class AgentSnapshot:
     # {"yes_prob": float, "confidence": float, "set_at_tick": int,
     #  "rationale": str}. None until the agent first calls update_belief.
     belief_snapshot: dict | None = None
+    # v15 (FORUM): the agent's structured social memory, surfaced so the
+    # prompt builder can render a bounded "social memory" section.
+    #   social_my_posts:   [{tick, post_id, content}]
+    #   social_read_posts: [{tick, post_id, author_id, content, followed}]
+    #   social_following:  [agent_id, ...]
+    # All capped by the observer; followed authors are prioritised in
+    # social_read_posts (see environment.env._fold_social_memory).
+    social_my_posts: list[dict] | None = None
+    social_read_posts: list[dict] | None = None
+    social_following: list[int] | None = None
 
 
 @dataclass
@@ -67,3 +77,11 @@ class Decision:
     # be persisted onto the agent before applying the trade.
     # Shape: {"yes_prob": float, "confidence": float, "rationale": str}.
     belief_update: dict | None = None
+    # v15 (FORUM): what the agent did on the social forum during this
+    # tick's bounded loop, so the env can fold it into the agent's
+    # structured social memory. Shape:
+    #   {"posts":   [{"tick", "post_id", "content"}],
+    #    "reads":   [{"tick", "post_id", "author_id", "content", "followed"}],
+    #    "follows": [target_agent_id, ...]}
+    # None when the forum was inactive this tick.
+    forum_activity: dict | None = None

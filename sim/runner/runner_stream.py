@@ -387,6 +387,19 @@ def _run_tick_loop(
                     "results": [r.to_dict() for r in results],
                 })
 
+            # Emit a forum_* event the moment a social action is applied to
+            # sim.forum, so the social-diffusion layer can be observed /
+            # audited / replayed. The forum *mechanism* is deterministic;
+            # the post/comment text is LLM-generated, so logging it here is
+            # what preserves auditability of the social content.
+            def _on_forum_action(kind, payload, _aid=aid, _tick=tick):
+                if kind == "post":
+                    on_event("forum_post", payload)
+                elif kind == "comment":
+                    on_event("forum_comment", payload)
+                elif kind == "follow":
+                    on_event("forum_follow", payload)
+
             try:
                 decision = decide(
                     persona=agent.persona,
@@ -403,6 +416,11 @@ def _run_tick_loop(
                     max_attempts=3,
                     info_enabled=True,
                     on_info_query=_on_info_query,
+                    forum=sim.forum,
+                    agent_id=aid,
+                    tick=tick,
+                    forum_enabled=True,
+                    on_forum_action=_on_forum_action,
                 )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {

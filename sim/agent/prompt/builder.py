@@ -168,6 +168,34 @@ def build_user_prompt(
     else:
         ticks_ago = 0
 
+    # v15 (FORUM): build a bounded, priority-ordered "social memory" block.
+    # Priority: posts by followed authors (the diffusion channel) are shown
+    # first, then the agent's own recent posts, then who it follows. Content
+    # is clipped per-line and the lists are already capped by the observer
+    # (depth-limited) to keep the prompt from exploding.
+    def _clip(text: str, n: int = 160) -> str:
+        text = (text or "").strip().replace("\n", " ")
+        return text if len(text) <= n else text[: n - 1] + "…"
+
+    read_posts = getattr(agent, "social_read_posts", None) or []
+    # followed-author posts first, then the rest (stable, preserves the
+    # newest-first order the observer already applied within each band).
+    followed_reads = [r for r in read_posts if r.get("followed")]
+    other_reads = [r for r in read_posts if not r.get("followed")]
+    social_read_lines = [
+        ("[followed] " if r.get("followed") else "")
+        + f"post #{r.get('post_id')} by agent {r.get('author_id')} "
+        f"(tick {r.get('tick')}): {_clip(r.get('content', ''))}"
+        for r in (followed_reads + other_reads)
+    ]
+    my_posts = getattr(agent, "social_my_posts", None) or []
+    social_my_post_lines = [
+        f"post #{p.get('post_id')} (tick {p.get('tick')}): "
+        f"{_clip(p.get('content', ''))}"
+        for p in my_posts
+    ]
+    social_following = getattr(agent, "social_following", None) or []
+
     template_name = "user_state_zh.j2" if prompt_language == "zh" else "user_state.j2"
     tmpl = _env().get_template(template_name)
     return tmpl.render(
@@ -193,4 +221,7 @@ def build_user_prompt(
         recent_decisions=getattr(agent, "recent_decisions", None) or [],
         belief_snapshot=belief,
         ticks_ago=ticks_ago,
+        social_read_lines=social_read_lines,
+        social_my_post_lines=social_my_post_lines,
+        social_following=social_following,
     )

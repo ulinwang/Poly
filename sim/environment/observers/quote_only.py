@@ -12,6 +12,11 @@ from agent.decision.types import AgentSnapshot, MarketSnapshot
 DEPTH_LEVELS = 5
 MEMORY_DEPTH = 5
 FILL_TAPE_DEPTH = 5
+# v15 (FORUM): how many social-memory entries to surface to the prompt.
+# Smaller than the stored caps so the prompt stays compact (depth-limited).
+SOCIAL_MY_POSTS_DEPTH = 3
+SOCIAL_READ_POSTS_DEPTH = 5
+SOCIAL_FOLLOWING_DEPTH = 8
 
 
 def _remaining(order) -> float:
@@ -145,6 +150,18 @@ def observe(sim, agent_id: int) -> tuple[MarketSnapshot, AgentSnapshot]:
     belief_snapshot = getattr(agent, "belief", None)
     belief_copy = dict(belief_snapshot) if belief_snapshot else None
 
+    # v15 (FORUM): surface a depth-limited slice of the structured social
+    # memory. read_posts is already follow-prioritised + newest-first by
+    # env._fold_social_memory; we just take the head N here.
+    sm = getattr(agent, "social_memory", None) or {}
+    social_my_posts = list(sm.get("my_posts", []) or [])[:SOCIAL_MY_POSTS_DEPTH]
+    social_read_posts = list(
+        sm.get("read_posts", []) or []
+    )[:SOCIAL_READ_POSTS_DEPTH]
+    social_following = list(
+        sm.get("following", []) or []
+    )[:SOCIAL_FOLLOWING_DEPTH]
+
     state = AgentSnapshot(
         agent_id=agent.agent_id, cash=agent.cash,
         yes_shares=agent.yes_shares, no_shares=agent.no_shares,
@@ -155,5 +172,8 @@ def observe(sim, agent_id: int) -> tuple[MarketSnapshot, AgentSnapshot]:
         resting_orders=_own_resting_orders(sim, agent_id),
         recent_own_fills=_recent_own_fills(sim, agent_id),
         belief_snapshot=belief_copy,
+        social_my_posts=social_my_posts,
+        social_read_posts=social_read_posts,
+        social_following=social_following,
     )
     return market, state
