@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
-  Globe, Droplets, Vote, Search, Tag,
+  Globe, Droplets, Vote, Search, Tag, RefreshCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
@@ -41,6 +41,7 @@ function deriveCategories(markets: Market[]): string[] {
 
 export default function MarketBrowser() {
   const [loading, setLoading] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
   const markets = useMarketStore((s) => s.markets);
   const setMarkets = useMarketStore((s) => s.setMarkets);
   const category = useMarketStore((s) => s.category);
@@ -56,9 +57,9 @@ export default function MarketBrowser() {
         if (!cancelled) setMarkets(res.markets);
       })
       .catch((err) => console.error('Failed to load markets:', err))
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [searchQuery, setMarkets]);
+  }, [searchQuery, setMarkets, refreshTick]);
 
   const categories = useMemo(() => deriveCategories(markets), [markets]);
 
@@ -109,7 +110,17 @@ export default function MarketBrowser() {
       {/* Section title */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-surface-900 dark:text-white">{category}</h2>
-        <span className="text-sm text-surface-400">{filtered.length} markets</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-surface-400">{filtered.length} markets</span>
+          <button
+            onClick={() => setRefreshTick((n) => n + 1)}
+            disabled={loading}
+            title="刷新市场数据"
+            className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Market grid */}
