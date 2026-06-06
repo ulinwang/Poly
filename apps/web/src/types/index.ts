@@ -224,6 +224,41 @@ export interface SimulationMetrics {
   lastTickElapsed: number;
 }
 
+// ── Forum / social (Forum & Social tabs) ─────────────────────────────
+/**
+ * A forum post authored by an agent during the run. Mirrors the backend
+ * `forum_post` event: { tick, author_id, post_id, content }.
+ */
+export interface ForumPost {
+  tick: number;
+  author_id: number;
+  post_id: number;
+  content: string;
+}
+
+/**
+ * A comment on a forum post. Mirrors the backend `forum_comment` event:
+ * { tick, author_id, post_id, comment_id, content }.
+ */
+export interface ForumComment {
+  tick: number;
+  author_id: number;
+  post_id: number;
+  comment_id: number;
+  content: string;
+}
+
+/**
+ * A directed follow edge between two agents. Mirrors the backend
+ * `forum_follow` event: { tick, agent_id, target_id } where agent_id follows
+ * target_id.
+ */
+export interface FollowEdge {
+  tick: number;
+  agent_id: number;
+  target_id: number;
+}
+
 // ── Agent introspection (Agent tab) ──────────────────────────────────
 export interface AgentToolParamProperty {
   type?: string;
