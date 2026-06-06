@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { spawnRun, createRunHandle } from './runner';
+import { config } from '../config';
 
 const mockSpawn = vi.fn();
 
@@ -46,8 +47,8 @@ describe('spawnRun', () => {
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
     spawnRun(handle, vi.fn());
 
-    expect(mockSpawn).toHaveBeenCalledWith('.venv/bin/python3', ['webapp/runner_cli.py'], {
-      cwd: '/Users/moonshot/Projects/Poly/polymetl',
+    expect(mockSpawn).toHaveBeenCalledWith(config.PYTHON_BIN, ['webapp/runner_cli.py'], {
+      cwd: config.REPO_ROOT,
     });
   });
 

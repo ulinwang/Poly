@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { config } from '../config';
 // import type { ExperimentRow } from '../types'; // available when needed
 
 export interface RunHandle {
@@ -63,11 +64,11 @@ export function spawnRun(
   onEvent: (kind: string, data: Record<string, unknown>) => void,
   apiSettings?: { api_key?: string; base_url?: string; model?: string },
 ): void {
-  const child = spawn('.venv/bin/python3', ['webapp/runner_cli.py'], {
-    cwd: '/Users/moonshot/Projects/Poly/polymetl',
+  const child = spawn(config.PYTHON_BIN, ['webapp/runner_cli.py'], {
+    cwd: config.REPO_ROOT,
   });
 
-  const config: Record<string, unknown> = {
+  const payload: Record<string, unknown> = {
     slug: handle.slug,
     n_agents: handle.nAgents,
     n_ticks: handle.nTicks,
@@ -76,11 +77,11 @@ export function spawnRun(
     temperature: 0.0,
     data_dir: 'data',
   };
-  if (apiSettings?.api_key) config.api_key = apiSettings.api_key;
-  if (apiSettings?.base_url) config.base_url = apiSettings.base_url;
-  if (apiSettings?.model) config.model = apiSettings.model;
+  if (apiSettings?.api_key) payload.api_key = apiSettings.api_key;
+  if (apiSettings?.base_url) payload.base_url = apiSettings.base_url;
+  if (apiSettings?.model) payload.model = apiSettings.model;
 
-  child.stdin.write(JSON.stringify(config));
+  child.stdin.write(JSON.stringify(payload));
   child.stdin.end();
 
   let buffer = '';
