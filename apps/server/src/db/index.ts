@@ -25,6 +25,16 @@ CREATE TABLE IF NOT EXISTS api_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    base_url TEXT,
+    model TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS experiments (
     id TEXT PRIMARY KEY,
     slug TEXT NOT NULL,
@@ -60,6 +70,9 @@ const expectedCols = [
   ['checkpoint_path', 'TEXT'],
   // RNG seed used for the run (reproducibility). NULL for legacy rows.
   ['seed', 'INTEGER'],
+  // Named API key (api_keys.id) chosen for this run; NULL means the default
+  // api_settings was used. Recorded so resume reuses the same key.
+  ['api_key_id', 'INTEGER'],
 ];
 const existingCols = db
   .prepare("PRAGMA table_info(experiments)")

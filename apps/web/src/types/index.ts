@@ -38,6 +38,11 @@ export interface ExperimentConfig {
   n_ticks: number;
   persona_set: 'archetype' | 'calibrated' | 'no_signal';
   api_settings_id?: number;
+  /**
+   * Named API key (ApiKey.id) to use for this run. Omit to use the default
+   * API settings configured under Settings.
+   */
+  api_key_id?: number;
   /** RNG seed handed to the sim core for reproducible runs. Defaults to 0. */
   seed?: number;
   /** LLM sampling temperature. Defaults to 0. */
@@ -73,6 +78,21 @@ export interface ApiSettings {
   base_url?: string;
   temperature: number;
   max_tokens: number;
+}
+
+/**
+ * Safe view of a stored named API key. The server never returns the plaintext
+ * key, only a masked preview.
+ */
+export interface ApiKey {
+  id: number;
+  name: string;
+  provider: string;
+  base_url?: string;
+  model?: string;
+  created_at: string;
+  /** Masked preview, e.g. "sk-…a1b2". */
+  key_masked: string;
 }
 
 export interface ProviderInfo {

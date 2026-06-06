@@ -17,6 +17,7 @@ import {
 } from '../services/runner';
 import type { ExperimentConfig, ExperimentRow } from '../types';
 import { getApiSettingsDecrypted } from '../db/settings';
+import { getApiKeyDecrypted } from '../db/apikeys';
 import fs from 'fs';
 import readline from 'readline';
 
@@ -163,9 +164,18 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     };
   }
 
-  function currentApiSettings() {
-    // Decrypt the stored key only here, kept in memory and handed to the
-    // Python subprocess; never persisted or returned to the client.
+  // Decrypt the key only here, kept in memory and handed to the Python
+  // subprocess; never persisted or returned to the client. When `apiKeyId` is
+  // given, use that named key (its provider's key/base_url/model); otherwise
+  // fall back to the single default api_settings.
+  function currentApiSettings(apiKeyId?: number | null) {
+    if (apiKeyId != null) {
+      const k = getApiKeyDecrypted(apiKeyId);
+      if (k && k.api_key) {
+        return { api_key: k.api_key, base_url: k.base_url, model: k.model };
+      }
+      // Selected key vanished (e.g. deleted) — fall through to default.
+    }
     const settings = getApiSettingsDecrypted();
     return settings
       ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
@@ -179,6 +189,9 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     const temperature = Number.isFinite(body.temperature as number)
       ? Number(body.temperature)
       : 0;
+    const apiKeyId = Number.isFinite(body.api_key_id as number)
+      ? Number(body.api_key_id)
+      : null;
     const handle = createRunHandle(
       runId,
       body.slug,
@@ -201,10 +214,11 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       finished_at: null,
       result_summary: null,
       seed,
+      api_key_id: apiKeyId,
     });
 
     spawnRun(handle, makeOnEvent(runId, handle), {
-      apiSettings: currentApiSettings(),
+      apiSettings: currentApiSettings(apiKeyId),
       checkpointOut: checkpointPathFor(runId),
     });
 
@@ -287,7 +301,8 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     });
 
     spawnRun(handle, makeOnEvent(expId, handle), {
-      apiSettings: currentApiSettings(),
+      // Reuse the same named key the run was started with (if any).
+      apiSettings: currentApiSettings(row.api_key_id),
       resumeCheckpoint: row.checkpoint_path,
       checkpointOut: checkpointPathFor(expId),
     });
