@@ -48,6 +48,36 @@ export interface MarketDetail extends Market {
   event_slug?: string | null;
 }
 
+// One selectable outcome inside an event summary. For a multi-result event this
+// is a single sub-market: `label` is its groupItemTitle (or question), `price`
+// is its YES probability (0..1, or null when no quote), and `slug` is that
+// sub-market's slug (used to deep-link into the detail page).
+export interface EventOutcomeSummary {
+  label: string;
+  price: number | null;
+  slug: string;
+}
+
+// Server-grouped view of a Polymarket event for the browse page. Replaces the
+// old client-side groupByEvent so pagination works across pages. A single
+// binary market event has is_single=true and renders as an ordinary Yes/No
+// card; everything else renders as a multi-outcome event card.
+export interface EventSummary {
+  event_slug: string;
+  title: string;
+  icon_url?: string;
+  description?: string;
+  volume: number;
+  categories: string[];
+  n_outcomes: number;
+  // Slug to route to when the card is clicked (first / highest-volume
+  // sub-market). The detail page surfaces the sibling outcomes from there.
+  primary_slug: string;
+  // True only when the event holds exactly one binary (Yes/No) sub-market.
+  is_single: boolean;
+  outcomes: EventOutcomeSummary[];
+}
+
 export interface ExperimentConfig {
   slug: string;
   n_agents: number;

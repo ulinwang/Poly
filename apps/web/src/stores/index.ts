@@ -1,12 +1,16 @@
 import { create } from 'zustand';
 import type {
-  Market, Experiment, ApiSettings, SimulationEvent,
+  Market, EventSummary, Experiment, ApiSettings, SimulationEvent,
   AgentDecision, TickLogEntry, SimulationMetrics,
   TickMetrics, AgentSnapshot,
 } from '../types';
 
 interface MarketState {
   markets: Market[];
+  // Server-grouped events feed for the browse page (replaces the flat markets
+  // list there). Kept on the same store so the shared searchQuery/category
+  // (also driven by the top-nav search) feed both.
+  events: EventSummary[];
   selectedSlug: string | null;
   category: string;
   searchQuery: string;
@@ -14,6 +18,8 @@ interface MarketState {
   error: string | null;
   setMarkets: (markets: Market[]) => void;
   appendMarkets: (markets: Market[]) => void;
+  setEvents: (events: EventSummary[]) => void;
+  appendEvents: (events: EventSummary[]) => void;
   selectMarket: (slug: string | null) => void;
   setCategory: (category: string) => void;
   setSearchQuery: (q: string) => void;
@@ -23,6 +29,7 @@ interface MarketState {
 
 export const useMarketStore = create<MarketState>((set) => ({
   markets: [],
+  events: [],
   selectedSlug: null,
   category: 'All',
   searchQuery: '',
@@ -35,6 +42,14 @@ export const useMarketStore = create<MarketState>((set) => ({
     const seen = new Set(s.markets.map((m) => m.slug));
     const fresh = markets.filter((m) => !seen.has(m.slug));
     return { markets: [...s.markets, ...fresh] };
+  }),
+  setEvents: (events) => set({ events }),
+  appendEvents: (events) => set((s) => {
+    // De-dup by event_slug so overlapping/repeated Gamma event pages don't
+    // create duplicate cards (and duplicate React keys).
+    const seen = new Set(s.events.map((e) => e.event_slug));
+    const fresh = events.filter((e) => !seen.has(e.event_slug));
+    return { events: [...s.events, ...fresh] };
   }),
   selectMarket: (slug) => set({ selectedSlug: slug }),
   setCategory: (category) => set({ category }),

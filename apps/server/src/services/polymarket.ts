@@ -1,4 +1,4 @@
-import type { Market, MarketDetail, OutcomeEntry } from '../types';
+import type { Market, MarketDetail, OutcomeEntry, EventSummary } from '../types';
 
 interface GammaTag {
   label?: string;
@@ -49,6 +49,8 @@ const CACHE_TTL_MS = 30_000;
 const cache = new Map<string, Cached>();
 // Separate cache for event-by-slug lookups (different payload shape).
 const eventCache = new Map<string, CachedEvent>();
+// Cache for the paged events feed, keyed by (offset,limit).
+const eventListCache = new Map<string, CachedEvent>();
 
 async function fetchGammaMarkets(offset = 0, limit = 100): Promise<GammaMarket[]> {
   const now = Date.now();
@@ -92,9 +94,15 @@ async function fetchGammaMarketBySlug(slug: string): Promise<GammaMarket | null>
   }
 }
 
-interface GammaEvent {
+export interface GammaEvent {
   slug?: string;
   title?: string;
+  image?: string;
+  icon?: string;
+  description?: string;
+  volume?: number;
+  volumeNum?: number;
+  tags?: GammaTag[];
   markets?: GammaMarket[];
 }
 
@@ -119,18 +127,46 @@ async function fetchGammaEventBySlug(slug: string): Promise<GammaEvent | null> {
   }
 }
 
+// Fetch a page of the Gamma events feed (each event carries its grouped
+// sub-markets). Cached per (offset,limit) for 30s, mirroring fetchGammaMarkets.
+async function fetchGammaEvents(offset = 0, limit = 30): Promise<GammaEvent[]> {
+  const now = Date.now();
+  const key = `${offset}:${limit}`;
+  const hit = eventListCache.get(key);
+  if (hit && now - hit.ts < CACHE_TTL_MS) return hit.data;
+  try {
+    const url =
+      `https://gamma-api.polymarket.com/events?limit=${limit}&offset=${offset}` +
+      '&closed=false&order=volume24hr&ascending=false';
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = (await resp.json()) as GammaEvent[];
+    eventListCache.set(key, { data: json, ts: now });
+    return json;
+  } catch (err) {
+    if (hit) return hit.data;
+    throw err;
+  }
+}
+
 // Internal/operational Gamma tags that should never surface as a user-facing
 // category (catch-all buckets, editorial flags, etc.).
 const TAG_DENYLIST = new Set([
   'all', 'hide from new', 'recurring', 'new', 'breaking news', 'trending',
 ]);
 
+// Pull human-readable category labels from a tag list, dropping
+// internal/operational tags.
+function extractTagLabels(tags: GammaTag[] | undefined): string[] {
+  return (tags ?? [])
+    .map((t) => (t.label || '').trim())
+    .filter((label) => label && !TAG_DENYLIST.has(label.toLowerCase()));
+}
+
 // Pull human-readable category labels from the market's tags, dropping
 // internal/operational tags.
 function extractCategories(m: GammaMarket): string[] {
-  return (m.tags ?? [])
-    .map((t) => (t.label || '').trim())
-    .filter((label) => label && !TAG_DENYLIST.has(label.toLowerCase()));
+  return extractTagLabels(m.tags);
 }
 
 // Derive the YES probability (0..1) from Gamma's live pricing fields. Prefers
@@ -295,6 +331,72 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     event_title: m.events?.[0]?.title || null,
     group_title: m.groupItemTitle || null,
   };
+}
+
+// Map a raw Gamma event into the browse-page EventSummary. Each sub-market
+// becomes one outcome row (label = groupItemTitle || question; price = that
+// sub-market's YES probability; slug = the sub-market slug). Reuses the shared
+// price/outcome parsers so behaviour matches the flat market feed.
+export function eventToSummary(ev: GammaEvent): EventSummary {
+  const subMarkets = ev.markets ?? [];
+  const outcomes = subMarkets.map((m) => ({
+    label: m.groupItemTitle || m.question || m.slug || '',
+    price: deriveYesPrice(m),
+    slug: m.slug || '',
+  }));
+
+  // Pick the highest-volume sub-market as the click target (falls back to the
+  // first). The detail page then surfaces the rest as siblings.
+  let primary = subMarkets[0];
+  let primaryVol = (primary?.volumeNum ?? primary?.volume ?? 0) || 0;
+  for (const m of subMarkets) {
+    const v = (m.volumeNum ?? m.volume ?? 0) || 0;
+    if (v > primaryVol) {
+      primary = m;
+      primaryVol = v;
+    }
+  }
+
+  // Event volume: prefer the event-level figure, else sum the sub-markets.
+  const eventVol = ev.volumeNum ?? ev.volume;
+  const volume = typeof eventVol === 'number' && Number.isFinite(eventVol)
+    ? eventVol
+    : subMarkets.reduce((sum, m) => sum + ((m.volumeNum ?? m.volume ?? 0) || 0), 0);
+
+  // A "single" event is one binary (Yes/No) sub-market — render it as a plain
+  // Yes/No card rather than a multi-outcome event card.
+  const isSingle =
+    subMarkets.length === 1 && isBinaryMarket(deriveOutcomes(subMarkets[0]));
+
+  return {
+    event_slug: ev.slug || '',
+    title: ev.title || ev.slug || '',
+    icon_url: ev.image || ev.icon || undefined,
+    description: ev.description || undefined,
+    volume,
+    categories: extractTagLabels(ev.tags),
+    n_outcomes: subMarkets.length,
+    primary_slug: primary?.slug || '',
+    is_single: isSingle,
+    outcomes,
+  };
+}
+
+// List Polymarket events (server-grouped) for the browse page. Each event keeps
+// its sub-markets grouped, so multi-result events (matches, World Cup winner,
+// "...by <date>") render as one card instead of flooding the feed with dozens
+// of sub-markets. `q` (when set) filters by event title (case-insensitive).
+export async function listPolymarketEvents(
+  q = '',
+  limit = 30,
+  offset = 0,
+): Promise<EventSummary[]> {
+  const events = await fetchGammaEvents(offset, limit);
+  const qlower = q.trim().toLowerCase();
+  const filtered = qlower
+    ? events.filter((ev) => (ev.title || '').toLowerCase().includes(qlower))
+    : events;
+  return filtered.map(eventToSummary);
 }
 
 // Return the sibling sub-markets that belong to the same event, normalized as

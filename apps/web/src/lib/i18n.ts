@@ -61,6 +61,7 @@ const zh: Dict = {
   'market.moreOutcomes': '+{count} 个结果',
   'market.multiOutcome': '多结果',
   'market.multiOutcomeEvent': '多结果事件',
+  'market.countEvents': '{count} 个事件',
 
   // ── Market detail ──────────────────────────────────────────────────
   'detail.back': '返回市场列表',
@@ -307,6 +308,7 @@ const en: Dict = {
   'market.moreOutcomes': '+{count} outcomes',
   'market.multiOutcome': 'Multi-outcome',
   'market.multiOutcomeEvent': 'Multi-outcome event',
+  'market.countEvents': '{count} events',
 
   // ── Market detail ──────────────────────────────────────────────────
   'detail.back': 'Back to markets',

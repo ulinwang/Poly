@@ -2,13 +2,12 @@ import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
   Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers,
-  ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
 import { useI18n } from '../lib/i18n';
-import type { Market } from '../types';
+import type { EventSummary } from '../types';
 
 // Icon hints for well-known category labels (falls back to a generic tag icon).
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
@@ -27,12 +26,12 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
 const MAX_TABS = 11;
 const PAGE_SIZE = 30;
 
-// Derive category tabs from the loaded markets, ranked by how many markets
-// carry each tag. Guarantees every tab actually has content when clicked.
-function deriveCategories(markets: Market[]): string[] {
+// Derive category tabs from the loaded events, ranked by how many events carry
+// each tag. Guarantees every tab actually has content when clicked.
+function deriveCategories(events: EventSummary[]): string[] {
   const counts = new Map<string, number>();
-  for (const m of markets) {
-    for (const c of m.categories ?? []) {
+  for (const ev of events) {
+    for (const c of ev.categories ?? []) {
       counts.set(c, (counts.get(c) ?? 0) + 1);
     }
   }
@@ -49,9 +48,9 @@ export default function MarketBrowser() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
-  const markets = useMarketStore((s) => s.markets);
-  const setMarkets = useMarketStore((s) => s.setMarkets);
-  const appendMarkets = useMarketStore((s) => s.appendMarkets);
+  const events = useMarketStore((s) => s.events);
+  const setEvents = useMarketStore((s) => s.setEvents);
+  const appendEvents = useMarketStore((s) => s.appendEvents);
   const category = useMarketStore((s) => s.category);
   const setCategory = useMarketStore((s) => s.setCategory);
   const searchQuery = useMarketStore((s) => s.searchQuery);
@@ -72,23 +71,23 @@ export default function MarketBrowser() {
     hasMoreRef.current = true;
     loadingRef.current = true;
     offsetRef.current = 0;
-    api.listMarkets({ q: searchQuery, live_only: true, limit: PAGE_SIZE, offset: 0 })
+    api.listEvents({ q: searchQuery, limit: PAGE_SIZE, offset: 0 })
       .then((res) => {
         if (cancelled) return;
-        setMarkets(res.markets);
+        setEvents(res.events);
         offsetRef.current = PAGE_SIZE;
-        const more = res.hasMore ?? res.markets.length >= PAGE_SIZE;
+        const more = res.hasMore ?? res.events.length >= PAGE_SIZE;
         setHasMore(more);
         hasMoreRef.current = more;
       })
-      .catch((err) => console.error('Failed to load markets:', err))
+      .catch((err) => console.error('Failed to load events:', err))
       .finally(() => {
         if (cancelled) return;
         setLoading(false);
         loadingRef.current = false;
       });
     return () => { cancelled = true; };
-  }, [searchQuery, setMarkets, refreshTick]);
+  }, [searchQuery, setEvents, refreshTick]);
 
   // Subsequent pages: append.
   const loadMore = useCallback(() => {
@@ -96,20 +95,20 @@ export default function MarketBrowser() {
     loadingRef.current = true;
     setLoadingMore(true);
     const offset = offsetRef.current;
-    api.listMarkets({ q: searchQuery, live_only: true, limit: PAGE_SIZE, offset })
+    api.listEvents({ q: searchQuery, limit: PAGE_SIZE, offset })
       .then((res) => {
-        appendMarkets(res.markets);
+        appendEvents(res.events);
         offsetRef.current = offset + PAGE_SIZE;
-        const more = res.hasMore ?? res.markets.length >= PAGE_SIZE;
+        const more = res.hasMore ?? res.events.length >= PAGE_SIZE;
         setHasMore(more);
         hasMoreRef.current = more;
       })
-      .catch((err) => console.error('Failed to load more markets:', err))
+      .catch((err) => console.error('Failed to load more events:', err))
       .finally(() => {
         setLoadingMore(false);
         loadingRef.current = false;
       });
-  }, [searchQuery, appendMarkets]);
+  }, [searchQuery, appendEvents]);
 
   // Bottom sentinel: trigger the next page when it scrolls into view.
   useEffect(() => {
@@ -122,19 +121,13 @@ export default function MarketBrowser() {
     return () => observer.disconnect();
   }, [loadMore]);
 
-  const categories = useMemo(() => deriveCategories(markets), [markets]);
+  const categories = useMemo(() => deriveCategories(events), [events]);
 
   const filtered = useMemo(() => (
     category === 'All'
-      ? markets
-      : markets.filter((m) => (m.categories ?? []).includes(category))
-  ), [markets, category]);
-
-  // Group the (filtered) markets by event_slug. An event with multiple
-  // sub-markets renders as a single multi-outcome card; events with one market
-  // (or no event_slug) render as ordinary market cards. Order is preserved from
-  // the underlying volume-sorted feed (anchored on each event's first market).
-  const displayItems = useMemo(() => groupByEvent(filtered), [filtered]);
+      ? events
+      : events.filter((ev) => (ev.categories ?? []).includes(category))
+  ), [events, category]);
 
   const tabs = ['All', ...categories];
 
@@ -180,7 +173,7 @@ export default function MarketBrowser() {
           {category === 'All' ? t('market.all') : category}
         </h2>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-surface-400">{t('market.countMarkets', { count: filtered.length })}</span>
+          <span className="text-sm text-surface-400">{t('market.countEvents', { count: filtered.length })}</span>
           <button
             onClick={() => setRefreshTick((n) => n + 1)}
             disabled={loading}
@@ -192,7 +185,7 @@ export default function MarketBrowser() {
         </div>
       </div>
 
-      {/* Market grid */}
+      {/* Event grid */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -216,16 +209,16 @@ export default function MarketBrowser() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {displayItems.map((item) => (
-            item.kind === 'event'
-              ? <EventCard key={`event:${item.eventSlug}`} group={item} />
-              : <MarketCard key={item.market.slug} market={item.market} />
+          {filtered.map((ev) => (
+            ev.is_single
+              ? <SingleEventCard key={ev.event_slug} event={ev} />
+              : <EventCard key={ev.event_slug} event={ev} />
           ))}
         </div>
       )}
 
       {/* Infinite-scroll sentinel + load-more indicator. The category tabs are a
-          client-side filter on already-loaded markets, so the sentinel keeps
+          client-side filter on already-loaded events, so the sentinel keeps
           fetching the underlying unfiltered list as long as the server has more. */}
       {!loading && (
         <div ref={sentinelRef} className="h-10 flex items-center justify-center">
@@ -235,7 +228,7 @@ export default function MarketBrowser() {
               {t('common.loading')}
             </span>
           )}
-          {!hasMore && markets.length > 0 && (
+          {!hasMore && events.length > 0 && (
             <span className="text-xs text-surface-400">{t('common.noMore')}</span>
           )}
         </div>
@@ -248,77 +241,6 @@ function formatVol(v: number) {
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}k`;
   return `$${v.toFixed(0)}`;
-}
-
-// A browser row is either a standalone market card or a grouped event card.
-type SingleItem = { kind: 'single'; market: Market };
-type EventItem = {
-  kind: 'event';
-  eventSlug: string;
-  title: string;
-  markets: Market[];
-  volume: number;
-};
-type DisplayItem = SingleItem | EventItem;
-
-// Strip a trailing " - <group_title>" / " <group_title>" suffix so the event
-// card shows the shared question rather than one sub-market's outcome.
-function eventTitle(market: Market): string {
-  const q = market.question || market.slug;
-  const g = market.group_title;
-  if (g && q.endsWith(g)) {
-    return q.slice(0, q.length - g.length).replace(/[\s\-–—:|]+$/, '').trim() || q;
-  }
-  return q;
-}
-
-// Group markets by event_slug, preserving feed order. Events with 2+ markets
-// become a single EventItem; everything else stays a SingleItem.
-function groupByEvent(markets: Market[]): DisplayItem[] {
-  const order: string[] = [];
-  const groups = new Map<string, Market[]>();
-  const singles: SingleItem[] = [];
-
-  for (const m of markets) {
-    const ev = m.event_slug;
-    if (!ev) {
-      // No event slug — always standalone. Key by index implicitly via push.
-      singles.push({ kind: 'single', market: m });
-      order.push(`single:${m.slug}`);
-      continue;
-    }
-    if (!groups.has(ev)) {
-      groups.set(ev, []);
-      order.push(`event:${ev}`);
-    }
-    groups.get(ev)!.push(m);
-  }
-
-  const singleBySlug = new Map(singles.map((s) => [`single:${s.market.slug}`, s]));
-  const items: DisplayItem[] = [];
-  for (const key of order) {
-    if (key.startsWith('single:')) {
-      const s = singleBySlug.get(key);
-      if (s) items.push(s);
-      continue;
-    }
-    const ev = key.slice('event:'.length);
-    const ms = groups.get(ev)!;
-    if (ms.length <= 1) {
-      items.push({ kind: 'single', market: ms[0] });
-    } else {
-      items.push({
-        kind: 'event',
-        eventSlug: ev,
-        // Prefer the real parent event name from the API; fall back to the
-        // suffix-strip heuristic only if it's missing.
-        title: ms[0].event_title || eventTitle(ms[0]),
-        markets: ms,
-        volume: ms.reduce((sum, m) => sum + (m.volume || 0), 0),
-      });
-    }
-  }
-  return items;
 }
 
 function hashString(str: string): number {
@@ -381,144 +303,13 @@ function Thumbnail({
   );
 }
 
-// Whether a standalone market is multi-result (not a binary Yes/No market).
-// Prefers the backend is_binary flag; falls back to inspecting outcomes_list so
-// the UI stays correct even if the flag is absent on older payloads.
-function isMultiOutcomeMarket(market: Market): boolean {
-  if (market.is_binary === true) return false;
-  const list = market.outcomes_list;
-  if (list && list.length > 0) {
-    if (list.length !== 2) return true;
-    const [a, b] = list;
-    const binary =
-      a.label.trim().toLowerCase() === 'yes' &&
-      b.label.trim().toLowerCase() === 'no';
-    return !binary;
-  }
-  // No outcome info → treat as binary (preserves prior Yes/No behaviour).
-  return false;
-}
-
-const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
+// Single binary event: rendered as an ordinary Yes/No market card. The single
+// outcome carries the live YES quote; "No" is its complement. Clicking opens
+// the sub-market detail page.
+const SingleEventCard = memo(function SingleEventCard({ event }: { event: EventSummary }) {
   const { t } = useI18n();
-  const yesCents = toCents(market.yes_price);
-  const change = market.price_change_24h;
-  const hasChange = change != null && Number.isFinite(change);
-  const multi = isMultiOutcomeMarket(market);
-  const outcomes = market.outcomes_list ?? [];
-  const shownOutcomes = outcomes.slice(0, 4);
-  const extraOutcomes = outcomes.length - shownOutcomes.length;
-
-  return (
-    <a
-      href={`#/markets/${market.slug}`}
-      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <Thumbnail src={market.icon_url} seed={market.slug} />
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
-            {market.question || market.slug}
-          </h3>
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className={`badge text-[10px] ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
-              {market.is_live ? t('market.open') : t('market.resolved')}
-            </span>
-            {multi && (
-              <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
-                <Layers className="w-3 h-3" />
-                {t('market.outcomes', { count: outcomes.length })}
-              </span>
-            )}
-            <span className="text-xs text-surface-400">
-              {formatVol(market.volume)} {t('market.vol')}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {multi ? (
-        /* Multi-result market: list real outcome labels with their live prices
-           (no forced Yes/No). Shows up to 4, then "+N". */
-        <div className="space-y-1.5">
-          {shownOutcomes.map((o, i) => {
-            const cents = toCents(o.price);
-            return (
-              <div
-                key={`${o.label}:${i}`}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-700/40"
-              >
-                <span className="text-xs text-surface-700 dark:text-surface-200 truncate flex-1">
-                  {o.label}
-                </span>
-                <span className="text-xs font-semibold text-primary-600 dark:text-primary-400 flex-shrink-0">
-                  {cents == null ? '—' : `${cents}¢`}
-                </span>
-              </div>
-            );
-          })}
-          {extraOutcomes > 0 && (
-            <div className="px-2.5 text-xs text-surface-400">{t('market.moreOutcomes', { count: extraOutcomes })}</div>
-          )}
-        </div>
-      ) : (
-        /* Binary market: Yes / No prices (real Polymarket quote; — when none) */
-        <div className="flex items-center gap-3">
-          <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
-            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('market.yes')}</div>
-            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
-              {yesCents == null ? '—' : `${yesCents}¢`}
-            </div>
-          </div>
-          <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
-            <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t('market.no')}</div>
-            <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
-              {yesCents == null ? '—' : `${100 - yesCents}¢`}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 24h change (real). No fabricated sparkline. */}
-      <div className="h-5 flex items-center">
-        {hasChange ? (
-          <span
-            className={`inline-flex items-center gap-1 text-xs font-medium ${
-              change! >= 0
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-rose-600 dark:text-rose-400'
-            }`}
-          >
-            {change! >= 0
-              ? <ArrowUpRight className="w-3.5 h-3.5" />
-              : <ArrowDownRight className="w-3.5 h-3.5" />}
-            {change! >= 0 ? '+' : ''}{(change! * 100).toFixed(1)}¢ {t('market.change24h')}
-          </span>
-        ) : (
-          <span className="text-xs text-surface-300 dark:text-surface-600">—</span>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50">
-        <span>{t('market.traders', { count: market.n_holders?.toLocaleString() || 0 })}</span>
-        <span className="font-mono text-[10px]">{market.condition_id.slice(0, 6)}…</span>
-      </div>
-    </a>
-  );
-});
-
-// Multi-outcome event card: lists up to 4 sub-market outcomes (group_title +
-// a deterministic mini Yes price). Clicking enters the event via its first
-// sub-market's slug — MarketDetail then surfaces the sibling outcomes.
-const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
-  const { t } = useI18n();
-  const outcomes = group.markets.slice(0, 4);
-  const extra = group.markets.length - outcomes.length;
-  const target = group.markets[0]?.slug ?? '';
-  // Prefer the parent event image, then the first sub-market's own image.
-  const headerSrc = group.markets[0]?.event_icon || group.markets[0]?.icon_url;
+  const yesCents = toCents(event.outcomes[0]?.price);
+  const target = event.primary_slug || event.outcomes[0]?.slug || '';
 
   return (
     <a
@@ -527,18 +318,75 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
     >
       {/* Header */}
       <div className="flex items-start gap-3">
-        <Thumbnail src={headerSrc} seed={group.eventSlug} />
+        <Thumbnail src={event.icon_url} seed={event.event_slug} />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
-            {group.title}
+            {event.title}
+          </h3>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="badge text-[10px] badge-live">
+              {t('market.open')}
+            </span>
+            <span className="text-xs text-surface-400">
+              {formatVol(event.volume)} {t('market.vol')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Binary market: Yes / No prices (real Polymarket quote; — when none) */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
+          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('market.yes')}</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+            {yesCents == null ? '—' : `${yesCents}¢`}
+          </div>
+        </div>
+        <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
+          <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t('market.no')}</div>
+          <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
+            {yesCents == null ? '—' : `${100 - yesCents}¢`}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50 mt-auto">
+        <span className="font-mono text-[10px]">{event.event_slug.slice(0, 10)}…</span>
+      </div>
+    </a>
+  );
+});
+
+// Multi-outcome event card: lists up to 4 sub-market outcomes (label + that
+// sub-market's live YES price). Clicking enters the event via its primary
+// sub-market slug — MarketDetail then surfaces the sibling outcomes. No
+// single-market "Open" badge is shown, since it would misrepresent the event.
+const EventCard = memo(function EventCard({ event }: { event: EventSummary }) {
+  const { t } = useI18n();
+  const shown = event.outcomes.slice(0, 4);
+  const extra = event.outcomes.length - shown.length;
+  const target = event.primary_slug || event.outcomes[0]?.slug || '';
+
+  return (
+    <a
+      href={`#/markets/${target}`}
+      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
+    >
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <Thumbnail src={event.icon_url} seed={event.event_slug} />
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
+            {event.title}
           </h3>
           <div className="flex items-center gap-2 mt-1.5">
             <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
               <Layers className="w-3 h-3" />
-              {t('market.outcomes', { count: group.markets.length })}
+              {t('market.outcomes', { count: event.n_outcomes })}
             </span>
             <span className="text-xs text-surface-400">
-              {formatVol(group.volume)} {t('market.vol')}
+              {formatVol(event.volume)} {t('market.vol')}
             </span>
           </div>
         </div>
@@ -546,15 +394,15 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
 
       {/* Outcome list with mini Yes prices */}
       <div className="space-y-1.5">
-        {outcomes.map((m) => {
-          const cents = toCents(m.yes_price);
+        {shown.map((o, i) => {
+          const cents = toCents(o.price);
           return (
             <div
-              key={m.slug}
+              key={o.slug || `${o.label}:${i}`}
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-700/40"
             >
               <span className="text-xs text-surface-700 dark:text-surface-200 truncate flex-1">
-                {m.group_title || m.question || m.slug}
+                {o.label}
               </span>
               <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
                 {cents == null ? '—' : `${cents}¢`}
@@ -570,7 +418,7 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-surface-400 dark:text-surface-500 pt-2 border-t border-surface-100 dark:border-surface-700/50 mt-auto">
         <span>{t('market.multiOutcomeEvent')}</span>
-        <span className="font-mono text-[10px]">{group.eventSlug.slice(0, 10)}…</span>
+        <span className="font-mono text-[10px]">{event.event_slug.slice(0, 10)}…</span>
       </div>
     </a>
   );

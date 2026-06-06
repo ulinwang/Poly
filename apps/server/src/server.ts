@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import marketsRoutes from './routes/markets';
+import eventsRoutes from './routes/events';
 import experimentsRoutes from './routes/experiments';
 import settingsRoutes from './routes/settings';
 import keysRoutes from './routes/keys';
@@ -37,6 +38,7 @@ export async function buildServer() {
   });
 
   await app.register(marketsRoutes, { prefix: '/api/v1/markets' });
+  await app.register(eventsRoutes, { prefix: '/api/v1/events' });
   await app.register(experimentsRoutes, { prefix: '/api/v1/experiments' });
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
   await app.register(keysRoutes, { prefix: '/api/v1/keys' });
