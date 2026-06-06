@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useExperimentStore } from '../stores';
+import type { AgentSnapshot } from '../types';
 
 export function useSSE(runId: string | null, replay: number = 1) {
   const addEvent = useExperimentStore((s) => s.addEvent);
   const addDecision = useExperimentStore((s) => s.addDecision);
   const addTickLog = useExperimentStore((s) => s.addTickLog);
   const setMetrics = useExperimentStore((s) => s.setMetrics);
+  const addTickMetrics = useExperimentStore((s) => s.addTickMetrics);
+  const addAgentSnapshots = useExperimentStore((s) => s.addAgentSnapshots);
   const setRunning = useExperimentStore((s) => s.setRunning);
   const setError = useExperimentStore((s) => s.setError);
 
@@ -85,6 +88,28 @@ export function useSSE(runId: string | null, replay: number = 1) {
         api_latency_ms: data.api_latency_ms,
         api_error: data.api_error,
       });
+    });
+
+    // Macro per-tick metrics (one row per tick) → drives the macro chart + cards.
+    es.addEventListener('tick_metrics', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      addEvent({ event: 'tick_metrics', data });
+      addTickMetrics({
+        tick: data.tick,
+        yes_mid: data.yes_mid,
+        no_mid: data.no_mid,
+        parity_gap: data.parity_gap,
+        n_fills: data.n_fills,
+        ret: data.ret,
+      });
+    });
+
+    // Micro per-agent snapshots (one envelope per tick carrying every agent's row).
+    es.addEventListener('agent_snapshots', (e: MessageEvent) => {
+      const data = JSON.parse(e.data);
+      addEvent({ event: 'agent_snapshots', data });
+      const agents = Array.isArray(data.agents) ? (data.agents as AgentSnapshot[]) : [];
+      addAgentSnapshots(agents);
     });
 
     es.addEventListener('agent_decision_error', (e: MessageEvent) => {
@@ -186,7 +211,7 @@ export function useSSE(runId: string | null, replay: number = 1) {
     return () => {
       es.close();
     };
-  }, [runId, replay, addEvent, addDecision, addTickLog, setMetrics, setRunning, setError, nowStr]);
+  }, [runId, replay, addEvent, addDecision, addTickLog, setMetrics, addTickMetrics, addAgentSnapshots, setRunning, setError, nowStr]);
 }
 
 export function useDebounce<T>(value: T, delay: number = 300): T {

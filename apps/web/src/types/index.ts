@@ -93,6 +93,43 @@ export interface TickLogEntry {
   kind: 'info' | 'warn' | 'error';
 }
 
+/**
+ * Macro (market-price) snapshot for a single tick.
+ * Mirrors sim/evaluation/schema.py::TickMetrics. Streamed as `tick_metrics`.
+ */
+export interface TickMetrics {
+  tick: number;
+  yes_mid: number;
+  no_mid: number;
+  /** Deviation from the YES+NO=1 arbitrage parity; large |gap| ⇒ inefficiency. */
+  parity_gap: number;
+  /** Fills that happened during this tick. */
+  n_fills: number;
+  /** YES-mid change vs the previous tick (per-tick return). */
+  ret: number;
+}
+
+/**
+ * Micro (single-agent) snapshot for a single tick.
+ * Mirrors sim/evaluation/schema.py::AgentSnapshot. Streamed inside
+ * `agent_snapshots` (one envelope per tick carrying every agent's row).
+ */
+export interface AgentSnapshot {
+  tick: number;
+  agent_id: number;
+  persona: string;
+  cash: number;
+  cash_reserved: number;
+  pos_yes: number;
+  pos_no: number;
+  /** Agent's stated posterior P(YES), if set (else null). */
+  belief_yes: number | null;
+  /** Agent's stated confidence, if set (else null). */
+  belief_conf: number | null;
+  /** Mark-to-market PnL vs initial capital at the current mids. */
+  pnl: number;
+}
+
 export interface SimulationMetrics {
   yesMid: number;
   yesMidHistory: number[];
