@@ -30,10 +30,12 @@ export async function buildServer() {
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
   await app.register(providersRoutes, { prefix: '/api/v1/providers' });
 
-  const distPath = path.resolve(__dirname, '../../webapp/frontend/dist');
+  const distPath = path.resolve(__dirname, '../../web/dist');
   await app.register(fastifyStatic, {
     root: distPath,
-    wildcard: false,
+    // wildcard:true serves any file under dist dynamically, so newly-hashed
+    // assets after a frontend rebuild are picked up without a server restart.
+    wildcard: true,
   });
 
   app.setNotFoundHandler((req, reply) => {

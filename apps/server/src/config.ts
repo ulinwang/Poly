@@ -2,8 +2,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Repo root: backend/src/config.ts -> ../../ -> polymetl/
-const REPO_ROOT = process.env.POLY_ROOT || path.resolve(__dirname, '../../');
+// Repo root: apps/server/src/config.ts -> ../../../ -> repo root
+const REPO_ROOT = process.env.POLY_ROOT || path.resolve(__dirname, '../../../');
 
 export const config = {
   PORT: parseInt(process.env.PORT || '8765', 10),
