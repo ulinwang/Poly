@@ -166,4 +166,16 @@ export const api = {
     fetchJson<{ models: string[]; source: 'live' | 'catalog'; message?: string }>(
       `/api/v1/providers/${encodeURIComponent(providerId)}/models`,
     ),
+
+  // Agent introspection — the LLM tool schemas and prompt templates the
+  // simulated agents see, sourced from the Python introspection script.
+  getAgentInfo: () =>
+    fetchJson<import('../types').AgentInfo>('/api/v1/agent/info'),
+
+  // On-chain analytics for a single market. Always resolves: when no data is
+  // ingested the body is { available:false, message }.
+  getMarketAnalysis: (slug: string) =>
+    fetchJson<import('../types').MarketAnalysis>(
+      `/api/v1/analysis/${encodeURIComponent(slug)}`,
+    ),
 };

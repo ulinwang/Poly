@@ -13,6 +13,8 @@ import experimentsRoutes from './routes/experiments';
 import settingsRoutes from './routes/settings';
 import keysRoutes from './routes/keys';
 import providersRoutes from './routes/providers';
+import agentRoutes from './routes/agent';
+import analysisRoutes from './routes/analysis';
 import { repairOrphanedRuns } from './db/experiments';
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -39,6 +41,8 @@ export async function buildServer() {
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
   await app.register(keysRoutes, { prefix: '/api/v1/keys' });
   await app.register(providersRoutes, { prefix: '/api/v1/providers' });
+  await app.register(agentRoutes, { prefix: '/api/v1/agent' });
+  await app.register(analysisRoutes, { prefix: '/api/v1/analysis' });
 
   const distPath = path.resolve(__dirname, '../../web/dist');
   await app.register(fastifyStatic, {

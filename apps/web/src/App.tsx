@@ -8,6 +8,8 @@ import { useSettingsStore } from './stores';
 const MarketDetail = lazy(() => import('./pages/MarketDetail'));
 const ExperimentManager = lazy(() => import('./pages/ExperimentManager'));
 const ExperimentLive = lazy(() => import('./pages/ExperimentLive'));
+const AgentInfo = lazy(() => import('./pages/AgentInfo'));
+const DataAnalysis = lazy(() => import('./pages/DataAnalysis'));
 const Settings = lazy(() => import('./pages/Settings'));
 
 function DarkModeInit() {
@@ -43,6 +45,12 @@ function App() {
             } />
             <Route path="/experiments/:id" element={
               <Suspense fallback={<PageLoader />}><ExperimentLive /></Suspense>
+            } />
+            <Route path="/agent" element={
+              <Suspense fallback={<PageLoader />}><AgentInfo /></Suspense>
+            } />
+            <Route path="/analysis" element={
+              <Suspense fallback={<PageLoader />}><DataAnalysis /></Suspense>
             } />
             <Route path="/settings/*" element={
               <Suspense fallback={<PageLoader />}><Settings /></Suspense>
