@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useSettingsStore, useMarketStore, useExperimentStore } from './index';
+import { applyEvent } from '../lib/applyEvent';
 
 // Zustand stores are singletons — reset between tests by mutating state directly
 describe('Settings store', () => {
@@ -127,6 +128,25 @@ describe('Experiment store', () => {
     expect(snaps[0].length).toBe(2);
     expect(snaps[0][1].pnl).toBe(3);
     expect(snaps[1][1].pnl).toBe(-1);
+  });
+
+  it('routes forum events into store via applyEvent and clears on reset', () => {
+    const store = useExperimentStore.getState();
+    applyEvent(store, 'forum_post', { tick: 0, author_id: 1, post_id: 10, content: 'hello' });
+    applyEvent(store, 'forum_comment', { tick: 1, author_id: 2, post_id: 10, comment_id: 100, content: 'reply' });
+    applyEvent(store, 'forum_follow', { tick: 1, agent_id: 2, target_id: 1 });
+    let s = useExperimentStore.getState();
+    expect(s.forumPosts.length).toBe(1);
+    expect(s.forumPosts[0].post_id).toBe(10);
+    expect(s.forumComments.length).toBe(1);
+    expect(s.forumComments[0].comment_id).toBe(100);
+    expect(s.follows.length).toBe(1);
+    expect(s.follows[0].target_id).toBe(1);
+    useExperimentStore.getState().resetSimulation();
+    s = useExperimentStore.getState();
+    expect(s.forumPosts.length).toBe(0);
+    expect(s.forumComments.length).toBe(0);
+    expect(s.follows.length).toBe(0);
   });
 
   it('clears tick metrics and snapshots on reset', () => {

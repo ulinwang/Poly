@@ -96,6 +96,33 @@ export function applyEvent(
       break;
     }
 
+    case 'forum_post':
+      store.addForumPost({
+        tick: data.tick as number,
+        author_id: data.author_id as number,
+        post_id: data.post_id as number,
+        content: (data.content as string) ?? '',
+      });
+      break;
+
+    case 'forum_comment':
+      store.addForumComment({
+        tick: data.tick as number,
+        author_id: data.author_id as number,
+        post_id: data.post_id as number,
+        comment_id: data.comment_id as number,
+        content: (data.content as string) ?? '',
+      });
+      break;
+
+    case 'forum_follow':
+      store.addFollow({
+        tick: data.tick as number,
+        agent_id: data.agent_id as number,
+        target_id: data.target_id as number,
+      });
+      break;
+
     case 'agent_decision_error':
       store.addTickLog({
         id: Date.now() + Math.random(), time: nowStr(), label: 'dec_err',

@@ -257,6 +257,27 @@ const zh: Dict = {
   'analysis.holders.yes': 'YES 持有人',
   'analysis.holders.no': 'NO 持有人',
   'analysis.question': '市场问题',
+
+  // ── Observation tabs (Market / Forum / Social) ─────────────────────
+  'tab.market': '市场',
+  'tab.forum': '论坛',
+  'tab.social': '社交',
+
+  // ── Forum tab ──────────────────────────────────────────────────────
+  'forum.empty': '论坛暂无动态',
+  'forum.tick': 't{tick}',
+  'forum.followed': '已关注',
+  'forum.commentsCount': '{count} 条评论',
+  'forum.noComments': '暂无评论',
+
+  // ── Social tab ─────────────────────────────────────────────────────
+  'social.empty': '暂无社交关系',
+  'social.title': '关注关系图谱',
+  'social.legend.node': '节点 = Agent（大小按被关注数）',
+  'social.legend.edge': '有向边 = 关注（A → B 表示 A 关注 B）',
+  'social.followers': '被关注 {count}',
+  'social.following': '关注 {count}',
+  'social.posts': '发帖 {count}',
 };
 
 const en: Dict = {
@@ -503,6 +524,27 @@ const en: Dict = {
   'analysis.holders.yes': 'YES holders',
   'analysis.holders.no': 'NO holders',
   'analysis.question': 'Market question',
+
+  // ── Observation tabs (Market / Forum / Social) ─────────────────────
+  'tab.market': 'Market',
+  'tab.forum': 'Forum',
+  'tab.social': 'Social',
+
+  // ── Forum tab ──────────────────────────────────────────────────────
+  'forum.empty': 'No forum activity yet',
+  'forum.tick': 't{tick}',
+  'forum.followed': 'Followed',
+  'forum.commentsCount': '{count} comments',
+  'forum.noComments': 'No comments yet',
+
+  // ── Social tab ─────────────────────────────────────────────────────
+  'social.empty': 'No social relationships yet',
+  'social.title': 'Follow relationship graph',
+  'social.legend.node': 'Node = Agent (size by follower count)',
+  'social.legend.edge': 'Directed edge = follow (A → B means A follows B)',
+  'social.followers': '{count} followers',
+  'social.following': 'following {count}',
+  'social.posts': '{count} posts',
 };
 
 const DICTS: Record<Locale, Dict> = { zh, en };

@@ -3,6 +3,7 @@ import type {
   Market, Experiment, ApiSettings, SimulationEvent,
   AgentDecision, TickLogEntry, SimulationMetrics,
   TickMetrics, AgentSnapshot,
+  ForumPost, ForumComment, FollowEdge,
 } from '../types';
 
 interface MarketState {
@@ -54,6 +55,12 @@ interface ExperimentState {
   tickMetrics: TickMetrics[];
   /** Per-agent micro snapshots, keyed by agent_id, each a tick-ordered history. */
   agentSnapshots: Record<number, AgentSnapshot[]>;
+  /** Forum posts authored by agents, in arrival order (for the Forum tab). */
+  forumPosts: ForumPost[];
+  /** Comments on forum posts, in arrival order (grouped by post_id in the UI). */
+  forumComments: ForumComment[];
+  /** Directed follow edges between agents (for the Social graph tab). */
+  follows: FollowEdge[];
   running: boolean;
   /** True between a `paused` event and the next resume. */
   paused: boolean;
@@ -68,6 +75,12 @@ interface ExperimentState {
   addTickMetrics: (m: TickMetrics) => void;
   /** Append a batch of agent rows for one tick (from an `agent_snapshots` event). */
   addAgentSnapshots: (snapshots: AgentSnapshot[]) => void;
+  /** Append one forum post (from a `forum_post` event). */
+  addForumPost: (post: ForumPost) => void;
+  /** Append one forum comment (from a `forum_comment` event). */
+  addForumComment: (comment: ForumComment) => void;
+  /** Append one follow edge (from a `forum_follow` event). */
+  addFollow: (edge: FollowEdge) => void;
   setRunning: (v: boolean) => void;
   setPaused: (v: boolean) => void;
   setError: (e: string | null) => void;
@@ -91,6 +104,9 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
   },
   tickMetrics: [],
   agentSnapshots: {},
+  forumPosts: [],
+  forumComments: [],
+  follows: [],
   running: false,
   paused: false,
   error: null,
@@ -124,6 +140,21 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     }
     return { agentSnapshots: byAgent };
   }),
+  addForumPost: (post) => set((s) => {
+    const next = [...s.forumPosts, post];
+    if (next.length > 2000) next.shift();
+    return { forumPosts: next };
+  }),
+  addForumComment: (comment) => set((s) => {
+    const next = [...s.forumComments, comment];
+    if (next.length > 4000) next.shift();
+    return { forumComments: next };
+  }),
+  addFollow: (edge) => set((s) => {
+    const next = [...s.follows, edge];
+    if (next.length > 4000) next.shift();
+    return { follows: next };
+  }),
   setRunning: (running) => set({ running }),
   setPaused: (paused) => set({ paused }),
   setError: (error) => set({ error }),
@@ -142,6 +173,9 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
     },
     tickMetrics: [],
     agentSnapshots: {},
+    forumPosts: [],
+    forumComments: [],
+    follows: [],
     running: false,
     paused: false,
     error: null,

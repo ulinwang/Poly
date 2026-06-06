@@ -9,7 +9,13 @@ import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber, useReplayPlayer } from '../hooks';
 import type { ReplayPlayer, ReplaySpeed } from '../hooks';
 import { useI18n } from '../lib/i18n';
-import type { Experiment, AgentSnapshot, AgentDecision } from '../types';
+import type {
+  Experiment, AgentSnapshot, AgentDecision,
+  ForumPost, ForumComment, FollowEdge,
+} from '../types';
+
+/** The three top-level observation tabs. */
+type ObsTab = 'market' | 'forum' | 'social';
 
 /** Deterministic HSL color block from an agent id, used as a tiny "avatar". */
 function agentColor(agentId: number): string {
@@ -23,11 +29,15 @@ export default function ExperimentLive() {
   const [experiment, setExperiment] = useState<Experiment | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
+  const [tab, setTab] = useState<ObsTab>('market');
 
   const metrics = useExperimentStore((s) => s.metrics);
   const decisions = useExperimentStore((s) => s.decisions);
   const tickMetrics = useExperimentStore((s) => s.tickMetrics);
   const agentSnapshots = useExperimentStore((s) => s.agentSnapshots);
+  const forumPosts = useExperimentStore((s) => s.forumPosts);
+  const forumComments = useExperimentStore((s) => s.forumComments);
+  const follows = useExperimentStore((s) => s.follows);
   const running = useExperimentStore((s) => s.running);
   const paused = useExperimentStore((s) => s.paused);
   const error = useExperimentStore((s) => s.error);
@@ -211,79 +221,444 @@ export default function ExperimentLive() {
       )}
 
       {/* ── Replay player controls (finished runs only) ───────────────── */}
+      {/* Status badge / replay / pause-resume above the tabs: they apply to
+          all three observation tabs (Market / Forum / Social). */}
       {isReplay && <ReplayControls replay={replay} />}
 
-      {/* ── Top: horizontally scrollable agent strip ──────────────────── */}
-      <AgentStrip
-        agents={agentList}
-        selectedAgent={selectedAgent}
-        onSelect={(aid) => setSelectedAgent((cur) => (cur === aid ? null : aid))}
-        hasAgents={hasAgents}
-        running={running}
-      />
+      {/* ── Top tab switcher: Market / Forum / Social ─────────────────── */}
+      <ObsTabs tab={tab} onChange={setTab} />
 
-      {/* ── Body: macro (left/full) + agent drawer (right) ────────────── */}
-      <div className="flex gap-4 items-start">
-        {/* Main: macro market outcome */}
-        <div className={`space-y-4 min-w-0 transition-all duration-300 ${drawerOpen ? 'flex-1' : 'w-full'}`}>
-          {/* Macro metric cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard
-              label={t('live.metric.yesMid')}
-              value={latestTickMetrics ? latestTickMetrics.yes_mid.toFixed(3) : metrics.yesMid.toFixed(3)}
-            />
-            <MetricCard
-              label={t('live.metric.parityGap')}
-              value={latestTickMetrics ? latestTickMetrics.parity_gap.toFixed(3) : '—'}
-            />
-            <MetricCard label={t('live.metric.cumulativeFills')} value={formatNumber(cumFills || metrics.nFills)} />
-            <MetricCard label={t('live.metric.tickProgress')} value={progressLabel} />
-          </div>
+      {tab === 'market' && (
+        <>
+          {/* ── Top: horizontally scrollable agent strip ──────────────── */}
+          <AgentStrip
+            agents={agentList}
+            selectedAgent={selectedAgent}
+            onSelect={(aid) => setSelectedAgent((cur) => (cur === aid ? null : aid))}
+            hasAgents={hasAgents}
+            running={running}
+          />
 
-          {/* Macro chart: yes_mid over ticks */}
-          <div className="card p-4">
-            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
-              {t('live.chartTitle')}
-            </h3>
-            {macroData.length === 0 ? (
-              <EmptyState
-                running={running}
-                idle={t('live.macroIdle')}
-                live={t('live.macroLive')}
-              />
-            ) : (
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={macroData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="tick" tick={{ fontSize: 12 }} />
-                    <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={(v) => Number(v).toFixed(3)} />
-                    <Line
-                      type="monotone"
-                      dataKey="yesMid"
-                      name="YES mid"
-                      stroke="#0d9488"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+          {/* ── Body: macro (left/full) + agent drawer (right) ────────── */}
+          <div className="flex gap-4 items-start">
+            {/* Main: macro market outcome */}
+            <div className={`space-y-4 min-w-0 transition-all duration-300 ${drawerOpen ? 'flex-1' : 'w-full'}`}>
+              {/* Macro metric cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricCard
+                  label={t('live.metric.yesMid')}
+                  value={latestTickMetrics ? latestTickMetrics.yes_mid.toFixed(3) : metrics.yesMid.toFixed(3)}
+                />
+                <MetricCard
+                  label={t('live.metric.parityGap')}
+                  value={latestTickMetrics ? latestTickMetrics.parity_gap.toFixed(3) : '—'}
+                />
+                <MetricCard label={t('live.metric.cumulativeFills')} value={formatNumber(cumFills || metrics.nFills)} />
+                <MetricCard label={t('live.metric.tickProgress')} value={progressLabel} />
               </div>
+
+              {/* Macro chart: yes_mid over ticks */}
+              <div className="card p-4">
+                <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-3">
+                  {t('live.chartTitle')}
+                </h3>
+                {macroData.length === 0 ? (
+                  <EmptyState
+                    running={running}
+                    idle={t('live.macroIdle')}
+                    live={t('live.macroLive')}
+                  />
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={macroData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="tick" tick={{ fontSize: 12 }} />
+                        <YAxis domain={[0, 1]} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(v) => Number(v).toFixed(3)} />
+                        <Line
+                          type="monotone"
+                          dataKey="yesMid"
+                          name="YES mid"
+                          stroke="#0d9488"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right drawer: selected agent detail */}
+            {drawerOpen && selectedAgent !== null && (
+              <AgentDrawer
+                agentId={selectedAgent}
+                snapshot={agentSnapshots[selectedAgent]?.[agentSnapshots[selectedAgent].length - 1] ?? null}
+                decisions={decisions.filter((d) => d.agent_id === selectedAgent)}
+                onClose={() => setSelectedAgent(null)}
+                formatNumber={formatNumber}
+              />
             )}
           </div>
-        </div>
+        </>
+      )}
 
-        {/* Right drawer: selected agent detail */}
-        {drawerOpen && selectedAgent !== null && (
-          <AgentDrawer
-            agentId={selectedAgent}
-            snapshot={agentSnapshots[selectedAgent]?.[agentSnapshots[selectedAgent].length - 1] ?? null}
-            decisions={decisions.filter((d) => d.agent_id === selectedAgent)}
-            onClose={() => setSelectedAgent(null)}
-            formatNumber={formatNumber}
-          />
-        )}
+      {tab === 'forum' && (
+        <ForumTab posts={forumPosts} comments={forumComments} follows={follows} />
+      )}
+
+      {tab === 'social' && (
+        <SocialTab posts={forumPosts} follows={follows} />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tab switcher
+// ─────────────────────────────────────────────────────────────────────────
+
+function ObsTabs({ tab, onChange }: { tab: ObsTab; onChange: (t: ObsTab) => void }) {
+  const { t } = useI18n();
+  const items: { key: ObsTab; label: string }[] = [
+    { key: 'market', label: t('tab.market') },
+    { key: 'forum', label: t('tab.forum') },
+    { key: 'social', label: t('tab.social') },
+  ];
+  return (
+    <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
+      {items.map((it) => {
+        const active = tab === it.key;
+        return (
+          <button
+            key={it.key}
+            onClick={() => onChange(it.key)}
+            className={`px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors ${
+              active
+                ? 'border-primary-500 text-primary-600 dark:text-primary-300'
+                : 'border-transparent text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            }`}
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Forum tab — Twitter-like feed of posts (newest tick first) with nested
+// comments per post and a small "followed author" marker.
+// ─────────────────────────────────────────────────────────────────────────
+
+function ForumTab({
+  posts, comments, follows,
+}: {
+  posts: ForumPost[];
+  comments: ForumComment[];
+  follows: FollowEdge[];
+}) {
+  const { t } = useI18n();
+
+  // Comments grouped by their post_id, each list kept in arrival order.
+  const commentsByPost = useMemo(() => {
+    const m = new Map<number, ForumComment[]>();
+    for (const c of comments) {
+      const arr = m.get(c.post_id);
+      if (arr) arr.push(c);
+      else m.set(c.post_id, [c]);
+    }
+    return m;
+  }, [comments]);
+
+  // Set of agents that are followed by someone (the target side of any edge),
+  // used to mark a post author as "followed".
+  const followedTargets = useMemo(
+    () => new Set(follows.map((f) => f.target_id)),
+    [follows],
+  );
+
+  // Newest tick first; stable for equal ticks by post_id descending.
+  const ordered = useMemo(
+    () => [...posts].sort((a, b) => (b.tick - a.tick) || (b.post_id - a.post_id)),
+    [posts],
+  );
+
+  if (ordered.length === 0) {
+    return (
+      <div className="card p-4">
+        <div className="text-center py-10 text-surface-400 text-sm">{t('forum.empty')}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 max-w-2xl">
+      {ordered.map((post) => {
+        const postComments = commentsByPost.get(post.post_id) ?? [];
+        const followed = followedTargets.has(post.author_id);
+        return (
+          <div key={post.post_id} className="card p-4">
+            {/* Author header */}
+            <div className="flex items-center gap-2">
+              <span
+                className="w-8 h-8 rounded-md shrink-0"
+                style={{ background: agentColor(post.author_id) }}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-surface-900 dark:text-white">
+                    A{post.author_id}
+                  </span>
+                  {followed && (
+                    <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+                      {t('forum.followed')}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-surface-400">{t('forum.tick', { tick: post.tick })}</div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <p className="mt-2 text-sm text-surface-800 dark:text-surface-200 whitespace-pre-wrap">
+              {post.content}
+            </p>
+
+            {/* Nested comments */}
+            <div className="mt-3 pl-4 border-l-2 border-surface-100 dark:border-surface-700 space-y-2">
+              <div className="text-[10px] uppercase tracking-wide text-surface-400">
+                {postComments.length > 0
+                  ? t('forum.commentsCount', { count: postComments.length })
+                  : t('forum.noComments')}
+              </div>
+              {postComments.map((c) => (
+                <div key={c.comment_id} className="flex items-start gap-2">
+                  <span
+                    className="w-5 h-5 rounded shrink-0 mt-0.5"
+                    style={{ background: agentColor(c.author_id) }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-[10px] text-surface-400">
+                      <span className="font-mono font-semibold text-surface-600 dark:text-surface-300">
+                        A{c.author_id}
+                      </span>
+                      <span>{t('forum.tick', { tick: c.tick })}</span>
+                    </div>
+                    <p className="text-xs text-surface-700 dark:text-surface-300 whitespace-pre-wrap">
+                      {c.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Social tab — lightweight self-drawn SVG follow graph. Nodes are agents that
+// participate (posted / followed / were followed); directed edges are follows
+// (agent_id → target_id, arrow points at the followed agent). Nodes are laid
+// out on a circle; node size scales with in-degree (follower count).
+// ─────────────────────────────────────────────────────────────────────────
+
+function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge[] }) {
+  const { t } = useI18n();
+
+  const graph = useMemo(() => {
+    // Collect participating agents and per-agent stats.
+    const ids = new Set<number>();
+    const inDeg = new Map<number, number>();   // followers
+    const outDeg = new Map<number, number>();  // following
+    const postCount = new Map<number, number>();
+
+    for (const p of posts) {
+      ids.add(p.author_id);
+      postCount.set(p.author_id, (postCount.get(p.author_id) ?? 0) + 1);
+    }
+    // De-dup edges so repeated follow events don't draw / count twice.
+    const seenEdges = new Set<string>();
+    const edges: FollowEdge[] = [];
+    for (const f of follows) {
+      ids.add(f.agent_id);
+      ids.add(f.target_id);
+      const key = `${f.agent_id}->${f.target_id}`;
+      if (seenEdges.has(key)) continue;
+      seenEdges.add(key);
+      edges.push(f);
+      inDeg.set(f.target_id, (inDeg.get(f.target_id) ?? 0) + 1);
+      outDeg.set(f.agent_id, (outDeg.get(f.agent_id) ?? 0) + 1);
+    }
+
+    const nodeIds = [...ids].sort((a, b) => a - b);
+    return { nodeIds, edges, inDeg, outDeg, postCount };
+  }, [posts, follows]);
+
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  if (graph.nodeIds.length === 0) {
+    return (
+      <div className="card p-4">
+        <div className="text-center py-10 text-surface-400 text-sm">{t('social.empty')}</div>
+      </div>
+    );
+  }
+
+  // Circular layout.
+  const W = 720;
+  const H = 520;
+  const cx = W / 2;
+  const cy = H / 2;
+  const radius = Math.min(W, H) / 2 - 70;
+  const n = graph.nodeIds.length;
+
+  const pos = new Map<number, { x: number; y: number }>();
+  graph.nodeIds.forEach((id, i) => {
+    // Single node sits in the center; otherwise spread around the circle.
+    if (n === 1) {
+      pos.set(id, { x: cx, y: cy });
+    } else {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      pos.set(id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+  });
+
+  const maxIn = Math.max(1, ...graph.nodeIds.map((id) => graph.inDeg.get(id) ?? 0));
+  const nodeRadius = (id: number) => 12 + ((graph.inDeg.get(id) ?? 0) / maxIn) * 14;
+
+  // Whether an edge touches the hovered node (for highlighting).
+  const edgeActive = (e: FollowEdge) =>
+    hovered === null || e.agent_id === hovered || e.target_id === hovered;
+  const nodeActive = (id: number) => {
+    if (hovered === null) return true;
+    if (id === hovered) return true;
+    return graph.edges.some(
+      (e) =>
+        (e.agent_id === hovered && e.target_id === id) ||
+        (e.target_id === hovered && e.agent_id === id),
+    );
+  };
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+          {t('social.title')}
+        </h3>
+        <div className="text-[10px] text-surface-400 space-x-3">
+          <span>{t('social.legend.node')}</span>
+          <span>{t('social.legend.edge')}</span>
+        </div>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <svg
+          width="100%"
+          viewBox={`0 0 ${W} ${H}`}
+          className="min-w-[480px]"
+          role="img"
+          aria-label={t('social.title')}
+        >
+          <defs>
+            <marker
+              id="arrow"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8" />
+            </marker>
+            <marker
+              id="arrow-hi"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#0d9488" />
+            </marker>
+          </defs>
+
+          {/* Edges: shorten the segment so the arrowhead lands at the node rim. */}
+          {graph.edges.map((e) => {
+            const a = pos.get(e.agent_id)!;
+            const b = pos.get(e.target_id)!;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len;
+            const uy = dy / len;
+            const rA = nodeRadius(e.agent_id);
+            const rB = nodeRadius(e.target_id);
+            const x1 = a.x + ux * rA;
+            const y1 = a.y + uy * rA;
+            const x2 = b.x - ux * (rB + 6);
+            const y2 = b.y - uy * (rB + 6);
+            const active = edgeActive(e);
+            return (
+              <line
+                key={`${e.agent_id}->${e.target_id}`}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={active ? '#0d9488' : '#cbd5e1'}
+                strokeWidth={active && hovered !== null ? 2 : 1.25}
+                opacity={active ? 0.9 : 0.25}
+                markerEnd={active && hovered !== null ? 'url(#arrow-hi)' : 'url(#arrow)'}
+              />
+            );
+          })}
+
+          {/* Nodes */}
+          {graph.nodeIds.map((id) => {
+            const p = pos.get(id)!;
+            const r = nodeRadius(id);
+            const active = nodeActive(id);
+            return (
+              <g
+                key={id}
+                transform={`translate(${p.x}, ${p.y})`}
+                opacity={active ? 1 : 0.3}
+                onMouseEnter={() => setHovered(id)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                <circle
+                  r={r}
+                  fill={agentColor(id)}
+                  stroke={hovered === id ? '#0d9488' : '#ffffff'}
+                  strokeWidth={hovered === id ? 3 : 1.5}
+                />
+                <text
+                  textAnchor="middle"
+                  dy={r + 12}
+                  className="fill-surface-600 dark:fill-surface-300"
+                  style={{ fontSize: 11, fontFamily: 'monospace' }}
+                >
+                  A{id}
+                </text>
+                <title>
+                  {`A${id} · ${t('social.followers', { count: graph.inDeg.get(id) ?? 0 })} · ${t('social.following', { count: graph.outDeg.get(id) ?? 0 })} · ${t('social.posts', { count: graph.postCount.get(id) ?? 0 })}`}
+                </title>
+              </g>
+            );
+          })}
+        </svg>
       </div>
     </div>
   );
