@@ -74,3 +74,6 @@ tmp/
 
 .superpowers/
 .vite/
+
+# server test/runtime sqlite
+apps/server/data/
