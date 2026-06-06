@@ -8,6 +8,12 @@ export interface Market {
   n_holders: number | null;
   categories?: string[];
   icon_url?: string;
+  // Parent event thumbnail (used for grouped event cards). Null if absent.
+  event_icon?: string | null;
+  // Live YES probability (0..1) from Polymarket, or null when no quote exists.
+  yes_price?: number | null;
+  // 24h YES price change (signed), or null when unavailable.
+  price_change_24h?: number | null;
   // Multi-market events: event_slug is the shared event id, event_title is the
   // parent event name (e.g. "What will happen before GTA VI?"), group_title is
   // this sub-market's outcome label (e.g. "50+ bps decrease"). Null otherwise.

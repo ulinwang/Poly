@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
   Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers,
+  ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '../lib/api';
@@ -343,23 +344,43 @@ function marketIconBg(slug: string): string {
   return bgs[hashString(slug) % bgs.length];
 }
 
+// Convert a YES probability (0..1) to whole cents. Returns null for null/NaN
+// input so callers can render a non-misleading placeholder.
+function toCents(p: number | null | undefined): number | null {
+  if (p == null || !Number.isFinite(p)) return null;
+  return Math.round(p * 100);
+}
+
+// Square thumbnail that shows a real image when available, falling back to a
+// deterministic emoji color block (keyed by slug) if the URL is empty or the
+// image fails to load.
+function Thumbnail({
+  src, seed, size = 'w-12 h-12 text-xl',
+}: { src?: string | null; seed: string; size?: string }) {
+  const [failed, setFailed] = useState(false);
+  const showImg = !!src && !failed;
+  if (showImg) {
+    return (
+      <img
+        src={src!}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className={`${size} rounded-xl object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-700`}
+      />
+    );
+  }
+  return (
+    <div className={`${size} rounded-xl flex-shrink-0 flex items-center justify-center ${marketIconBg(seed)}`}>
+      {marketIcon(seed)}
+    </div>
+  );
+}
+
 const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
-  const sparkline = useMemo(() => {
-    const seed = hashString(market.slug);
-    const rng = (n: number) => {
-      const x = Math.sin(seed + n) * 10000;
-      return x - Math.floor(x);
-    };
-    return Array.from({ length: 20 }, (_, i) => 30 + rng(i) * 50);
-  }, [market.slug]);
-
-  const yesPrice = useMemo(() => {
-    const h = hashString(market.slug + 'yes');
-    return (h % 100);
-  }, [market.slug]);
-
-  const icon = marketIcon(market.slug);
-  const iconBg = marketIconBg(market.slug);
+  const yesCents = toCents(market.yes_price);
+  const change = market.price_change_24h;
+  const hasChange = change != null && Number.isFinite(change);
 
   return (
     <a
@@ -368,9 +389,7 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
     >
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl ${iconBg}`}>
-          {icon}
-        </div>
+        <Thumbnail src={market.icon_url} seed={market.slug} />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
             {market.question || market.slug}
@@ -386,27 +405,40 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
         </div>
       </div>
 
-      {/* Yes / No prices */}
+      {/* Yes / No prices (real Polymarket quote; — when no live quote) */}
       <div className="flex items-center gap-3">
         <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
           <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Yes</div>
-          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{yesPrice}¢</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+            {yesCents == null ? '—' : `${yesCents}¢`}
+          </div>
         </div>
         <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
           <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">No</div>
-          <div className="text-lg font-bold text-rose-700 dark:text-rose-300">{100 - yesPrice}¢</div>
+          <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
+            {yesCents == null ? '—' : `${100 - yesCents}¢`}
+          </div>
         </div>
       </div>
 
-      {/* Sparkline */}
-      <div className="h-8 flex items-end gap-[3px]">
-        {sparkline.map((h, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-sm bg-primary-200/70 dark:bg-primary-800/40"
-            style={{ height: `${h}%` }}
-          />
-        ))}
+      {/* 24h change (real). No fabricated sparkline. */}
+      <div className="h-5 flex items-center">
+        {hasChange ? (
+          <span
+            className={`inline-flex items-center gap-1 text-xs font-medium ${
+              change! >= 0
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-rose-600 dark:text-rose-400'
+            }`}
+          >
+            {change! >= 0
+              ? <ArrowUpRight className="w-3.5 h-3.5" />
+              : <ArrowDownRight className="w-3.5 h-3.5" />}
+            {change! >= 0 ? '+' : ''}{(change! * 100).toFixed(1)}¢ 24h
+          </span>
+        ) : (
+          <span className="text-xs text-surface-300 dark:text-surface-600">—</span>
+        )}
       </div>
 
       {/* Footer */}
@@ -424,9 +456,9 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
 const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
   const outcomes = group.markets.slice(0, 4);
   const extra = group.markets.length - outcomes.length;
-  const icon = marketIcon(group.eventSlug);
-  const iconBg = marketIconBg(group.eventSlug);
   const target = group.markets[0]?.slug ?? '';
+  // Prefer the parent event image, then the first sub-market's own image.
+  const headerSrc = group.markets[0]?.event_icon || group.markets[0]?.icon_url;
 
   return (
     <a
@@ -435,9 +467,7 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
     >
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className={`w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center text-xl ${iconBg}`}>
-          {icon}
-        </div>
+        <Thumbnail src={headerSrc} seed={group.eventSlug} />
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100 line-clamp-2 leading-snug">
             {group.title}
@@ -457,7 +487,7 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
       {/* Outcome list with mini Yes prices */}
       <div className="space-y-1.5">
         {outcomes.map((m) => {
-          const yesPrice = hashString(m.slug + 'yes') % 100;
+          const cents = toCents(m.yes_price);
           return (
             <div
               key={m.slug}
@@ -467,7 +497,7 @@ const EventCard = memo(function EventCard({ group }: { group: EventItem }) {
                 {m.group_title || m.question || m.slug}
               </span>
               <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex-shrink-0">
-                {yesPrice}¢
+                {cents == null ? '—' : `${cents}¢`}
               </span>
             </div>
           );
