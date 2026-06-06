@@ -57,6 +57,7 @@ const zh: Dict = {
   'market.change24h': '24h',
   'market.outcomes': '{count} 个结果',
   'market.moreOutcomes': '+{count} 个结果',
+  'market.multiOutcome': '多结果',
   'market.multiOutcomeEvent': '多结果事件',
 
   // ── Market detail ──────────────────────────────────────────────────
@@ -66,6 +67,7 @@ const zh: Dict = {
   'detail.notFound': '未找到该市场',
   'detail.otherOutcomes': '该事件的其它结果',
   'detail.multiOutcomeHint': '这是一个多结果事件。仿真针对当前选中的单个结果子市场，点击下方结果可切换。',
+  'detail.outcomesTitle': '结果与概率',
   'detail.noQuote': '暂无行情',
   'detail.marketExperiments': '该市场的实验',
   'detail.noExperiments': '还没有针对该市场的实验，在下方新建一个。',
@@ -254,6 +256,7 @@ const en: Dict = {
   'market.change24h': '24h',
   'market.outcomes': '{count} outcomes',
   'market.moreOutcomes': '+{count} outcomes',
+  'market.multiOutcome': 'Multi-outcome',
   'market.multiOutcomeEvent': 'Multi-outcome event',
 
   // ── Market detail ──────────────────────────────────────────────────
@@ -263,6 +266,7 @@ const en: Dict = {
   'detail.notFound': 'Market not found',
   'detail.otherOutcomes': 'Other outcomes in this event',
   'detail.multiOutcomeHint': 'This is a multi-outcome event. The simulation targets the single selected outcome sub-market; click an outcome below to switch.',
+  'detail.outcomesTitle': 'Outcomes & probabilities',
   'detail.noQuote': 'No quote',
   'detail.marketExperiments': 'Experiments for this market',
   'detail.noExperiments': 'No experiments for this market yet. Start one below.',

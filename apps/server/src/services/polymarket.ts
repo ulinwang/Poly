@@ -1,4 +1,4 @@
-import type { Market, MarketDetail } from '../types';
+import type { Market, MarketDetail, OutcomeEntry } from '../types';
 
 interface GammaTag {
   label?: string;
@@ -19,11 +19,15 @@ export interface GammaMarket {
   image?: string;
   icon?: string;
   // Live pricing fields from Gamma. outcomePrices is usually a JSON-encoded
-  // string array (e.g. "[\"0.62\",\"0.38\"]") ordered [Yes, No].
+  // string array (e.g. "[\"0.62\",\"0.38\"]") ordered to match `outcomes`.
   bestBid?: number;
   bestAsk?: number;
   lastTradePrice?: number;
   outcomePrices?: string;
+  // Outcome labels as a JSON-encoded string array. Binary markets are
+  // '["Yes","No"]'; match/multi-choice markets carry real names, e.g.
+  // '["G2","Monte"]' or '["against All authority","INFURITY Gaming"]'.
+  outcomes?: string;
   oneDayPriceChange?: number;
   tags?: GammaTag[];
   events?: Array<{ slug?: string; title?: string; image?: string; description?: string }>;
@@ -157,8 +161,44 @@ export function deriveYesPrice(m: GammaMarket): number | null {
   return null;
 }
 
+// Parse a Gamma JSON-encoded string array (e.g. outcomes / outcomePrices).
+// Returns the raw string elements, or an empty array on malformed input.
+function parseStringArray(raw: string | undefined): string[] {
+  if (typeof raw !== 'string' || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.map((x) => String(x));
+  } catch {
+    // Malformed JSON — treat as no data.
+  }
+  return [];
+}
+
+// Pair each outcome label with its corresponding price by index. A label with
+// no parseable price (or no price at that index) gets price: null so the UI can
+// render "—" rather than a fabricated number.
+export function deriveOutcomes(m: GammaMarket): OutcomeEntry[] {
+  const labels = parseStringArray(m.outcomes);
+  const prices = parseStringArray(m.outcomePrices);
+  return labels.map((label, i) => {
+    const p = parseFloat(prices[i] ?? '');
+    return { label, price: Number.isFinite(p) ? p : null };
+  });
+}
+
+// A market is binary when its outcomes are exactly ["Yes","No"]
+// (case-insensitive, in that order).
+export function isBinaryMarket(outcomes: OutcomeEntry[]): boolean {
+  return (
+    outcomes.length === 2 &&
+    outcomes[0].label.trim().toLowerCase() === 'yes' &&
+    outcomes[1].label.trim().toLowerCase() === 'no'
+  );
+}
+
 function normalizeMarket(m: GammaMarket): Market {
   const isLive = m.active === true && m.closed !== true;
+  const outcomesList = deriveOutcomes(m);
   return {
     slug: m.slug || '',
     question: m.question || '',
@@ -184,6 +224,12 @@ function normalizeMarket(m: GammaMarket): Market {
     yes_price: deriveYesPrice(m),
     // 24h YES price change from Gamma, or null.
     price_change_24h: m.oneDayPriceChange ?? null,
+    // Real outcome labels paired with live prices. For binary markets this is
+    // [{Yes,..},{No,..}]; for match/multi-choice it holds the actual names.
+    outcomes_list: outcomesList,
+    // True only when outcomes are exactly ["Yes","No"]. Multi-result markets
+    // (team/option names) are false and must not be rendered as Yes/No.
+    is_binary: isBinaryMarket(outcomesList),
   };
 }
 
@@ -211,9 +257,12 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
   const sub = m.markets?.[0];
   const tick = sub?.minimumTickSize ?? 0.01;
   const fee = sub?.takerBaseFee ?? 0;
-  const outcomes = sub?.outcomes ?? [];
-  const yes = outcomes.find((o) => (o.outcome || '').toLowerCase() === 'yes');
-  const no = outcomes.find((o) => (o.outcome || '').toLowerCase() === 'no');
+  const subOutcomes = sub?.outcomes ?? [];
+  const yes = subOutcomes.find((o) => (o.outcome || '').toLowerCase() === 'yes');
+  const no = subOutcomes.find((o) => (o.outcome || '').toLowerCase() === 'no');
+  // Real outcome labels + live prices from the top-level Gamma fields.
+  const outcomesList = deriveOutcomes(m);
+  const binary = isBinaryMarket(outcomesList);
   return {
     slug: m.slug || '',
     question: m.question || '',
@@ -227,13 +276,19 @@ export async function getPolymarketMarket(slug: string): Promise<MarketDetail | 
     description: m.description || '',
     yes_token_id: yes?.token_id || '',
     no_token_id: no?.token_id || '',
-    outcomes: ['Yes', 'No'],
+    // Real outcome labels when available (e.g. ["G2","Monte"]); fall back to
+    // the binary default so existing callers keep a non-empty list.
+    outcomes: outcomesList.length > 0 ? outcomesList.map((o) => o.label) : ['Yes', 'No'],
     categories: extractCategories(m),
     icon_url: m.image || m.icon || undefined,
     event_icon: m.events?.[0]?.image || null,
     event_description: m.events?.[0]?.description || null,
     yes_price: deriveYesPrice(m),
     price_change_24h: m.oneDayPriceChange ?? null,
+    // Real outcome labels + live prices; is_binary distinguishes Yes/No markets
+    // from multi-result (match/multi-choice) ones.
+    outcomes_list: outcomesList,
+    is_binary: binary,
     // Polymarket groups markets under an event; the event slug is what the
     // public site routes on (polymarket.com/event/<event_slug>).
     event_slug: m.events?.[0]?.slug || null,

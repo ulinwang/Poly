@@ -381,11 +381,33 @@ function Thumbnail({
   );
 }
 
+// Whether a standalone market is multi-result (not a binary Yes/No market).
+// Prefers the backend is_binary flag; falls back to inspecting outcomes_list so
+// the UI stays correct even if the flag is absent on older payloads.
+function isMultiOutcomeMarket(market: Market): boolean {
+  if (market.is_binary === true) return false;
+  const list = market.outcomes_list;
+  if (list && list.length > 0) {
+    if (list.length !== 2) return true;
+    const [a, b] = list;
+    const binary =
+      a.label.trim().toLowerCase() === 'yes' &&
+      b.label.trim().toLowerCase() === 'no';
+    return !binary;
+  }
+  // No outcome info → treat as binary (preserves prior Yes/No behaviour).
+  return false;
+}
+
 const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
   const { t } = useI18n();
   const yesCents = toCents(market.yes_price);
   const change = market.price_change_24h;
   const hasChange = change != null && Number.isFinite(change);
+  const multi = isMultiOutcomeMarket(market);
+  const outcomes = market.outcomes_list ?? [];
+  const shownOutcomes = outcomes.slice(0, 4);
+  const extraOutcomes = outcomes.length - shownOutcomes.length;
 
   return (
     <a
@@ -403,6 +425,12 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
             <span className={`badge text-[10px] ${market.is_live ? 'badge-live' : 'badge-resolved'}`}>
               {market.is_live ? t('market.open') : t('market.resolved')}
             </span>
+            {multi && (
+              <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
+                <Layers className="w-3 h-3" />
+                {t('market.outcomes', { count: outcomes.length })}
+              </span>
+            )}
             <span className="text-xs text-surface-400">
               {formatVol(market.volume)} {t('market.vol')}
             </span>
@@ -410,21 +438,47 @@ const MarketCard = memo(function MarketCard({ market }: { market: Market }) {
         </div>
       </div>
 
-      {/* Yes / No prices (real Polymarket quote; — when no live quote) */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('market.yes')}</div>
-          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
-            {yesCents == null ? '—' : `${yesCents}¢`}
+      {multi ? (
+        /* Multi-result market: list real outcome labels with their live prices
+           (no forced Yes/No). Shows up to 4, then "+N". */
+        <div className="space-y-1.5">
+          {shownOutcomes.map((o, i) => {
+            const cents = toCents(o.price);
+            return (
+              <div
+                key={`${o.label}:${i}`}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-surface-50 dark:bg-surface-700/40"
+              >
+                <span className="text-xs text-surface-700 dark:text-surface-200 truncate flex-1">
+                  {o.label}
+                </span>
+                <span className="text-xs font-semibold text-primary-600 dark:text-primary-400 flex-shrink-0">
+                  {cents == null ? '—' : `${cents}¢`}
+                </span>
+              </div>
+            );
+          })}
+          {extraOutcomes > 0 && (
+            <div className="px-2.5 text-xs text-surface-400">{t('market.moreOutcomes', { count: extraOutcomes })}</div>
+          )}
+        </div>
+      ) : (
+        /* Binary market: Yes / No prices (real Polymarket quote; — when none) */
+        <div className="flex items-center gap-3">
+          <div className="flex-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2 text-center">
+            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('market.yes')}</div>
+            <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+              {yesCents == null ? '—' : `${yesCents}¢`}
+            </div>
+          </div>
+          <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
+            <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t('market.no')}</div>
+            <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
+              {yesCents == null ? '—' : `${100 - yesCents}¢`}
+            </div>
           </div>
         </div>
-        <div className="flex-1 bg-rose-50 dark:bg-rose-900/20 rounded-lg px-3 py-2 text-center">
-          <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t('market.no')}</div>
-          <div className="text-lg font-bold text-rose-700 dark:text-rose-300">
-            {yesCents == null ? '—' : `${100 - yesCents}¢`}
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* 24h change (real). No fabricated sparkline. */}
       <div className="h-5 flex items-center">
