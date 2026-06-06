@@ -21,6 +21,12 @@
 
 非目标（YAGNI）：数据库迁移框架、缓存可观测性、Redis、生产部署加固等——本次不做。
 
+### 命名与清理（已确认）
+
+- **品牌改名为 "Poly"**：前端 `TopNav.tsx`、`index.html` 标题、`pyproject.toml` 包名等 "PolyMetl"/"polymetl" 字串改为 "Poly"/"poly"。**不改代码 import（Python 按 `agent`/`environment`/`webapp` 导入，与名称无关），不改目录名。**
+- **暂不删除**：`webapp/backend/`（已废弃 Python 后端）、`webapp/server.py`/`explorer.py`（v12 旧后端）、根目录 `polymetl-backup-20260603-152256/`（6.8G 备份）全部保留。
+- **数据分析流水线不动**：`experiments/`（含 `analysis/`、`plots/`）、`scripts/`（thesis_v14/v15 分析、`clustering/`、RQ 作图、`build_thesis_docx`/`render_thesis`）、`viz/`、`comparison/` 是论文研究主体，与网站解耦（网站不 import 它们），本次重构完全不触碰。
+
 ## 设计
 
 ### A. 前端样式基建 — Tailwind v4 迁移
