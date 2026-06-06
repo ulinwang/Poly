@@ -143,6 +143,14 @@ export default function MarketDetail() {
   // Event header only when nothing is selected; once an outcome is chosen the
   // market has been refetched to that sub-market, so show its own fields.
   const isMultiEvent = siblings.length > 1;
+  // A single (non-event-grouped) market whose own outcomes aren't binary Yes/No,
+  // e.g. "G2 vs Monte". We surface its real outcomes instead of pretending it's
+  // a Yes/No market. Skip when it's an event group (the siblings card covers it).
+  const ownOutcomes = market.outcomes_list ?? [];
+  const isMultiOutcomeMarket =
+    !isMultiEvent &&
+    market.is_binary === false &&
+    ownOutcomes.length > 0;
   const showEventHeader = isMultiEvent && selectedSlug == null;
   const headerTitle = (showEventHeader && market.event_title) || market.question || market.slug;
   const headerImage = (showEventHeader && market.event_icon) ? market.event_icon : market.icon_url;
@@ -227,6 +235,47 @@ export default function MarketDetail() {
           </span>
         </div>
       </div>
+
+      {/* Outcomes & probabilities for a standalone multi-result market
+          (e.g. "G2 vs Monte"). Lists the real outcome labels with their live
+          Polymarket prices rather than a misleading Yes/No split. */}
+      {isMultiOutcomeMarket && (
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-4 h-4 text-primary-500" />
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+              {t('detail.outcomesTitle')}
+            </h3>
+            <span className="badge text-[10px] inline-flex items-center gap-1 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
+              {t('market.outcomes', { count: ownOutcomes.length })}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {ownOutcomes.map((o, i) => {
+              const hasPrice = o.price != null && Number.isFinite(o.price);
+              const pct = hasPrice ? Math.round(o.price! * 100) : null;
+              return (
+                <div key={`${o.label}:${i}`} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-surface-700 dark:text-surface-200 truncate">
+                      {o.label}
+                    </span>
+                    <span className="text-sm font-semibold text-primary-600 dark:text-primary-400 flex-shrink-0">
+                      {pct == null ? '—' : `${pct}¢`}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-surface-100 dark:bg-surface-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary-400/80 dark:bg-primary-500/60"
+                      style={{ width: `${pct ?? 0}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Sibling outcomes (multi-market event). Each links to its own detail
           page; the simulation always targets the single selected sub-market. */}

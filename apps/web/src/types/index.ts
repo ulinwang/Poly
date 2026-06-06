@@ -1,3 +1,11 @@
+// A single market outcome label paired with its live probability (0..1), or
+// null when no quote is available. For binary markets this is Yes/No; for
+// match/multi-choice markets these are the real option names (e.g. "G2").
+export interface OutcomeEntry {
+  label: string;
+  price: number | null;
+}
+
 export interface Market {
   slug: string;
   question: string;
@@ -7,6 +15,13 @@ export interface Market {
   end_date_iso: string | null;
   n_holders: number | null;
   categories?: string[];
+  // Real outcome labels + live prices, in API order. Binary markets pair
+  // Yes/No; multi-result markets carry team/option names. May be empty when the
+  // upstream feed omitted outcomes.
+  outcomes_list?: OutcomeEntry[];
+  // True only when outcomes are exactly ["Yes","No"] (case-insensitive). When
+  // false, the market is multi-result and must not be rendered as Yes/No.
+  is_binary?: boolean;
   icon_url?: string;
   // Parent event thumbnail (used for grouped event cards). Null if absent.
   event_icon?: string | null;
