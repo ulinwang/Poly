@@ -105,6 +105,14 @@ export const api = {
       { method: 'POST' },
     ),
 
+  // Full recorded event history of a finished run, for the replay player.
+  // Throws (HTTP 404) when the run has no recorded event log.
+  getReplay: (id: string) =>
+    fetchJson<{
+      events: { kind: string; data: Record<string, unknown> }[];
+      total: number;
+    }>(`/api/v1/experiments/${id}/replay`),
+
   // Settings
   // Response carries api_key_set (boolean) and never the plaintext api_key.
   getApiSettings: () =>

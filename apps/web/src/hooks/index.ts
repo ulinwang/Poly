@@ -1,22 +1,34 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useExperimentStore } from '../stores';
-import type { AgentSnapshot } from '../types';
+import { applyEvent } from '../lib/applyEvent';
+import { api } from '../lib/api';
+
+/**
+ * Domain events whose only effect is to mutate store state — dispatched
+ * uniformly through `applyEvent` (the same mapping the replay player uses). The
+ * lifecycle events (done/error/cancelled/paused/end/ping) are handled
+ * separately below because they also drive running/connection state.
+ */
+const SSE_DOMAIN_EVENTS = [
+  'run_started',
+  'market_resolved',
+  'priors_ready',
+  'population_built',
+  'env_ready',
+  'tick_started',
+  'agent_decision',
+  'tick_metrics',
+  'agent_snapshots',
+  'agent_decision_error',
+  'tick_finished',
+  'settled',
+  'run_resumed',
+] as const;
 
 export function useSSE(runId: string | null, replay: number = 1) {
-  const addEvent = useExperimentStore((s) => s.addEvent);
-  const addDecision = useExperimentStore((s) => s.addDecision);
-  const addTickLog = useExperimentStore((s) => s.addTickLog);
-  const setMetrics = useExperimentStore((s) => s.setMetrics);
-  const addTickMetrics = useExperimentStore((s) => s.addTickMetrics);
-  const addAgentSnapshots = useExperimentStore((s) => s.addAgentSnapshots);
   const setRunning = useExperimentStore((s) => s.setRunning);
   const setPaused = useExperimentStore((s) => s.setPaused);
   const setError = useExperimentStore((s) => s.setError);
-
-  const nowStr = useCallback(() => {
-    const d = new Date();
-    return d.toTimeString().slice(0, 8);
-  }, []);
 
   useEffect(() => {
     if (!runId) return;
@@ -32,155 +44,27 @@ export function useSSE(runId: string | null, replay: number = 1) {
       setRunning(true);
     };
 
-    es.addEventListener('run_started', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'run_started', data });
-      setPaused(false);
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'start', msg: `Run started: ${data.slug}`, kind: 'info' });
-    });
-
-    es.addEventListener('market_resolved', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'market_resolved', data });
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'market', msg: data.question || 'Market resolved', kind: 'info' });
-    });
-
-    es.addEventListener('priors_ready', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'priors_ready', data });
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'priors', msg: `Priors ready: μ=${data.signal_mu?.toFixed(3) || '?'}`, kind: 'info' });
-    });
-
-    es.addEventListener('population_built', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'population_built', data });
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'agents', msg: `${data.n_agents} agents built`, kind: 'info' });
-    });
-
-    es.addEventListener('env_ready', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'env_ready', data });
-      setMetrics({
-        yesMid: data.yes_mid_post_seed ?? 0.5,
-        totalTicks: data.n_ticks ?? 0,
+    // Pure store-mutating events all flow through the shared dispatcher so the
+    // kind→store mapping is defined once (also reused by the replay player).
+    for (const kind of SSE_DOMAIN_EVENTS) {
+      es.addEventListener(kind, (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        applyEvent(useExperimentStore.getState(), kind, data);
       });
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'env', msg: `Env ready: YES=${data.yes_mid_post_seed?.toFixed(3) || '?'}`, kind: 'info' });
-    });
+    }
 
-    es.addEventListener('tick_started', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'tick_started', data });
-      setMetrics({ currentTick: data.tick });
-    });
-
-    es.addEventListener('agent_decision', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'agent_decision', data });
-      addDecision({
-        id: Date.now() + Math.random(),
-        agent_id: data.agent_id,
-        tick: data.tick,
-        persona_type: data.persona_type,
-        order_type: data.order_type,
-        side: data.side,
-        outcome: data.outcome,
-        price: data.price,
-        size_usd: data.size_usd,
-        reasoning: data.reasoning,
-        api_latency_ms: data.api_latency_ms,
-        api_error: data.api_error,
-      });
-    });
-
-    // Macro per-tick metrics (one row per tick) → drives the macro chart + cards.
-    es.addEventListener('tick_metrics', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'tick_metrics', data });
-      addTickMetrics({
-        tick: data.tick,
-        yes_mid: data.yes_mid,
-        no_mid: data.no_mid,
-        parity_gap: data.parity_gap,
-        n_fills: data.n_fills,
-        ret: data.ret,
-      });
-    });
-
-    // Micro per-agent snapshots (one envelope per tick carrying every agent's row).
-    es.addEventListener('agent_snapshots', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'agent_snapshots', data });
-      const agents = Array.isArray(data.agents) ? (data.agents as AgentSnapshot[]) : [];
-      addAgentSnapshots(agents);
-    });
-
-    es.addEventListener('agent_decision_error', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'agent_decision_error', data });
-      addTickLog({
-        id: Date.now(),
-        time: nowStr(),
-        label: 'dec_err',
-        msg: `Agent ${data.agent_id} tick ${data.tick}: ${data.message}`,
-        kind: 'error',
-      });
-    });
-
-    es.addEventListener('tick_finished', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'tick_finished', data });
-      const yesMid = data.yes_mid ?? 0.5;
-      setMetrics({
-        yesMid,
-        nFills: data.n_fills ?? 0,
-        nActions: data.n_actions ?? 0,
-        lastTickElapsed: data.elapsed_s ?? 0,
-      });
-      // Append to history
-      const store = useExperimentStore.getState();
-      const history = [...store.metrics.yesMidHistory, yesMid];
-      if (history.length > 500) history.shift();
-      setMetrics({ yesMidHistory: history });
-      addTickLog({
-        id: Date.now(),
-        time: nowStr(),
-        label: 'tick',
-        msg: `Tick ${data.tick}: YES=${yesMid.toFixed(3)} fills=${data.n_fills} actions=${data.n_actions}`,
-        kind: 'info',
-      });
-    });
-
-    es.addEventListener('settled', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'settled', data });
-      setMetrics({
-        yesMid: data.yes_mid_final ?? 0.5,
-        nFills: data.n_fills ?? 0,
-        nActions: data.n_actions ?? 0,
-      });
-      addTickLog({
-        id: Date.now(),
-        time: nowStr(),
-        label: 'settled',
-        msg: `Settled: YES=${data.yes_mid_final?.toFixed(3) || '?'} fills=${data.n_fills}`,
-        kind: 'info',
-      });
-    });
-
+    // ── Lifecycle events: apply the event, then drive connection state ──
     es.addEventListener('done', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
-      addEvent({ event: 'done', data });
+      applyEvent(useExperimentStore.getState(), 'done', data);
       setRunning(false);
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'done', msg: 'Simulation complete', kind: 'info' });
       es.close();
     });
 
     es.addEventListener('error', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        addEvent({ event: 'error', data });
-        setError(data.message || 'Unknown error');
-        addTickLog({ id: Date.now(), time: nowStr(), label: 'error', msg: data.message, kind: 'error' });
+        applyEvent(useExperimentStore.getState(), 'error', data);
       } catch {
         setError('SSE connection error');
       }
@@ -189,27 +73,17 @@ export function useSSE(runId: string | null, replay: number = 1) {
 
     es.addEventListener('cancelled', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
-      addEvent({ event: 'cancelled', data });
+      applyEvent(useExperimentStore.getState(), 'cancelled', data);
       setRunning(false);
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'cancel', msg: `Cancelled at tick ${data.tick ?? '?'}`, kind: 'warn' });
       es.close();
     });
 
     es.addEventListener('paused', (e: MessageEvent) => {
       const data = JSON.parse(e.data);
-      addEvent({ event: 'paused', data });
+      applyEvent(useExperimentStore.getState(), 'paused', data);
       setRunning(false);
       setPaused(true);
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'pause', msg: `Paused at tick ${data.tick ?? '?'} (checkpointed)`, kind: 'warn' });
       es.close();
-    });
-
-    es.addEventListener('run_resumed', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      addEvent({ event: 'run_resumed', data });
-      setPaused(false);
-      setRunning(true);
-      addTickLog({ id: Date.now(), time: nowStr(), label: 'resume', msg: `Resumed from tick ${data.resume_tick ?? '?'}`, kind: 'info' });
     });
 
     es.addEventListener('end', () => {
@@ -230,7 +104,7 @@ export function useSSE(runId: string | null, replay: number = 1) {
     return () => {
       es.close();
     };
-  }, [runId, replay, addEvent, addDecision, addTickLog, setMetrics, addTickMetrics, addAgentSnapshots, setRunning, setPaused, setError, nowStr]);
+  }, [runId, replay, setRunning, setPaused, setError]);
 }
 
 export function useDebounce<T>(value: T, delay: number = 300): T {
@@ -259,4 +133,190 @@ export function useFormatNumber() {
     if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'k';
     return n.toFixed(0);
   }, []);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Replay player
+// ─────────────────────────────────────────────────────────────────────────
+
+export type ReplayEvent = { kind: string; data: Record<string, unknown> };
+export type ReplaySpeed = 1 | 2 | 4;
+
+export interface ReplayPlayer {
+  /** True while the recording is being fetched. */
+  loading: boolean;
+  /** True when the run has no recorded event log (nothing to replay). */
+  empty: boolean;
+  /** Whether the timer is currently advancing. */
+  playing: boolean;
+  /** Playback speed multiplier. */
+  speed: ReplaySpeed;
+  /** Highest tick applied so far (−1 = only the setup/pre-tick events). */
+  currentTick: number;
+  /** Highest tick index present in the recording (−1 if no ticks). */
+  maxTick: number;
+  play: () => void;
+  pause: () => void;
+  /** Reset to the start (only pre-tick setup applied). */
+  restart: () => void;
+  /** Apply everything at once and stop at the end. */
+  skipToEnd: () => void;
+  /** Jump to a tick: reset, then re-apply every event up to and incl. T. */
+  seek: (tick: number) => void;
+  setSpeed: (s: ReplaySpeed) => void;
+}
+
+/** Per-tick base interval (ms) at 1x; divided by the speed multiplier. */
+const REPLAY_BASE_INTERVAL_MS = 700;
+
+/**
+ * Replay player for a finished run. Fetches the full recorded event log once,
+ * groups events by tick, and applies them to the experiment store through the
+ * shared `applyEvent` dispatcher — the same mapping the live SSE hook uses, so
+ * the replayed UI state is identical to what was shown live.
+ *
+ * Events that arrive before the first `tick_started` (run_started, env_ready,
+ * population_built, …) are bucketed under tick −1 and always applied first.
+ * Seeking re-applies from a clean store so state is always consistent with the
+ * target tick regardless of direction.
+ */
+export function useReplayPlayer(runId: string | null, enabled: boolean): ReplayPlayer {
+  const resetSimulation = useExperimentStore((s) => s.resetSimulation);
+
+  const [events, setEvents] = useState<ReplayEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [empty, setEmpty] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<ReplaySpeed>(1);
+  const [currentTick, setCurrentTick] = useState(-1);
+
+  // Group event indices by tick. -1 holds setup events with no tick field.
+  const { ticks, eventsByTick, maxTick } = useMemo(() => {
+    const byTick = new Map<number, ReplayEvent[]>();
+    for (const ev of events) {
+      const raw = ev.data?.tick;
+      const tick = typeof raw === 'number' ? raw : -1;
+      const bucket = byTick.get(tick);
+      if (bucket) bucket.push(ev);
+      else byTick.set(tick, [ev]);
+    }
+    const sorted = [...byTick.keys()].sort((a, b) => a - b);
+    const realTicks = sorted.filter((t) => t >= 0);
+    return {
+      ticks: sorted,
+      eventsByTick: byTick,
+      maxTick: realTicks.length ? realTicks[realTicks.length - 1] : -1,
+    };
+  }, [events]);
+
+  // Fetch the recording when entering replay mode.
+  useEffect(() => {
+    if (!enabled || !runId) return;
+    let cancelled = false;
+    setLoading(true);
+    setEmpty(false);
+    setPlaying(false);
+    setCurrentTick(-1);
+    api.getReplay(runId)
+      .then((res) => {
+        if (cancelled) return;
+        setEvents(res.events);
+        setEmpty(res.events.length === 0);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // 404 (no log) or any fetch failure → nothing to replay.
+        setEvents([]);
+        setEmpty(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [enabled, runId]);
+
+  // Apply every event from (after `fromTick`) up to and including `toTick`.
+  // `fromTick = -2` means start from the very beginning (incl. setup bucket).
+  const applyRange = useCallback((fromTick: number, toTick: number) => {
+    const store = useExperimentStore.getState();
+    for (const t of ticks) {
+      if (t > fromTick && t <= toTick) {
+        for (const ev of eventsByTick.get(t) ?? []) {
+          applyEvent(store, ev.kind, ev.data);
+        }
+      }
+    }
+  }, [ticks, eventsByTick]);
+
+  const seek = useCallback((tick: number) => {
+    const clamped = Math.max(-1, Math.min(tick, maxTick));
+    resetSimulation();
+    applyRange(-2, clamped); // -2: include the setup bucket (tick -1)
+    setCurrentTick(clamped);
+    setPlaying(false);
+  }, [applyRange, maxTick, resetSimulation]);
+
+  const restart = useCallback(() => {
+    resetSimulation();
+    applyRange(-2, -1); // setup events only
+    setCurrentTick(-1);
+    setPlaying(false);
+  }, [applyRange, resetSimulation]);
+
+  const skipToEnd = useCallback(() => {
+    seek(maxTick);
+  }, [seek, maxTick]);
+
+  const play = useCallback(() => {
+    if (empty || maxTick < 0) return;
+    // Restart from the top if we're already at the end.
+    if (currentTick >= maxTick) {
+      resetSimulation();
+      applyRange(-2, -1);
+      setCurrentTick(-1);
+    }
+    setPlaying(true);
+  }, [empty, maxTick, currentTick, resetSimulation, applyRange]);
+
+  const pause = useCallback(() => setPlaying(false), []);
+
+  // On first load (or re-fetch), apply the setup bucket so the page isn't blank.
+  const loadedRef = useRef<ReplayEvent[] | null>(null);
+  useEffect(() => {
+    if (loading || empty || events.length === 0) return;
+    if (loadedRef.current === events) return;
+    loadedRef.current = events;
+    resetSimulation();
+    const store = useExperimentStore.getState();
+    for (const ev of eventsByTick.get(-1) ?? []) {
+      applyEvent(store, ev.kind, ev.data);
+    }
+    setCurrentTick(-1);
+  }, [loading, empty, events, eventsByTick, resetSimulation]);
+
+  // Playback timer: advance one tick per interval.
+  useEffect(() => {
+    if (!playing) return;
+    const interval = REPLAY_BASE_INTERVAL_MS / speed;
+    const timer = setInterval(() => {
+      setCurrentTick((cur) => {
+        const next = cur + 1;
+        if (next > maxTick) {
+          setPlaying(false);
+          return cur;
+        }
+        const store = useExperimentStore.getState();
+        for (const ev of eventsByTick.get(next) ?? []) {
+          applyEvent(store, ev.kind, ev.data);
+        }
+        return next;
+      });
+    }, interval);
+    return () => clearInterval(timer);
+  }, [playing, speed, maxTick, eventsByTick]);
+
+  return {
+    loading, empty, playing, speed, currentTick, maxTick,
+    play, pause, restart, skipToEnd, seek, setSpeed,
+  };
 }

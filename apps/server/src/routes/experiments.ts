@@ -52,6 +52,34 @@ async function replayEventLog(
   return true;
 }
 
+/**
+ * Read a run's full NDJSON event log into memory as an ordered array of
+ * `{ kind, data }` events. `__end__` sentinels and malformed lines are skipped.
+ * Returns null if no log file exists for the run. Unlike the SSE streaming
+ * replay above this materialises everything at once — used by the JSON /replay
+ * endpoint that the front-end replay player consumes.
+ */
+async function readEventLog(
+  runId: string,
+): Promise<{ kind: string; data: Record<string, unknown> }[] | null> {
+  const logPath = eventLogPathFor(runId);
+  if (!fs.existsSync(logPath)) return null;
+  const events: { kind: string; data: Record<string, unknown> }[] = [];
+  const stream = fs.createReadStream(logPath, { encoding: 'utf8' });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const ev = JSON.parse(line) as { kind: string; data: Record<string, unknown> };
+      if (ev.kind === '__end__') continue;
+      events.push(ev);
+    } catch {
+      // ignore malformed lines
+    }
+  }
+  return events;
+}
+
 function rowToExperiment(row: ExperimentRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -308,6 +336,20 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     });
 
     return { run_id: expId, resumed: true };
+  });
+
+  // Full event history of a finished run as a single JSON array, for the
+  // front-end replay player. Reads the durable NDJSON log (the same source the
+  // SSE replay streams from), filtering out `__end__` sentinels. Not truncated.
+  // 404 when no log exists (e.g. legacy runs that predate event logging).
+  app.get('/:expId/replay', async (req, reply) => {
+    const { expId } = req.params as { expId: string };
+    const events = await readEventLog(expId);
+    if (events === null) {
+      reply.status(404);
+      return { message: 'No recorded event log for this experiment' };
+    }
+    return { events, total: events.length };
   });
 
   app.get('/:expId/events', async (req, reply) => {

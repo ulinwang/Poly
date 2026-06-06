@@ -3,10 +3,11 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Square, ArrowLeft, X, Pause, Play } from 'lucide-react';
+import { Square, ArrowLeft, X, Pause, Play, SkipForward, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
-import { useSSE, useFormatNumber } from '../hooks';
+import { useSSE, useFormatNumber, useReplayPlayer } from '../hooks';
+import type { ReplayPlayer, ReplaySpeed } from '../hooks';
 import { useI18n } from '../lib/i18n';
 import type { Experiment, AgentSnapshot, AgentDecision } from '../types';
 
@@ -38,8 +39,18 @@ export default function ExperimentLive() {
 
   const formatNumber = useFormatNumber();
 
-  // Connect SSE
-  useSSE(id || null);
+  // A finished run (anything that is no longer running) enters replay mode and
+  // reads its recorded event log instead of opening a live SSE stream. We only
+  // know the status after the experiment loads, so default to "not replay" until
+  // then to avoid prematurely treating a fresh/live run as a recording.
+  const status = experiment?.status;
+  const isReplay = status != null && status !== 'running';
+
+  // Live mode: stream SSE (only when not in replay mode). Replay mode: fetch the
+  // recording and drive playback. Both hooks are always called (rules of hooks);
+  // each is gated by a flag so only one is active at a time.
+  useSSE(isReplay ? null : id || null);
+  const replay = useReplayPlayer(id || null, isReplay);
 
   useEffect(() => {
     if (!id) return;
@@ -146,6 +157,11 @@ export default function ExperimentLive() {
               {experiment?.slug || id}
             </h1>
             <div className="flex items-center gap-2 text-xs text-surface-400">
+              {isReplay && (
+                <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
+                  {t('replay.badge')}
+                </span>
+              )}
               <span className={`badge ${running ? 'badge-live' : paused ? 'badge-warn' : 'badge-resolved'}`}>
                 {running
                   ? t('live.running')
@@ -193,6 +209,9 @@ export default function ExperimentLive() {
           {t('live.error', { msg: error })}
         </div>
       )}
+
+      {/* ── Replay player controls (finished runs only) ───────────────── */}
+      {isReplay && <ReplayControls replay={replay} />}
 
       {/* ── Top: horizontally scrollable agent strip ──────────────────── */}
       <AgentStrip
@@ -492,6 +511,97 @@ function StatCell({ label, value, accent }: { label: string; value: string; acce
     <div className="rounded-lg bg-surface-50 dark:bg-surface-800/50 p-2">
       <div className="text-[10px] text-surface-400">{label}</div>
       <div className={`text-sm font-bold mt-0.5 ${valueClass}`}>{value}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Replay controls
+// ─────────────────────────────────────────────────────────────────────────
+
+const REPLAY_SPEEDS: ReplaySpeed[] = [1, 2, 4];
+
+function ReplayControls({ replay }: { replay: ReplayPlayer }) {
+  const { t } = useI18n();
+
+  if (replay.loading) {
+    return (
+      <div className="card p-4 text-center text-sm text-surface-400">
+        {t('replay.loading')}
+      </div>
+    );
+  }
+  if (replay.empty) {
+    return (
+      <div className="card p-4 text-center text-sm text-surface-400">
+        {t('replay.empty')}
+      </div>
+    );
+  }
+
+  // Scrubber operates over ticks [-1 .. maxTick]; -1 = setup-only.
+  const sliderMax = Math.max(replay.maxTick, 0);
+  const sliderValue = Math.max(replay.currentTick, 0);
+  const tickLabel = t('replay.tickOf', {
+    current: replay.currentTick + 1,
+    total: replay.maxTick + 1,
+  });
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        {replay.playing ? (
+          <button onClick={replay.pause} className="btn-secondary flex items-center gap-2">
+            <Pause className="w-4 h-4" />
+            {t('replay.pause')}
+          </button>
+        ) : (
+          <button onClick={replay.play} className="btn-secondary flex items-center gap-2 text-primary-600">
+            <Play className="w-4 h-4" />
+            {t('replay.play')}
+          </button>
+        )}
+        <button onClick={replay.restart} className="btn-secondary flex items-center gap-2" title={t('replay.restart')}>
+          <RotateCcw className="w-4 h-4" />
+          <span className="hidden sm:inline">{t('replay.restart')}</span>
+        </button>
+        <button onClick={replay.skipToEnd} className="btn-secondary flex items-center gap-2" title={t('replay.skipToEnd')}>
+          <SkipForward className="w-4 h-4" />
+          <span className="hidden sm:inline">{t('replay.skipToEnd')}</span>
+        </button>
+
+        {/* Speed selector */}
+        <div className="flex items-center gap-1 ml-2">
+          <span className="text-xs text-surface-400">{t('replay.speed')}</span>
+          {REPLAY_SPEEDS.map((s) => (
+            <button
+              key={s}
+              onClick={() => replay.setSpeed(s)}
+              className={`px-2 py-1 rounded-md text-xs font-medium transition-colors ${
+                replay.speed === s
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+              }`}
+            >
+              {s}x
+            </button>
+          ))}
+        </div>
+
+        <span className="ml-auto text-xs font-mono text-surface-500">{tickLabel}</span>
+      </div>
+
+      {/* Scrubber: drag to seek by tick */}
+      <input
+        type="range"
+        min={0}
+        max={sliderMax}
+        step={1}
+        value={sliderValue}
+        onChange={(e) => replay.seek(Number(e.target.value))}
+        className="w-full accent-primary-500"
+        aria-label={t('replay.progress')}
+      />
     </div>
   );
 }

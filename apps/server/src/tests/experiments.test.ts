@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { buildServer } from '../server';
+import { eventLogPathFor } from '../services/runner';
 import {
   saveExperiment,
   getExperiment,
@@ -106,6 +109,42 @@ describe('experiments routes', () => {
     expect(getExperiment(runId)?.api_key_id).toBe(keyId);
 
     await app.inject({ method: 'POST', url: `/api/v1/experiments/${runId}/cancel` });
+  });
+
+  it('GET /:id/replay returns the recorded events array (skips __end__)', async () => {
+    const app = await buildServer();
+    const runId = 'replaytest' + crypto.randomBytes(4).toString('hex');
+    const logPath = eventLogPathFor(runId);
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    const lines = [
+      { kind: 'run_started', data: { slug: 'replay-market' } },
+      { kind: 'tick_started', data: { tick: 0 } },
+      { kind: 'tick_metrics', data: { tick: 0, yes_mid: 0.51 } },
+      { kind: '__end__', data: {} },
+    ];
+    fs.writeFileSync(logPath, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+
+    try {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/experiments/${runId}/replay` });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.total).toBe(3); // __end__ filtered out
+      expect(Array.isArray(body.events)).toBe(true);
+      expect(body.events[0].kind).toBe('run_started');
+      expect(body.events[2].data.yes_mid).toBe(0.51);
+      expect(body.events.some((e: { kind: string }) => e.kind === '__end__')).toBe(false);
+    } finally {
+      fs.rmSync(logPath, { force: true });
+    }
+  });
+
+  it('GET /:id/replay returns 404 when no event log exists', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/experiments/nolog${crypto.randomBytes(4).toString('hex')}/replay`,
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   it('repairOrphanedRuns flips running -> error but leaves paused alone', () => {
