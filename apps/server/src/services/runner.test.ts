@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { spawnRun, createRunHandle } from './runner';
+import { spawnRun, createRunHandle, pauseRun } from './runner';
 import { config } from '../config';
 
 const mockSpawn = vi.fn();
@@ -149,5 +149,57 @@ describe('spawnRun', () => {
     );
     expect(onEvent).toHaveBeenCalledWith('__end__', {});
     expect(handle.finished).toBe(true);
+  });
+
+  it('passes resume_checkpoint and checkpoint_out into the stdin config', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), {
+      resumeCheckpoint: '/tmp/ck.pkl',
+      checkpointOut: '/tmp/out.pkl',
+    });
+    const cfg = JSON.parse(mockChild.stdin.write.mock.calls[0][0] as string);
+    expect(cfg.resume_checkpoint).toBe('/tmp/ck.pkl');
+    expect(cfg.checkpoint_out).toBe('/tmp/out.pkl');
+  });
+
+  it('still accepts a bare apiSettings object (back-compat)', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), { api_key: 'k', base_url: 'b', model: 'm' });
+    const cfg = JSON.parse(mockChild.stdin.write.mock.calls[0][0] as string);
+    expect(cfg.api_key).toBe('k');
+    expect(cfg.base_url).toBe('b');
+    expect(cfg.model).toBe('m');
+  });
+
+  it('marks handle paused and records checkpoint on a paused event', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), { checkpointOut: '/tmp/out.pkl' });
+    mockChild.stdout.emit('data', '{"kind":"paused","data":{"tick":3,"checkpoint":"/tmp/out.pkl"}}\n');
+    expect(handle.paused).toBe(true);
+    expect(handle.checkpointPath).toBe('/tmp/out.pkl');
+  });
+
+  it('does not emit error on non-zero exit after a pause', () => {
+    const onEvent = vi.fn();
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, onEvent, { checkpointOut: '/tmp/out.pkl' });
+    mockChild.stdout.emit('data', '{"kind":"paused","data":{"tick":3,"checkpoint":"/tmp/out.pkl"}}\n');
+    onEvent.mockClear();
+    mockChild.emit('exit', 0);
+    expect(onEvent).not.toHaveBeenCalledWith('error', expect.anything());
+  });
+
+  it('pauseRun sends SIGUSR1 to the live child', () => {
+    vi.useFakeTimers();
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn());
+    expect(pauseRun(handle)).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(mockChild.kill).toHaveBeenCalledWith('SIGUSR1');
+  });
+
+  it('pauseRun returns false when there is no live child', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    expect(pauseRun(handle)).toBe(false);
   });
 });

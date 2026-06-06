@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Square, ArrowLeft, X } from 'lucide-react';
+import { Square, ArrowLeft, X, Pause, Play } from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber } from '../hooks';
@@ -26,8 +26,13 @@ export default function ExperimentLive() {
   const tickMetrics = useExperimentStore((s) => s.tickMetrics);
   const agentSnapshots = useExperimentStore((s) => s.agentSnapshots);
   const running = useExperimentStore((s) => s.running);
+  const paused = useExperimentStore((s) => s.paused);
   const error = useExperimentStore((s) => s.error);
   const resetSimulation = useExperimentStore((s) => s.resetSimulation);
+  const setRunning = useExperimentStore((s) => s.setRunning);
+  const setPaused = useExperimentStore((s) => s.setPaused);
+
+  const [pausePending, setPausePending] = useState(false);
 
   const formatNumber = useFormatNumber();
 
@@ -42,18 +47,47 @@ export default function ExperimentLive() {
     setLoading(true);
     api.getExperiment(id)
       .then((res) => {
-        if (!cancelled) setExperiment(res.experiment);
+        if (!cancelled) {
+          setExperiment(res.experiment);
+          // Reflect a persisted paused status when re-opening the page.
+          if (res.experiment.status === 'paused') setPaused(true);
+        }
       })
       .catch((err) => console.error('Failed to load experiment:', err))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [id, resetSimulation]);
+  }, [id, resetSimulation, setPaused]);
 
   const handleCancel = () => {
     if (!id) return;
     api.cancelExperiment(id).catch(console.error);
+  };
+
+  const handlePause = () => {
+    if (!id) return;
+    setPausePending(true);
+    api.pauseExperiment(id)
+      .then((res) => {
+        if (res.paused) {
+          setRunning(false);
+          setPaused(true);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setPausePending(false));
+  };
+
+  const handleResume = () => {
+    if (!id) return;
+    setPaused(false);
+    setRunning(true);
+    api.resumeExperiment(id).catch((err) => {
+      console.error(err);
+      setRunning(false);
+      setPaused(true);
+    });
   };
 
   // ── Derived: macro chart from accumulated tick_metrics ────────────────
@@ -110,19 +144,37 @@ export default function ExperimentLive() {
               {experiment?.slug || id}
             </h1>
             <div className="flex items-center gap-2 text-xs text-surface-400">
-              <span className={`badge ${running ? 'badge-live' : 'badge-resolved'}`}>
-                {running ? 'Running' : experiment?.status || 'Done'}
+              <span className={`badge ${running ? 'badge-live' : paused ? 'badge-warn' : 'badge-resolved'}`}>
+                {running ? 'Running' : paused ? 'Paused' : experiment?.status || 'Done'}
               </span>
               <span>{experiment?.n_agents} agents · {experiment?.n_ticks} ticks</span>
             </div>
           </div>
         </div>
-        {running && (
-          <button onClick={handleCancel} className="btn-secondary flex items-center gap-2 text-danger">
-            <Square className="w-4 h-4" />
-            Cancel
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {running && (
+            <button
+              onClick={handlePause}
+              disabled={pausePending}
+              className="btn-secondary flex items-center gap-2 disabled:opacity-50"
+            >
+              <Pause className="w-4 h-4" />
+              {pausePending ? 'Pausing…' : 'Pause'}
+            </button>
+          )}
+          {paused && !running && (
+            <button onClick={handleResume} className="btn-secondary flex items-center gap-2 text-primary-600">
+              <Play className="w-4 h-4" />
+              Resume
+            </button>
+          )}
+          {(running || paused) && (
+            <button onClick={handleCancel} className="btn-secondary flex items-center gap-2 text-danger">
+              <Square className="w-4 h-4" />
+              Cancel
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

@@ -35,6 +35,8 @@ from environment.seeders.from_clob_history import seed as seed_from_clob
 from evaluation.metrics.macro import compute_tick_metrics
 from evaluation.metrics.micro import snapshot_all
 
+from checkpoint import load_checkpoint, rng_from_state, save_checkpoint
+
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +77,8 @@ def run_stream(
     temperature: float = 0.0,
     on_event: EventCallback,
     cancel: Optional[threading.Event] = None,
+    pause: Optional[threading.Event] = None,
+    checkpoint_out: Optional[str] = None,
     data_dir: Path = Path("data"),
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
@@ -85,6 +89,10 @@ def run_stream(
     Raises only for fatal preflight errors (unknown slug, missing API
     key). Per-tick LLM failures are reported as 'agent_decision' events
     with non-empty `api_error` and the loop continues.
+
+    If `pause` is set at a tick boundary and `checkpoint_out` is given,
+    the run writes a checkpoint to that path, emits a `paused` event and
+    returns cleanly (no `settled`/`done`). Resume later via `resume_stream`.
     """
     settings = get_settings()
     started_at = dt.datetime.utcnow()
@@ -184,10 +192,151 @@ def run_stream(
         })
         return
     prev_yes_mid: Optional[float] = float(sim.yes_mid)
-    for tick in range(n_ticks):
+    _run_tick_loop(
+        env=env, obs=obs, meta=meta, priors=priors,
+        n_ticks=n_ticks, start_tick=0,
+        slug=slug, persona_set=persona_set, seed=seed,
+        temperature=temperature, prev_yes_mid=prev_yes_mid,
+        api_key=_api_key, base_url=_base_url, model=_model,
+        settings=settings, on_event=on_event,
+        cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
+        started_at=started_at,
+    )
+
+
+def resume_stream(
+    *,
+    resume_checkpoint: str,
+    on_event: EventCallback,
+    cancel: Optional[threading.Event] = None,
+    pause: Optional[threading.Event] = None,
+    checkpoint_out: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
+) -> None:
+    """Resume a previously paused run from a checkpoint pickle.
+
+    Reconstructs the env around the pickled `Simulation` (mirroring the
+    state restore in env.sensitivity_run: assign env.sim, env._tick,
+    env._rng), then continues the tick loop from `next_tick`. The market
+    and priors are taken from the checkpoint, so no re-derivation occurs
+    and the resumed run reproduces the original from the pause point.
+    """
+    settings = get_settings()
+    started_at = dt.datetime.utcnow()
+
+    ckpt = load_checkpoint(resume_checkpoint)
+    sim = ckpt["sim"]
+    rng = rng_from_state(ckpt["rng_state"])
+    next_tick = int(ckpt["next_tick"])
+    n_ticks = int(ckpt["n_ticks"])
+    meta = ckpt["market_meta"]
+    priors = ckpt["priors"]
+    slug = ckpt["slug"]
+    persona_set = ckpt["persona_set"]
+    seed = int(ckpt["seed"])
+    temperature = float(ckpt["temperature"])
+    prev_yes_mid = ckpt.get("prev_yes_mid")
+
+    on_event("run_resumed", {
+        "slug": slug, "resume_tick": next_tick, "n_ticks": n_ticks,
+        "checkpoint": resume_checkpoint,
+        "resumed_at": started_at.isoformat() + "Z",
+    })
+
+    # Rebuild env wrapping the restored sim. The constructor needs the
+    # population only for reset(); we bypass reset() and inject state
+    # directly (same pattern as env.sensitivity_run's restore block).
+    env = PolyEnv(
+        market_meta=meta, population=sim.agents,
+        n_ticks=n_ticks, taker_fee_bps=priors["taker_fee_bps"],
+        observer="quote_only",
+    )
+    env.sim = sim
+    env._tick = next_tick
+    env._rng = rng
+    obs = env._observations()
+
+    on_event("env_ready", {
+        "n_ticks": n_ticks,
+        "yes_mid_post_seed": float(sim.yes_mid),
+        "resumed_from_tick": next_tick,
+        **_market_snapshot_dict(sim),
+    })
+
+    _api_key = api_key or settings.DEEPSEEK_API_KEY
+    _base_url = base_url or settings.DEEPSEEK_BASE_URL
+    _model = model or settings.DEEPSEEK_MODEL
+    if not _api_key:
+        on_event("error", {
+            "where": "preflight_llm",
+            "message": "LLM API key not set; configure provider in Settings or set POLYMETL_DEEPSEEK_API_KEY",
+        })
+        return
+
+    _run_tick_loop(
+        env=env, obs=obs, meta=meta, priors=priors,
+        n_ticks=n_ticks, start_tick=next_tick,
+        slug=slug, persona_set=persona_set, seed=seed,
+        temperature=temperature, prev_yes_mid=prev_yes_mid,
+        api_key=_api_key, base_url=_base_url, model=_model,
+        settings=settings, on_event=on_event,
+        cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
+        started_at=started_at,
+    )
+
+
+def _run_tick_loop(
+    *,
+    env: PolyEnv,
+    obs: dict,
+    meta: dict,
+    priors: dict,
+    n_ticks: int,
+    start_tick: int,
+    slug: str,
+    persona_set: str,
+    seed: int,
+    temperature: float,
+    prev_yes_mid: Optional[float],
+    api_key: str,
+    base_url: Optional[str],
+    model: Optional[str],
+    settings,
+    on_event: EventCallback,
+    cancel: Optional[threading.Event],
+    pause: Optional[threading.Event],
+    checkpoint_out: Optional[str],
+    started_at: dt.datetime,
+) -> None:
+    """Shared tick loop for fresh runs and resumes.
+
+    Runs ticks `[start_tick, n_ticks)`. At each tick boundary it checks
+    `pause`: if set (and a `checkpoint_out` path is configured), it writes
+    a checkpoint capturing the env state *before* the upcoming tick, emits
+    `paused`, and returns without settling. `cancel` short-circuits as
+    before (emits `cancelled`, no checkpoint).
+    """
+    sim = env.state
+
+    for tick in range(start_tick, n_ticks):
         if cancel is not None and cancel.is_set():
             on_event("cancelled", {"tick": tick})
             return
+        # Pause at the tick boundary: snapshot everything needed to resume
+        # exactly here (the env has not yet run `tick`).
+        if pause is not None and pause.is_set() and checkpoint_out:
+            save_checkpoint(
+                checkpoint_out,
+                sim=sim, rng=env._rng, next_tick=tick, n_ticks=n_ticks,
+                slug=slug, persona_set=persona_set, seed=seed,
+                temperature=temperature, market_meta=meta, priors=priors,
+                prev_yes_mid=prev_yes_mid,
+            )
+            on_event("paused", {"tick": tick, "checkpoint": checkpoint_out})
+            return
+
         tick_started = time.time()
         on_event("tick_started", {
             "tick": tick, "total": n_ticks,
@@ -212,9 +361,9 @@ def run_stream(
                     description=meta.get("description", ""),
                     end_date=meta.get("end_date_iso", ""),
                     market=market_snap, agent=agent_snap,
-                    api_key=_api_key,
-                    base_url=_base_url,
-                    model=_model,
+                    api_key=api_key,
+                    base_url=base_url,
+                    model=model,
                     tick_size=priors["tick_size"],
                     temperature=temperature,
                     timeout=settings.DEEPSEEK_TIMEOUT,

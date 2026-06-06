@@ -46,7 +46,7 @@ export interface Experiment {
   n_agents: number;
   n_ticks: number;
   persona_set: string;
-  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'error';
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'cancelled' | 'error';
   started_at: string;
   finished_at: string | null;
   elapsed_s: number;
