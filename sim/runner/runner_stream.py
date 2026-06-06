@@ -354,6 +354,19 @@ def _run_tick_loop(
             market_snap, agent_snap = obs[aid]
             agent = next(a for a in sim.agents if a.agent_id == aid)
             t0 = time.time()
+
+            # Log every live web search this agent runs this tick. Web
+            # search is NOT bit-for-bit reproducible (results change over
+            # time); emitting the actual query + results preserves
+            # auditability / replay of what the agent actually saw.
+            def _on_info_query(query, results, _aid=aid, _tick=tick):
+                on_event("agent_info_query", {
+                    "tick": _tick, "agent_id": _aid,
+                    "query": query,
+                    "n_items_returned": len(results),
+                    "results": [r.to_dict() for r in results],
+                })
+
             try:
                 decision = decide(
                     persona=agent.persona,
@@ -368,6 +381,8 @@ def _run_tick_loop(
                     temperature=temperature,
                     timeout=settings.DEEPSEEK_TIMEOUT,
                     max_attempts=3,
+                    info_enabled=True,
+                    on_info_query=_on_info_query,
                 )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {

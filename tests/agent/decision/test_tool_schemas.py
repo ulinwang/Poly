@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 
 from agent.decision.tool_schemas import (
-    NAME_TO_ORDER_TYPE, TOOL_SCHEMAS, select_tools,
+    INFO_TOOL_NAME, NAME_TO_ORDER_TYPE, TOOL_SCHEMAS, select_tools,
 )
 
 
@@ -21,15 +21,29 @@ class SelectToolsTest(unittest.TestCase):
         self.assertNotIn("update_belief", names)
         self.assertEqual(len(tools), len(TOOL_SCHEMAS) - 1)
 
+    def test_default_includes_info(self):
+        names = {t["function"]["name"] for t in select_tools()}
+        self.assertIn(INFO_TOOL_NAME, names)
+
+    def test_info_disabled_drops_info(self):
+        tools = select_tools(info_enabled=False)
+        names = {t["function"]["name"] for t in tools}
+        self.assertNotIn(INFO_TOOL_NAME, names)
+        self.assertEqual(len(tools), len(TOOL_SCHEMAS) - 1)
+
 
 class ToolSchemaShapeTest(unittest.TestCase):
-    def test_has_six_tools(self):
-        # v13 (AGT-4) added `update_belief`; bumped from 5 → 6.
-        self.assertEqual(len(TOOL_SCHEMAS), 6)
+    def test_has_seven_tools(self):
+        # v13 (AGT-4) added `update_belief` (→6); the web-search
+        # `get_information` read tool added it to 7.
+        self.assertEqual(len(TOOL_SCHEMAS), 7)
 
     def test_names_match_dispatcher(self):
+        # `get_information` is a READ tool, not an order, so it is
+        # intentionally absent from NAME_TO_ORDER_TYPE.
         names = {t["function"]["name"] for t in TOOL_SCHEMAS}
-        self.assertEqual(names, set(NAME_TO_ORDER_TYPE))
+        self.assertEqual(names - {INFO_TOOL_NAME}, set(NAME_TO_ORDER_TYPE))
+        self.assertNotIn(INFO_TOOL_NAME, NAME_TO_ORDER_TYPE)
 
     def test_order_types_are_engine_compatible(self):
         # Every order_type the parser maps to must be one the engine accepts.
