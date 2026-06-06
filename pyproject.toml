@@ -21,6 +21,8 @@ dependencies = [
 	"jinja2>=3.1",
 	# v8.1: OpenAI-compatible client for DeepSeek tool calling
 	"openai>=1.40",
+	# unified multi-provider LLM gateway (OpenAI/DeepSeek/Kimi/Anthropic/…)
+	"litellm>=1.50",
 	# v8.2: interactive HTML reports for experiments
 	"plotly>=5.18",
 	# v10: K-means clustering of wallet behavioral fingerprints

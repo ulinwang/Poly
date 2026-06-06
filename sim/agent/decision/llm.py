@@ -1,6 +1,8 @@
-"""DeepSeek chat-completions client (OpenAI-compatible).
+"""Unified LLM chat-completions client, backed by litellm.
 
-Two entry points:
+Two entry points (names kept for backward compatibility — callers in
+agent.decision.runtime and agent.personas.calibrated inject them as
+`call_fn`):
 
   call_deepseek(...)             — text-mode completion. Used by the
                                     persona generator (agent.personas.calibrated)
@@ -8,31 +10,40 @@ Two entry points:
 
   call_deepseek_with_tools(...)  — function-tool mode. Used by the
                                     per-tick trader decision flow
-                                    (agent.decision.runtime). The caller
-                                    may let the LLM choose a tool or force
-                                    a specific tool for staged decisions.
+                                    (agent.decision.runtime).
 
-Stateless, synchronous. The OpenAI Python SDK is the underlying
-transport — DeepSeek exposes an OpenAI-compatible endpoint.
+Stateless, synchronous. Transport is litellm.completion, which gives a
+single interface over OpenAI / DeepSeek / Kimi (Moonshot) / Anthropic / any
+OpenAI-compatible endpoint. We route through litellm's OpenAI-compatible
+handler (model="openai/<model>", api_base=<base_url>) so the existing
+(base_url, api_key, model) contract is preserved unchanged: DeepSeek, Kimi
+and others are reached via their OpenAI-compatible base URLs.
 """
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from typing import Any, Optional
 
-from openai import OpenAI
+import litellm
+
+# Keep stdout pristine — runner_cli.py speaks JSON-over-stdout, so litellm must
+# not print banners/debug there. (litellm logs to stderr, which the runner
+# forwards to its own stderr.)
+litellm.telemetry = False
+litellm.suppress_debug_info = True
+# Silently drop provider-unsupported kwargs (e.g. `thinking`, `response_format`)
+# instead of raising, so the same call works across providers.
+litellm.drop_params = True
 
 
-@lru_cache(maxsize=4)
-def _client(api_key: str, base_url: str, timeout: float) -> OpenAI:
-    """Process-singleton OpenAI client per (api_key, base_url, timeout).
+def _route(model: str) -> str:
+    """Map a bare model id to litellm's OpenAI-compatible route.
 
-    The OpenAI SDK is thread-safe and pools HTTP connections internally,
-    so a single client serves all concurrent agent decisions. The cache
-    is keyed because tests inject distinct api_key/base_url stubs.
+    Already-namespaced ids (e.g. "deepseek/deepseek-chat", "anthropic/...")
+    are passed through untouched; bare ids go through the OpenAI-compatible
+    handler so they resolve against the supplied api_base.
     """
-    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+    return model if "/" in model else f"openai/{model}"
 
 
 def call_deepseek(
@@ -49,13 +60,15 @@ def call_deepseek(
 
     Returns: {"text", "prompt_tokens", "completion_tokens", "raw"}.
 
-    `response_format={"type": "json_object"}` available for callers
-    that need DeepSeek's strict-JSON mode (legacy persona path).
+    `response_format={"type": "json_object"}` available for callers that
+    need strict-JSON mode (dropped automatically if the provider lacks it).
     """
-    client = _client(api_key, base_url, timeout)
     kwargs: dict[str, Any] = {
-        "model": model,
+        "model": _route(model),
+        "api_key": api_key,
+        "api_base": base_url,
         "temperature": temperature,
+        "timeout": timeout,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -63,7 +76,7 @@ def call_deepseek(
     }
     if response_format is not None:
         kwargs["response_format"] = response_format
-    resp = client.chat.completions.create(**kwargs)
+    resp = litellm.completion(**kwargs)
     msg = resp.choices[0].message
     usage = resp.usage
     return {
@@ -95,39 +108,41 @@ def call_deepseek_with_tools(
             "name": "place_limit_order",
             "arguments": {"outcome": "YES", ...},
         },
+        "tool_calls": [ ... ],               # all calls
         "text": str,                         # LLM prose (often empty when tool was called)
         "prompt_tokens": int,
         "completion_tokens": int,
         "raw": str,                          # full response JSON
       }
     """
-    client = _client(api_key, base_url, timeout)
-    # `thinking` toggles the DeepSeek hybrid reasoning mode. None keeps
-    # the API default (thinking on); True/False force enabled/disabled.
-    extra_body: dict[str, Any] = {}
-    if thinking is not None:
-        extra_body["thinking"] = {
-            "type": "enabled" if thinking else "disabled"
-        }
-    resp = client.chat.completions.create(
-        model=model,
-        temperature=temperature,
-        messages=[
+    kwargs: dict[str, Any] = {
+        "model": _route(model),
+        "api_key": api_key,
+        "api_base": base_url,
+        "temperature": temperature,
+        "timeout": timeout,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        tools=tools,
-        tool_choice=tool_choice,
-        extra_body=extra_body or None,
-    )
+        "tools": tools,
+        "tool_choice": tool_choice,
+    }
+    # `thinking` toggles DeepSeek's hybrid reasoning mode. None keeps the API
+    # default; True/False force enabled/disabled. Forwarded as a provider-
+    # specific extra param (dropped for providers that don't support it).
+    if thinking is not None:
+        kwargs["extra_body"] = {
+            "thinking": {"type": "enabled" if thinking else "disabled"}
+        }
+    resp = litellm.completion(**kwargs)
     msg = resp.choices[0].message
     usage = resp.usage
 
-    # v13 (AGT-4): expose ALL tool calls (not just the first). The
-    # `update_belief` tool can be paired with a trade tool in the same
-    # response — the runtime composes them. `tool_call` continues to
-    # point at the first non-`update_belief` call (or the first call if
-    # all are belief updates) so legacy callers keep working.
+    # Expose ALL tool calls (not just the first). The `update_belief` tool can
+    # be paired with a trade tool in the same response — the runtime composes
+    # them. `tool_call` points at the first non-`update_belief` call (or the
+    # first call if all are belief updates) so legacy callers keep working.
     tool_calls_payload: list[dict] = []
     if msg.tool_calls:
         for tc in msg.tool_calls:
@@ -143,7 +158,6 @@ def call_deepseek_with_tools(
 
     tool_call_payload = None
     if tool_calls_payload:
-        # Prefer a non-belief call as the "primary" (trade) action.
         non_belief = [t for t in tool_calls_payload
                       if t.get("name") != "update_belief"]
         tool_call_payload = (non_belief or tool_calls_payload)[0]
