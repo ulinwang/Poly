@@ -40,7 +40,60 @@ class ClobSystemPromptTest(unittest.TestCase):
         )
         self.assertIn("你是 Polymarket 预测市场交易者", out)
         self.assertIn("谨慎交易者", out)
-        self.assertIn("第一阶段先更新", out)
+        self.assertIn("两个阶段", out)
+
+    def test_forum_tools_described_when_enabled(self):
+        p = Persona("Calibrated", 0.5, 1000.0, "p")
+        out = build_clob_system_prompt(
+            p, "Q?", "R", "2026", info_enabled=True, forum_enabled=True,
+        )
+        for tool in ("get_information", "read_forum", "post_to_forum",
+                     "comment_on_post", "follow_user"):
+            self.assertIn(tool, out)
+
+    def test_forum_tools_absent_when_disabled(self):
+        p = Persona("Calibrated", 0.5, 1000.0, "p")
+        out = build_clob_system_prompt(
+            p, "Q?", "R", "2026", info_enabled=False, forum_enabled=False,
+        )
+        for tool in ("get_information", "read_forum", "post_to_forum",
+                     "comment_on_post", "follow_user"):
+            self.assertNotIn(tool, out)
+        # Trade tools are always present.
+        self.assertIn("place_limit_order", out)
+
+
+class ForumUserPromptTest(unittest.TestCase):
+    """The forum/social section must appear even with empty social memory
+    (otherwise a fresh agent is never told the forum exists), and must be
+    gated on forum_enabled."""
+
+    def _market(self):
+        return MarketSnapshot(
+            yes_best_bid=0.4, yes_best_ask=0.5, yes_mid=0.45,
+            no_best_bid=0.5, no_best_ask=0.6, no_mid=0.55,
+            yes_mid_history=[0.5, 0.48, 0.45],
+            ticks_remaining=10, total_ticks=48,
+        )
+
+    def _agent(self):
+        return AgentSnapshot(
+            agent_id=1, cash=100.0, yes_shares=0.0, no_shares=0.0,
+            n_resting_orders=0,
+        )
+
+    def test_empty_social_memory_still_nudges_read_forum(self):
+        out = build_user_prompt(
+            self._market(), self._agent(), forum_enabled=True,
+        )
+        self.assertIn("read_forum", out)
+        self.assertIn("have not read the forum yet", out)
+
+    def test_forum_section_absent_when_disabled(self):
+        out = build_user_prompt(
+            self._market(), self._agent(), forum_enabled=False,
+        )
+        self.assertNotIn("read_forum", out)
 
 
 class SimpleSystemPromptTest(unittest.TestCase):

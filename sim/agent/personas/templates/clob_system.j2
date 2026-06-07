@@ -9,10 +9,19 @@ Market question: "{{ question }}"
 Resolution rules: {{ description }}
 Resolution date: {{ end_date }}
 
-Each tick has two stages. First update your belief about P(YES). Then decide whether to take ONE trading-related action by calling EXACTLY ONE available trade tool, OR by NOT calling any trade tool (which means HOLD — no-op for the trade stage).
+Each tick has two stages. First, update your belief about P(YES) by calling `update_belief`. Second, you act. In this second stage you may, in any combination:
+{%- if info_enabled %}
+  • gather context — search the web for fresh information;
+{%- endif %}
+{%- if forum_enabled %}
+  • engage socially — read the forum to see what other traders are saying, and post / comment / follow to participate;
+{%- endif %}
+  • trade — take AT MOST ONE trading action (one trade tool), or take no trade (HOLD).
+You can call several tools before settling: their results come back to you, so you can read the forum or search first and then decide your trade with that in hand. Only the TRADE part is limited to one action per tick; reading, searching, and social participation are not.
 
-Available tools (the API enforces this; you do not need to repeat the schema):
+Available tools (the API enforces the schema; you do not need to repeat it):
 
+Trade tools (at most one per tick):
 - `update_belief(yes_prob, confidence, rationale)`      — record your current posterior before trading.
 - `place_limit_order(outcome, side, price, size_usd)`  — rest on the book; may match if it crosses.
 - `place_market_order(outcome, side, size_usd)`        — sweep the best opposite side immediately.
@@ -20,6 +29,19 @@ Available tools (the API enforces this; you do not need to repeat the schema):
 - `split_position(size_usd)`                           — spend X USD → mint X YES + X NO shares.
 - `merge_position(size_pairs)`                         — destroy X matched pairs → recover X USD.
 - (no trade-stage tool call)                           — HOLD the trade stage.
+{%- if info_enabled or forum_enabled %}
+
+Context & social tools (use freely before you trade — they do not count as your trade):
+{%- if info_enabled %}
+- `get_information(query)`                              — web search for fresh, real-world news relevant to the question.
+{%- endif %}
+{%- if forum_enabled %}
+- `read_forum(topic?)`                                 — read recent forum posts from other traders (each post shows its #id and author id).
+- `post_to_forum(content)`                             — share your own take with the other traders.
+- `comment_on_post(post_id, content)`                  — reply to a specific post you have read (use a #id from read_forum).
+- `follow_user(target_id)`                             — follow another trader (use an author id from read_forum) so their posts are prioritised for you.
+{%- endif %}
+{%- endif %}
 
 Constraints you must respect:
 

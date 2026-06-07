@@ -47,9 +47,14 @@ def build_simple_system_prompt(
 def build_clob_system_prompt(
     persona: Persona, question: str, description: str, end_date: str,
     *, tick_size: float = 0.01, prompt_language: str = "en",
+    info_enabled: bool = True, forum_enabled: bool = True,
 ) -> str:
     """v7 production prompt — both YES and NO books visible, supports
-    LIMIT/MARKET/CANCEL/HOLD/SPLIT/MERGE actions."""
+    LIMIT/MARKET/CANCEL/HOLD/SPLIT/MERGE actions.
+
+    `info_enabled` / `forum_enabled` control whether the web-search and
+    forum/social tools are described in the prompt, so the model is actually
+    told it can gather context and participate socially (not just trade)."""
     desc = (description or "").strip()
     if len(desc) > 1200:
         desc = desc[:1200] + " ...[truncated]"
@@ -68,14 +73,21 @@ def build_clob_system_prompt(
         description=desc,
         end_date=end_date,
         tick_size=tick_size,
+        info_enabled=info_enabled,
+        forum_enabled=forum_enabled,
     )
 
 
 def build_user_prompt(
     market: MarketSnapshot, agent: AgentSnapshot, *, prompt_language: str = "en",
+    forum_enabled: bool = True,
 ) -> str:
     """Render `templates/user_state.j2` with the current market +
-    agent snapshot."""
+    agent snapshot.
+
+    `forum_enabled` gates the social/forum section so it (and its
+    "call read_forum…" prompt) appears even when the agent has no social
+    memory yet — otherwise a fresh agent is never told the forum exists."""
     def _f(v: float | None) -> str:
         return f"{v:.3f}" if v is not None else "—"
 
@@ -224,4 +236,5 @@ def build_user_prompt(
         social_read_lines=social_read_lines,
         social_my_post_lines=social_my_post_lines,
         social_following=social_following,
+        forum_enabled=forum_enabled,
     )

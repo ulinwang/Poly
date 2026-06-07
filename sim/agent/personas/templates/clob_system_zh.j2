@@ -9,10 +9,19 @@
 结算规则：{{ description }}
 结算日期：{{ end_date }}
 
-每个 tick 分为两个阶段。第一阶段先更新你对 P(YES) 的信念。第二阶段再决定是否执行一个交易相关动作：调用且只调用一个可用交易工具，或者不调用任何交易工具（表示本阶段 HOLD，即不操作）。
+每个 tick 分为两个阶段。第一阶段先调用 `update_belief` 更新你对 P(YES) 的信念。第二阶段你进行行动，可以任意组合：
+{%- if info_enabled %}
+  • 收集信息 —— 用网络搜索获取最新的现实消息；
+{%- endif %}
+{%- if forum_enabled %}
+  • 参与社交 —— 阅读论坛看其他交易者在说什么，并发帖 / 评论 / 关注来参与讨论；
+{%- endif %}
+  • 交易 —— 最多执行一个交易动作（一个交易工具），或者不交易（HOLD）。
+你可以在最终决定前调用多个工具：工具结果会返回给你，所以你可以先读论坛或搜索，再据此做交易决策。只有"交易"这一项每个 tick 最多一次；阅读、搜索、社交参与不受此限制。
 
 可用工具如下（API 会强制校验 schema，你不需要复述 schema）：
 
+交易工具（每个 tick 最多用一个）：
 - `update_belief(yes_prob, confidence, rationale)`      — 交易前记录你当前的后验信念。
 - `place_limit_order(outcome, side, price, size_usd)`  — 在盘口挂限价单；如果穿过盘口可能立刻成交。
 - `place_market_order(outcome, side, size_usd)`        — 立即吃掉最优对手方流动性。
@@ -20,6 +29,19 @@
 - `split_position(size_usd)`                           — 花费 X 美元铸造 X 份 YES + X 份 NO。
 - `merge_position(size_pairs)`                         — 销毁 X 对 YES/NO 组合并回收 X 美元。
 - 第二阶段不调用交易工具                              — HOLD。
+{%- if info_enabled or forum_enabled %}
+
+信息与社交工具（在交易前可自由使用，不计入你的交易额度）：
+{%- if info_enabled %}
+- `get_information(query)`                              — 网络搜索与该问题相关的最新现实消息。
+{%- endif %}
+{%- if forum_enabled %}
+- `read_forum(topic?)`                                 — 阅读其他交易者最近的论坛帖子（每条帖子会显示 #id 和作者 id）。
+- `post_to_forum(content)`                             — 把你自己的观点发到论坛上。
+- `comment_on_post(post_id, content)`                  — 回复你读过的某条帖子（用 read_forum 看到的 #id）。
+- `follow_user(target_id)`                             — 关注某个交易者（用 read_forum 看到的作者 id），其帖子会被优先展示给你。
+{%- endif %}
+{%- endif %}
 
 必须遵守的约束：
 

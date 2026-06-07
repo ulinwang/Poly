@@ -64,9 +64,9 @@
 - 把“最近一次陈述的观点”当作先验；只有出现新信息时才修正它，例如价格变化、时间衰减、仓位变化、盘口深度变化、长期未成交等。
 - 不要为了“清空状态”重复撤销自己已经确认过的挂单；只有当你的观点或风险暴露发生实质变化时才撤单。
 {%- endif %}
-{%- if social_read_lines or social_my_post_lines or social_following %}
+{%- if forum_enabled %}
 
-社交记忆（论坛——其他交易者在说什么；你关注的作者优先）：
+论坛 / 社交记忆（其他交易者在说什么；你关注的作者优先）：
 {%- if social_read_lines %}
 你读到的帖子：
 {%- for line in social_read_lines %}
@@ -82,7 +82,10 @@
 {%- if social_following %}
 你关注的人：{{ social_following | join("、") }}
 {%- endif %}
-你可以用 read_forum 刷新这个 feed，用 post_to_forum / comment_on_post / follow_user 参与讨论。论坛帖子是观点而非事实，请结合自己的分析来权衡。
+{%- if not (social_read_lines or social_my_post_lines or social_following) %}
+你还没有读过论坛。其他交易者可能正在发帖——在做决定前，可以调用 read_forum 看看最新的帖子（每条会显示 #id 和作者 id）。
+{%- endif %}
+你可以用 read_forum 刷新这个 feed，用 post_to_forum / comment_on_post / follow_user 参与讨论（comment_on_post 需要帖子 #id、follow_user 需要作者 id，都来自 read_forum）。论坛帖子是观点而非事实，请结合自己的分析来权衡。
 {%- endif %}
 
 请使用当前决策阶段允许的工具。

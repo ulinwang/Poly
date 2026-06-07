@@ -34,15 +34,20 @@ from agent.personas.persona import Persona
 from agent.prompt.builder import build_clob_system_prompt, build_user_prompt
 
 
-# Max number of read-tool round-trips (get_information AND read_forum,
-# combined) allowed per tick before we force the LLM to converge on a
-# trade/HOLD action. This bounds the read part of the loop.
+# Max web-search (get_information) round-trips per tick. Bounds the
+# information-gathering part of the loop.
 MAX_INFO_TURNS = 2
+
+# Max read_forum round-trips per tick. A SEPARATE budget from web search so a
+# search-heavy agent does not starve forum reading — without this they share
+# one budget and agents never see the forum, hence never comment/follow.
+MAX_FORUM_READ_TURNS = 2
 
 # Max number of *record* social actions (post_to_forum / comment_on_post /
 # follow_user) an agent may take per tick. Prevents an agent from spamming
 # the forum or looping forever on social actions. The loop also has a hard
-# overall turn cap (MAX_INFO_TURNS + K_SOCIAL + 1) as a final safety bound.
+# overall turn cap (MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1) as a
+# final safety bound.
 K_SOCIAL = 2
 
 # Callback the runner injects to log the actual search query + results
@@ -376,9 +381,11 @@ def _run_trade_stage_loop(
       * `post_to_forum` / `comment_on_post` / `follow_user` — record
         actions that mutate `sim.forum`.
     Each such call is answered with a tool-result message and the LLM is
-    asked to continue. The loop is bounded by THREE limits so it always
-    converges to a trade tool or HOLD:
-      * at most `MAX_INFO_TURNS` read-tool round trips (web + forum reads),
+    asked to continue. The loop is bounded by separate per-tick limits so it
+    always converges to a trade tool or HOLD:
+      * at most `MAX_INFO_TURNS` web-search round trips,
+      * at most `MAX_FORUM_READ_TURNS` forum-read round trips (separate budget
+        so search-heavy agents can still read the forum),
       * at most `K_SOCIAL` record social actions,
       * a hard overall turn cap (belt-and-braces).
     When a budget is exhausted we drop the now-disallowed tools from the
@@ -413,11 +420,12 @@ def _run_trade_stage_loop(
         {"role": "user", "content": trade_user_prompt},
     ]
 
-    read_turns = 0      # get_information + read_forum
+    info_turns = 0      # get_information (web search)
+    forum_read_turns = 0  # read_forum
     social_actions = 0  # post / comment / follow
     # Hard overall cap so a misbehaving model cannot loop forever even if
-    # it alternates between the two budgets.
-    hard_cap = MAX_INFO_TURNS + K_SOCIAL + 1
+    # it alternates between the budgets.
+    hard_cap = MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1
     total_turns = 0
 
     def _tool_content_for(name: str, call: dict) -> str:
@@ -480,15 +488,20 @@ def _run_trade_stage_loop(
             calls, result.get("reasoning_content")))
         for call in calls:
             name = str(call.get("name", ""))
-            if name in {INFO_TOOL_NAME, FORUM_READ_TOOL_NAME}:
-                read_turns += 1
+            if name == INFO_TOOL_NAME:
+                info_turns += 1
+            elif name == FORUM_READ_TOOL_NAME:
+                forum_read_turns += 1
             elif name in FORUM_ACTION_TOOL_NAMES:
                 social_actions += 1
             messages.append(
                 _tool_result_message(call, _tool_content_for(name, call)))
 
         # --- decide which tools to offer on the next turn ---
-        reads_exhausted = read_turns >= MAX_INFO_TURNS
+        # Web search and forum reading have SEPARATE budgets so a
+        # search-heavy agent can still read the forum (and then comment/follow).
+        info_exhausted = info_turns >= MAX_INFO_TURNS
+        forum_read_exhausted = forum_read_turns >= MAX_FORUM_READ_TURNS
         social_exhausted = social_actions >= K_SOCIAL
         # On the very last allowed overall turn, force convergence by
         # dropping ALL non-terminating tools.
@@ -496,11 +509,14 @@ def _run_trade_stage_loop(
         next_tools = []
         for t in trade_tools:
             tname = t.get("function", {}).get("name", "")
-            is_read = tname in {INFO_TOOL_NAME, FORUM_READ_TOOL_NAME}
+            is_info = tname == INFO_TOOL_NAME
+            is_forum_read = tname == FORUM_READ_TOOL_NAME
             is_social_action = tname in FORUM_ACTION_TOOL_NAMES
-            if last_overall and (is_read or is_social_action):
+            if last_overall and (is_info or is_forum_read or is_social_action):
                 continue
-            if is_read and reads_exhausted:
+            if is_info and info_exhausted:
+                continue
+            if is_forum_read and forum_read_exhausted:
                 continue
             if is_social_action and social_exhausted:
                 continue
@@ -599,9 +615,11 @@ def decide(
     system_prompt = build_clob_system_prompt(
         persona, question, description, end_date, tick_size=tick_size,
         prompt_language=prompt_language,
+        info_enabled=use_info, forum_enabled=use_forum,
     )
     user_prompt = build_user_prompt(
         market, agent, prompt_language=prompt_language,
+        forum_enabled=use_forum,
     )
 
     started = time.time()
