@@ -46,6 +46,24 @@ def _route(model: str) -> str:
     return model if "/" in model else f"openai/{model}"
 
 
+def _thinking_extra_body(tool_choice, thinking: Optional[bool]) -> Optional[dict]:
+    """Resolve the DeepSeek `thinking` extra_body for a tool call.
+
+    DeepSeek's hybrid "thinking" mode (default ON for v4 models) is
+    incompatible with a FORCED tool_choice — the API rejects it with
+    "Thinking mode does not support this tool_choice". So whenever the
+    caller forces a specific tool (dict) or "required", we disable thinking
+    for that call regardless of the requested `thinking`. For non-forced
+    ("auto"/"none") calls we honor the explicit `thinking` flag if given.
+    """
+    forced = isinstance(tool_choice, dict) or tool_choice == "required"
+    if forced:
+        return {"thinking": {"type": "disabled"}}
+    if thinking is not None:
+        return {"thinking": {"type": "enabled" if thinking else "disabled"}}
+    return None
+
+
 def call_deepseek(
     base_url: str,
     api_key: str,
@@ -132,13 +150,12 @@ def call_deepseek_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
-    # `thinking` toggles DeepSeek's hybrid reasoning mode. None keeps the API
-    # default; True/False force enabled/disabled. Forwarded as a provider-
-    # specific extra param (dropped for providers that don't support it).
-    if thinking is not None:
-        kwargs["extra_body"] = {
-            "thinking": {"type": "enabled" if thinking else "disabled"}
-        }
+    # Forced tool_choice disables thinking (incompatible on DeepSeek); otherwise
+    # honor the explicit thinking flag. Forwarded as a provider extra param
+    # (dropped for providers that don't support it).
+    extra = _thinking_extra_body(tool_choice, thinking)
+    if extra is not None:
+        kwargs["extra_body"] = extra
     return _complete_with_tools(kwargs)
 
 
@@ -177,10 +194,9 @@ def continue_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
-    if thinking is not None:
-        kwargs["extra_body"] = {
-            "thinking": {"type": "enabled" if thinking else "disabled"}
-        }
+    extra = _thinking_extra_body(tool_choice, thinking)
+    if extra is not None:
+        kwargs["extra_body"] = extra
     return _complete_with_tools(kwargs)
 
 

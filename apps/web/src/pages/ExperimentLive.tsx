@@ -189,7 +189,10 @@ export default function ExperimentLive() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {running && (
+          {/* Pausable whenever the experiment is actually running (by status),
+              not just when the transient SSE `running` flag is set — a flaky
+              stream shouldn't hide the control. */}
+          {(running || status === 'running') && !paused && (
             <button
               onClick={handlePause}
               disabled={pausePending}
@@ -199,13 +202,13 @@ export default function ExperimentLive() {
               {pausePending ? t('live.pausing') : t('live.pause')}
             </button>
           )}
-          {paused && !running && (
+          {paused && (
             <button onClick={handleResume} className="btn-secondary flex items-center gap-2 text-primary-600">
               <Play className="w-4 h-4" />
               {t('live.resume')}
             </button>
           )}
-          {(running || paused) && (
+          {(running || paused || status === 'running') && (
             <button onClick={handleCancel} className="btn-secondary flex items-center gap-2 text-danger">
               <Square className="w-4 h-4" />
               {t('live.cancel')}
