@@ -167,11 +167,18 @@ def _format_search_results(results: list[SearchResult]) -> str:
     return "\n".join(lines) if lines else "(no results)"
 
 
-def _assistant_tool_call_message(tool_call: dict) -> dict:
+def _assistant_tool_call_message(
+    tool_call: dict, reasoning_content: str | None = None,
+) -> dict:
     """Build the assistant message that records a single tool call, in the
     OpenAI/litellm wire format, so it can be appended to `messages` and
-    paired with the matching `role: "tool"` result message."""
-    return {
+    paired with the matching `role: "tool"` result message.
+
+    When the turn was produced in DeepSeek thinking mode, its
+    ``reasoning_content`` MUST be echoed back or the next call fails with
+    "The reasoning_content in the thinking mode must be passed back to the
+    API". We include it whenever present (harmless for non-thinking models)."""
+    msg: dict = {
         "role": "assistant",
         "content": None,
         "tool_calls": [{
@@ -185,6 +192,9 @@ def _assistant_tool_call_message(tool_call: dict) -> dict:
             },
         }],
     }
+    if reasoning_content:
+        msg["reasoning_content"] = reasoning_content
+    return msg
 
 
 def _tool_result_message(tool_call: dict, content: str) -> dict:
@@ -358,6 +368,9 @@ def _run_trade_stage_loop(
     )
 
     pending = _read_or_social_call(result)
+    # reasoning_content of the turn that produced `pending`, echoed back when
+    # we append that assistant message (required in DeepSeek thinking mode).
+    pending_reasoning = result.get("reasoning_content")
     if pending is None:
         return result, activity
 
@@ -428,7 +441,7 @@ def _run_trade_stage_loop(
         else:                       # pragma: no cover — guarded by caller
             break
 
-        messages.append(_assistant_tool_call_message(pending))
+        messages.append(_assistant_tool_call_message(pending, pending_reasoning))
         messages.append(_tool_result_message(pending, tool_content))
 
         # --- decide which tools to offer on the next turn ---
@@ -459,6 +472,7 @@ def _run_trade_stage_loop(
             tool_choice="auto",
         )
         pending = None if last_overall else _read_or_social_call(result)
+        pending_reasoning = result.get("reasoning_content")
 
     return result, activity
 
@@ -632,11 +646,14 @@ def decide(
                     parsed = parse_tool_call(
                         trade_result.get("tool_call"), tick_size=tick_size,
                     )
-                    # If the LLM put prose in `text` (e.g. tool_choice=auto
-                    # and it declined to call), pin it as the reasoning so
-                    # we don't lose the trace.
-                    if not parsed["reasoning"] and trade_result.get("text"):
-                        parsed["reasoning"] = trade_result["text"][:280]
+                    # Surface the trade-stage reasoning for display: prefer the
+                    # thinking-mode chain-of-thought, then any prose in `text`
+                    # (e.g. tool_choice=auto and it declined to call).
+                    if not parsed["reasoning"]:
+                        parsed["reasoning"] = (
+                            trade_result.get("reasoning_content")
+                            or trade_result.get("text", "")
+                        )[:600]
                 else:
                     raw = _stage_raw(belief_stage=belief_result)
                     parsed = {
@@ -687,8 +704,10 @@ def decide(
                 belief_update = _parse_belief_result(result)
             else:
                 belief_update = parsed.get("belief_update")
-            if not parsed["reasoning"] and result.get("text"):
-                parsed["reasoning"] = result["text"][:280]
+            if not parsed["reasoning"]:
+                parsed["reasoning"] = (
+                    result.get("reasoning_content") or result.get("text", "")
+                )[:600]
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
         api_error = f"http: {exc}"
     except (ValueError, KeyError, json.JSONDecodeError) as exc:

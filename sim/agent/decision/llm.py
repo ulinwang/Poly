@@ -49,26 +49,22 @@ def _route(model: str) -> str:
 def _thinking_extra_body(tool_choice, thinking: Optional[bool]) -> dict:
     """Resolve the DeepSeek `thinking` extra_body for a tool call.
 
-    DeepSeek's hybrid "thinking" mode (default ON for v4 models) is
-    fundamentally incompatible with our tool-calling decision path:
+    DeepSeek's hybrid "thinking" mode (default ON for v4 models) has one hard
+    constraint we must respect: a FORCED tool_choice (a dict, or "required")
+    is rejected outright with "Thinking mode does not support this
+    tool_choice". So forced calls — the belief stage forces ``update_belief``
+    — always run with thinking DISABLED.
 
-    1. A FORCED tool_choice is rejected outright ("Thinking mode does not
-       support this tool_choice") — that breaks the belief stage.
-    2. In a multi-turn tool loop (e.g. after a WebSearch via
-       ``continue_with_tools``) the API requires the prior turn's
-       ``reasoning_content`` to be echoed back; we don't reconstruct it, so
-       it fails with "The reasoning_content in the thinking mode must be
-       passed back to the API".
-
-    Both calls here always carry tools, so we default to thinking DISABLED.
-    We only enable it when the caller EXPLICITLY asks (thinking=True) AND the
-    tool_choice isn't forced — leaving a deliberate opt-in path, while the
-    default (thinking=None) keeps every agent decision working.
+    For non-forced ("auto"/"none") calls we keep thinking ENABLED by default
+    (the v4 default), which is what surfaces the model's reasoning text. The
+    multi-turn tool loop is made compatible by echoing each turn's
+    ``reasoning_content`` back to the API (see ``runtime`` /
+    ``_complete_with_tools``). Pass ``thinking=False`` to force it off.
     """
     forced = isinstance(tool_choice, dict) or tool_choice == "required"
-    if thinking is True and not forced:
-        return {"thinking": {"type": "enabled"}}
-    return {"thinking": {"type": "disabled"}}
+    if forced or thinking is False:
+        return {"thinking": {"type": "disabled"}}
+    return {"thinking": {"type": "enabled"}}
 
 
 def call_deepseek(
@@ -157,12 +153,9 @@ def call_deepseek_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
-    # Forced tool_choice disables thinking (incompatible on DeepSeek); otherwise
-    # honor the explicit thinking flag. Forwarded as a provider extra param
-    # (dropped for providers that don't support it).
-    extra = _thinking_extra_body(tool_choice, thinking)
-    if extra is not None:
-        kwargs["extra_body"] = extra
+    # thinking enabled for non-forced calls, disabled when tool_choice is
+    # forced (DeepSeek constraint). Dropped for providers that don't support it.
+    kwargs["extra_body"] = _thinking_extra_body(tool_choice, thinking)
     return _complete_with_tools(kwargs)
 
 
@@ -201,9 +194,7 @@ def continue_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
-    extra = _thinking_extra_body(tool_choice, thinking)
-    if extra is not None:
-        kwargs["extra_body"] = extra
+    kwargs["extra_body"] = _thinking_extra_body(tool_choice, thinking)
     return _complete_with_tools(kwargs)
 
 
@@ -236,10 +227,21 @@ def _complete_with_tools(kwargs: dict) -> dict:
                       if t.get("name") != "update_belief"]
         tool_call_payload = (non_belief or tool_calls_payload)[0]
 
+    # DeepSeek thinking mode returns the chain-of-thought separately as
+    # `reasoning_content` (litellm surfaces it on the message and/or in
+    # provider_specific_fields). It must be echoed back when continuing a
+    # tool-calling conversation, and is also what we display as the agent's
+    # reasoning text.
+    reasoning = getattr(msg, "reasoning_content", None)
+    if not reasoning:
+        psf = getattr(msg, "provider_specific_fields", None) or {}
+        reasoning = psf.get("reasoning_content")
+
     return {
         "tool_call": tool_call_payload,
         "tool_calls": tool_calls_payload,
         "text": msg.content or "",
+        "reasoning_content": reasoning or "",
         "prompt_tokens": int(usage.prompt_tokens) if usage else 0,
         "completion_tokens": int(usage.completion_tokens) if usage else 0,
         "raw": resp.model_dump_json(),
