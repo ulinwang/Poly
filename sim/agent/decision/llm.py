@@ -46,22 +46,29 @@ def _route(model: str) -> str:
     return model if "/" in model else f"openai/{model}"
 
 
-def _thinking_extra_body(tool_choice, thinking: Optional[bool]) -> Optional[dict]:
+def _thinking_extra_body(tool_choice, thinking: Optional[bool]) -> dict:
     """Resolve the DeepSeek `thinking` extra_body for a tool call.
 
     DeepSeek's hybrid "thinking" mode (default ON for v4 models) is
-    incompatible with a FORCED tool_choice — the API rejects it with
-    "Thinking mode does not support this tool_choice". So whenever the
-    caller forces a specific tool (dict) or "required", we disable thinking
-    for that call regardless of the requested `thinking`. For non-forced
-    ("auto"/"none") calls we honor the explicit `thinking` flag if given.
+    fundamentally incompatible with our tool-calling decision path:
+
+    1. A FORCED tool_choice is rejected outright ("Thinking mode does not
+       support this tool_choice") — that breaks the belief stage.
+    2. In a multi-turn tool loop (e.g. after a WebSearch via
+       ``continue_with_tools``) the API requires the prior turn's
+       ``reasoning_content`` to be echoed back; we don't reconstruct it, so
+       it fails with "The reasoning_content in the thinking mode must be
+       passed back to the API".
+
+    Both calls here always carry tools, so we default to thinking DISABLED.
+    We only enable it when the caller EXPLICITLY asks (thinking=True) AND the
+    tool_choice isn't forced — leaving a deliberate opt-in path, while the
+    default (thinking=None) keeps every agent decision working.
     """
     forced = isinstance(tool_choice, dict) or tool_choice == "required"
-    if forced:
-        return {"thinking": {"type": "disabled"}}
-    if thinking is not None:
-        return {"thinking": {"type": "enabled" if thinking else "disabled"}}
-    return None
+    if thinking is True and not forced:
+        return {"thinking": {"type": "enabled"}}
+    return {"thinking": {"type": "disabled"}}
 
 
 def call_deepseek(
