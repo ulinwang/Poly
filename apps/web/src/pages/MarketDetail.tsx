@@ -423,16 +423,28 @@ export default function MarketDetail() {
               <Users className="w-3 h-3 inline mr-1" />
               {t('detail.agentCount', { count: nAgents })}
             </label>
-            <input type="range" min="3" max="100" value={nAgents}
-              onChange={(e) => setNAgents(Number(e.target.value))} className="w-full" />
+            {/* Slider for quick adjustment + number field for exact / large values. */}
+            <div className="flex items-center gap-2">
+              <input type="range" min="3" max="100" value={Math.min(nAgents, 100)}
+                onChange={(e) => setNAgents(Number(e.target.value))} className="flex-1" />
+              <input type="number" min="1" value={nAgents}
+                onChange={(e) => setNAgents(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                className="input w-20 py-1 text-sm" />
+            </div>
           </div>
           <div>
             <label className="block text-xs text-surface-500 mb-1">
               <Clock className="w-3 h-3 inline mr-1" />
               {t('detail.tickCount', { count: nTicks })}
             </label>
-            <input type="range" min="1" max="48" value={nTicks}
-              onChange={(e) => setNTicks(Number(e.target.value))} className="w-full" />
+            {/* Slider caps at 200 for dragging; type a larger number for 500+. */}
+            <div className="flex items-center gap-2">
+              <input type="range" min="1" max="200" value={Math.min(nTicks, 200)}
+                onChange={(e) => setNTicks(Number(e.target.value))} className="flex-1" />
+              <input type="number" min="1" value={nTicks}
+                onChange={(e) => setNTicks(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                className="input w-20 py-1 text-sm" />
+            </div>
           </div>
           <div>
             <label className="block text-xs text-surface-500 mb-1">{t('detail.personaSet')}</label>
