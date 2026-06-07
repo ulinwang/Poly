@@ -3,14 +3,22 @@ import path from 'path';
 import fs from 'fs';
 import { config } from '../config';
 
-const dbDir = path.resolve(config.DATA_DIR);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
+// Under the test runner use a throwaway in-memory database so the suite
+// (which DELETEs from api_settings/api_keys in beforeEach) never touches the
+// developer's real webapp.db — otherwise running tests wipes configured keys.
+const useMemoryDb = !!process.env.VITEST || process.env.NODE_ENV === 'test';
 
-const dbPath = path.join(dbDir, 'webapp.db');
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
+let db: Database.Database;
+if (useMemoryDb) {
+  db = new Database(':memory:');
+} else {
+  const dbDir = path.resolve(config.DATA_DIR);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  db = new Database(path.join(dbDir, 'webapp.db'));
+  db.pragma('journal_mode = WAL');
+}
 
 const initSQL = `
 CREATE TABLE IF NOT EXISTS api_settings (
