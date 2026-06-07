@@ -206,18 +206,54 @@ def _tool_result_message(tool_call: dict, content: str) -> dict:
     }
 
 
-def _read_or_social_call(result: dict) -> dict | None:
-    """Return the first non-terminating tool call (get_information,
-    read_forum, or a forum record action), or None.
+def _assistant_tool_calls_message(
+    tool_calls: list[dict], reasoning_content: str | None = None,
+) -> dict:
+    """Build one assistant message recording SEVERAL tool calls in the
+    OpenAI/litellm wire format. The model may emit several tool calls in a
+    single turn (parallel tool calling); each must be echoed back here and
+    answered by a matching ``role: "tool"`` message. See
+    :func:`_assistant_tool_call_message` for the reasoning_content note."""
+    msg: dict = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": tc.get("id") or f"call_{i}",
+            "type": "function",
+            "function": {
+                "name": tc.get("name", ""),
+                "arguments": json.dumps(
+                    tc.get("arguments") or {}, ensure_ascii=False,
+                ),
+            },
+        } for i, tc in enumerate(tool_calls)],
+    }
+    if reasoning_content:
+        msg["reasoning_content"] = reasoning_content
+    return msg
 
-    These are the calls that keep the bounded trade-stage loop going; any
-    other tool call (a trade tool) is a terminal decision.
-    """
-    for tc in _tool_calls(result):
-        name = str(tc.get("name", ""))
-        if name == INFO_TOOL_NAME or name in FORUM_TOOL_NAMES:
-            return tc
-    return None
+
+def _is_continuing_call(name: str) -> bool:
+    """A tool call that keeps the bounded trade-stage loop going: a read
+    (get_information / read_forum) or a forum record action. Any other call
+    (a trade tool) is a terminal decision."""
+    return name == INFO_TOOL_NAME or name in FORUM_TOOL_NAMES
+
+
+def _continuing_calls(result: dict) -> list[dict]:
+    """All non-terminating tool calls in a result, in the order the model
+    emitted them. Empty when the model returned a trade tool / no tool (a
+    terminal turn). The model can emit several in one turn, so we process
+    them all rather than just the first."""
+    return [tc for tc in _tool_calls(result)
+            if _is_continuing_call(str(tc.get("name", "")))]
+
+
+def _read_or_social_call(result: dict) -> dict | None:
+    """Return the first non-terminating tool call, or None. Retained for
+    callers/tests that only need to know whether the loop should continue."""
+    calls = _continuing_calls(result)
+    return calls[0] if calls else None
 
 
 def _format_feed(forum, agent_id: int, limit: int = 5) -> str:
@@ -367,11 +403,7 @@ def _run_trade_stage_loop(
         tool_choice="auto",
     )
 
-    pending = _read_or_social_call(result)
-    # reasoning_content of the turn that produced `pending`, echoed back when
-    # we append that assistant message (required in DeepSeek thinking mode).
-    pending_reasoning = result.get("reasoning_content")
-    if pending is None:
+    if not _continuing_calls(result):
         return result, activity
 
     # Enter the multi-turn loop: rebuild the conversation as explicit
@@ -388,14 +420,11 @@ def _run_trade_stage_loop(
     hard_cap = MAX_INFO_TURNS + K_SOCIAL + 1
     total_turns = 0
 
-    while pending is not None and total_turns < hard_cap:
-        total_turns += 1
-        name = str(pending.get("name", ""))
-        args = pending.get("arguments") or {}
-
-        # --- produce the tool-result content for this call ---
+    def _tool_content_for(name: str, call: dict) -> str:
+        """Run one continuing tool call and return the text fed back to the
+        LLM. Mutates `activity`/`forum` for forum actions/reads."""
+        args = call.get("arguments") or {}
         if name == INFO_TOOL_NAME:
-            read_turns += 1
             query = str(args.get("query", "")).strip()
             results = search_web(query, backend=search_backend, max_results=5)
             if on_info_query is not None:
@@ -403,46 +432,60 @@ def _run_trade_stage_loop(
                     on_info_query(query, results)
                 except Exception:        # noqa: BLE001
                     pass
-            tool_content = (
+            return (
                 f"Web search results for \"{query}\":\n"
                 f"{_format_search_results(results)}"
             )
-        elif name == FORUM_READ_TOOL_NAME:
-            read_turns += 1
-            if forum_enabled:
-                topic = str(args.get("topic", "")).strip()
-                hint = f" (topic: {topic})" if topic else ""
-                feed = forum.get_feed_for(agent_id)
-                followed = forum.followed_by(agent_id)
-                # Record what was read into social memory (newest posts the
-                # agent saw), flagging followed authors for priority.
-                for p in feed:
-                    activity["reads"].append({
-                        "tick": p.tick, "post_id": p.id,
-                        "author_id": p.author_id, "content": p.content,
-                        "followed": p.author_id in followed,
-                    })
-                tool_content = (
-                    f"Your forum feed{hint} (followed authors first):\n"
-                    f"{_format_feed(forum, agent_id)}"
-                )
-            else:
-                tool_content = "(forum unavailable)"
-        elif name in FORUM_ACTION_TOOL_NAMES:
-            social_actions += 1
-            if forum_enabled:
-                tool_content = _apply_forum_action(
-                    forum=forum, agent_id=agent_id, tick=tick,
-                    tool_call=pending, on_forum_action=on_forum_action,
-                    activity=activity,
-                )
-            else:
-                tool_content = "(forum unavailable)"
-        else:                       # pragma: no cover — guarded by caller
-            break
+        if name == FORUM_READ_TOOL_NAME:
+            if not forum_enabled:
+                return "(forum unavailable)"
+            topic = str(args.get("topic", "")).strip()
+            hint = f" (topic: {topic})" if topic else ""
+            feed = forum.get_feed_for(agent_id)
+            followed = forum.followed_by(agent_id)
+            # Record what was read into social memory (newest posts the agent
+            # saw), flagging followed authors for priority.
+            for p in feed:
+                activity["reads"].append({
+                    "tick": p.tick, "post_id": p.id,
+                    "author_id": p.author_id, "content": p.content,
+                    "followed": p.author_id in followed,
+                })
+            return (
+                f"Your forum feed{hint} (followed authors first):\n"
+                f"{_format_feed(forum, agent_id)}"
+            )
+        if name in FORUM_ACTION_TOOL_NAMES:
+            if not forum_enabled:
+                return "(forum unavailable)"
+            return _apply_forum_action(
+                forum=forum, agent_id=agent_id, tick=tick,
+                tool_call=call, on_forum_action=on_forum_action,
+                activity=activity,
+            )
+        return f"unknown_tool:{name}"
 
-        messages.append(_assistant_tool_call_message(pending, pending_reasoning))
-        messages.append(_tool_result_message(pending, tool_content))
+    while total_turns < hard_cap:
+        # The model may emit SEVERAL continuing tool calls in one turn
+        # (parallel tool calling). Process them all this turn: append the
+        # assistant message listing every call (with its reasoning_content),
+        # then a tool result for each — required by the OpenAI/DeepSeek wire
+        # protocol (every tool_call must be answered).
+        calls = _continuing_calls(result)
+        if not calls:
+            break
+        total_turns += 1
+
+        messages.append(_assistant_tool_calls_message(
+            calls, result.get("reasoning_content")))
+        for call in calls:
+            name = str(call.get("name", ""))
+            if name in {INFO_TOOL_NAME, FORUM_READ_TOOL_NAME}:
+                read_turns += 1
+            elif name in FORUM_ACTION_TOOL_NAMES:
+                social_actions += 1
+            messages.append(
+                _tool_result_message(call, _tool_content_for(name, call)))
 
         # --- decide which tools to offer on the next turn ---
         reads_exhausted = read_turns >= MAX_INFO_TURNS
@@ -471,8 +514,8 @@ def _run_trade_stage_loop(
             tools=next_tools,
             tool_choice="auto",
         )
-        pending = None if last_overall else _read_or_social_call(result)
-        pending_reasoning = result.get("reasoning_content")
+        if last_overall:
+            break
 
     return result, activity
 

@@ -147,5 +147,86 @@ class DecideToolCallingTest(unittest.TestCase):
         self.assertIn("rate limited", d.api_error)
 
 
+class MultiToolPerTurnTest(unittest.TestCase):
+    """The model may emit several tool calls in one turn (parallel tool
+    calling). The trade-stage loop must process them ALL in that turn —
+    appending one assistant message listing every call plus a tool result
+    for each — rather than handling only the first and dropping the rest."""
+
+    def _belief(self):
+        c = {"id": "b", "name": "update_belief",
+             "arguments": {"yes_prob": 0.3, "confidence": 0.5,
+                           "rationale": "r"}}
+        return {"tool_call": c, "tool_calls": [c], "text": "",
+                "raw": "{}", "prompt_tokens": 0, "completion_tokens": 0}
+
+    def test_info_and_forum_post_in_one_turn(self):
+        import agent.decision.runtime as rt
+        from agent.decision.tool_schemas import select_tools
+        from agent.info import SearchResult
+        from environment.forum import Forum
+
+        orig_search = rt.search_web
+        rt.search_web = lambda query, backend=None, max_results=5: [
+            SearchResult(title="Odds", snippet="France 16%", url="http://x")
+        ]
+        try:
+            continues = {"n": 0}
+
+            def call_fn(**kw):
+                names = {t["function"]["name"] for t in kw["tools"]}
+                if names == {"update_belief"}:
+                    return self._belief()
+                # First trade call: TWO continuing tools in one turn.
+                return {
+                    "tool_call": {"id": "i", "name": "get_information",
+                                  "arguments": {"query": "france odds"}},
+                    "tool_calls": [
+                        {"id": "i", "name": "get_information",
+                         "arguments": {"query": "france odds"}},
+                        {"id": "p", "name": "post_to_forum",
+                         "arguments": {"content": "France looks weak."}},
+                    ],
+                    "text": "", "reasoning_content": "search and post",
+                    "raw": "{}", "prompt_tokens": 0, "completion_tokens": 0,
+                }
+
+            def continue_fn(**kw):
+                continues["n"] += 1
+                c = {"id": "t", "name": "place_market_order",
+                     "arguments": {"outcome": "NO", "side": "BUY",
+                                   "size_usd": 30}}
+                return {"tool_call": c, "tool_calls": [c], "text": "",
+                        "raw": "{}", "prompt_tokens": 0, "completion_tokens": 0}
+
+            forum = Forum()
+            infos, actions = [], []
+            d = decide(
+                persona=_persona(), question="Q?", description="R",
+                end_date="2026", market=_market(), agent=_agent_state(),
+                api_key="x", base_url="x", model="x",
+                call_fn=call_fn, continue_fn=continue_fn,
+                tools=select_tools(info_enabled=True, forum_enabled=True),
+                info_enabled=True, forum_enabled=True, forum=forum,
+                agent_id=1, tick=1,
+                on_info_query=lambda q, r: infos.append(q),
+                on_forum_action=lambda k, p: actions.append(k),
+                max_attempts=1,
+            )
+
+            # Both tools handled in ONE turn => exactly one continuation call.
+            self.assertEqual(continues["n"], 1)
+            self.assertEqual(infos, ["france odds"])
+            self.assertEqual(actions, ["post"])
+            self.assertEqual(len(forum.posts), 1)
+            # The continuation's trade tool is the final decision.
+            self.assertEqual(d.order_type, "MARKET")
+            self.assertEqual(d.outcome, "NO")
+            self.assertEqual(d.size_usd, 30.0)
+            self.assertEqual(d.api_error, "")
+        finally:
+            rt.search_web = orig_search
+
+
 if __name__ == "__main__":
     unittest.main()
