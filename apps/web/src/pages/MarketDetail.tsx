@@ -236,6 +236,20 @@ export default function MarketDetail() {
         </div>
       </div>
 
+      {/* Live Polymarket embed — the official widget for this event (real
+          prices/chart), keyed off event_slug so it adapts to any market. */}
+      {market.event_slug && (
+        <div className="card overflow-hidden">
+          <iframe
+            title={`Polymarket — ${market.question || market.slug}`}
+            src={`https://embed.polymarket.com/market?event=${encodeURIComponent(market.event_slug)}&rotate=true`}
+            className="w-full block"
+            style={{ height: 360, border: 0 }}
+            allowTransparency
+          />
+        </div>
+      )}
+
       {/* Outcomes & probabilities for a standalone multi-result market
           (e.g. "G2 vs Monte"). Lists the real outcome labels with their live
           Polymarket prices rather than a misleading Yes/No split. */}
