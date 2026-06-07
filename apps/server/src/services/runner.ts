@@ -184,10 +184,22 @@ export function spawnRun(
   });
 
   let pauseSent = false;
+  // Cancel escalation: SIGTERM first (lets Python emit `cancelled` and clean
+  // up), then SIGKILL if it's still alive after a short grace period. The
+  // Python side checks the cancel flag cooperatively between agents, so while
+  // it's blocked in a long LLM call SIGTERM alone can take tens of seconds;
+  // SIGKILL guarantees the run stops promptly. Cancel discards the run (no
+  // checkpoint), so a hard kill is safe.
+  let killDeadline = 0;
   const cancelCheck = setInterval(() => {
     if (handle.cancel) {
-      clearInterval(cancelCheck);
-      child.kill('SIGTERM');
+      if (killDeadline === 0) {
+        child.kill('SIGTERM');
+        killDeadline = Date.now() + 3000;
+      } else if (Date.now() >= killDeadline) {
+        clearInterval(cancelCheck);
+        child.kill('SIGKILL');
+      }
     } else if (handle.pauseRequested && !pauseSent) {
       // SIGUSR1 -> Python checkpoints at the next tick boundary, emits
       // `paused`, then exits cleanly.
@@ -210,9 +222,14 @@ export function spawnRun(
     clearInterval(cancelCheck);
     handle.child = null;
     if (!handle.finished) {
-      // A non-zero exit that is not an intentional pause is a real error.
-      if (code !== 0 && !handle.paused) {
+      // A non-zero exit that is not an intentional pause OR cancel is a real
+      // error. A cancelled run exits non-zero when force-killed (SIGKILL),
+      // which is expected — don't surface it as an error.
+      if (code !== 0 && !handle.paused && !handle.cancel) {
         onEvent('error', { message: `process exited with code ${code}` });
+      }
+      if (handle.cancel) {
+        onEvent('cancelled', {});
       }
       handle.finished = true;
       onEvent('__end__', {});

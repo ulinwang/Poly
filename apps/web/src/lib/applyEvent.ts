@@ -166,10 +166,19 @@ export function applyEvent(
       break;
 
     case 'cancelled':
+      // Reflect the stop in the UI even if it lands after the cancel request's
+      // HTTP response (the Python side stops cooperatively / on force-kill).
+      store.setRunning(false);
+      store.setPaused(false);
       store.addTickLog({ id: Date.now() + Math.random(), time: nowStr(), label: 'cancel', msg: `Cancelled at tick ${data.tick ?? '?'}`, kind: 'warn' });
       break;
 
     case 'paused':
+      // The pause fires at a tick boundary, often after the pause request's
+      // HTTP response has already returned — flip the UI here so it reflects
+      // the paused/resumable state regardless of timing.
+      store.setRunning(false);
+      store.setPaused(true);
       store.addTickLog({ id: Date.now() + Math.random(), time: nowStr(), label: 'pause', msg: `Paused at tick ${data.tick ?? '?'} (checkpointed)`, kind: 'warn' });
       break;
 

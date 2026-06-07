@@ -83,13 +83,22 @@ export default function ExperimentLive() {
     return () => { cancelled = true; };
   }, [id, resetSimulation, setPaused]);
 
+  const [cancelPending, setCancelPending] = useState(false);
   const handleCancel = () => {
     if (!id) return;
-    api.cancelExperiment(id).catch(console.error);
+    setCancelPending(true);
+    api.cancelExperiment(id).catch((err) => {
+      console.error(err);
+      setCancelPending(false);
+    });
   };
 
   const handlePause = () => {
     if (!id) return;
+    // Keep the button in its "pausing…" state until the pause actually lands
+    // at the next tick boundary (the 'paused' SSE event flips `paused`). The
+    // HTTP call may return "pending" well before that — don't clear the
+    // pending state on its response, only on error.
     setPausePending(true);
     api.pauseExperiment(id)
       .then((res) => {
@@ -98,9 +107,18 @@ export default function ExperimentLive() {
           setPaused(true);
         }
       })
-      .catch(console.error)
-      .finally(() => setPausePending(false));
+      .catch((err) => {
+        console.error(err);
+        setPausePending(false);
+      });
   };
+
+  // Clear the transient pending flags once the run actually reaches a
+  // paused/stopped state (driven by SSE), so the buttons don't get stuck.
+  useEffect(() => {
+    if (paused || !running) setPausePending(false);
+    if (!running) setCancelPending(false);
+  }, [paused, running]);
 
   const handleResume = () => {
     if (!id) return;
@@ -209,9 +227,13 @@ export default function ExperimentLive() {
             </button>
           )}
           {(running || paused || status === 'running') && (
-            <button onClick={handleCancel} className="btn-secondary flex items-center gap-2 text-danger">
+            <button
+              onClick={handleCancel}
+              disabled={cancelPending}
+              className="btn-secondary flex items-center gap-2 text-danger disabled:opacity-50"
+            >
               <Square className="w-4 h-4" />
-              {t('live.cancel')}
+              {cancelPending ? t('live.cancelling') : t('live.cancel')}
             </button>
           )}
         </div>
