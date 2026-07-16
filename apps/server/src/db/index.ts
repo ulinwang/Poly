@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { config } from '../config';
+import { config } from '../config.js';
 
 // Under the test runner use a throwaway in-memory database so the suite
 // (which DELETEs from api_settings/api_keys in beforeEach) never touches the

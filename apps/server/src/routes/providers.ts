@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { providerInfoList, PROVIDER_CATALOG } from '../providers';
-import { getApiSettingsDecrypted } from '../db/settings';
+import { providerInfoList, PROVIDER_CATALOG } from '../providers.js';
+import { getApiSettingsDecrypted } from '../db/settings.js';
 
 interface ModelsResponse {
   models: string[];

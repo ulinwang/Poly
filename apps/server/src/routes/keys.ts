@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { listApiKeys, createApiKey, deleteApiKey } from '../db/apikeys';
-import { providerBaseUrl } from '../providers';
+import { listApiKeys, createApiKey, deleteApiKey } from '../db/apikeys.js';
+import { providerBaseUrl } from '../providers.js';
 
 interface CreateKeyBody {
   name?: string;

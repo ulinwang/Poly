@@ -90,15 +90,16 @@ relayed back over SSE to the live observation page
 
 ```bash
 # 1. Python deps (creates .venv, installs the multi-root packages editable)
+#    If uv tries to download its own Python and fails, use the system python:
+#    uv venv --python python3 && uv pip install -e .
 uv sync
 uv pip install -e .
 
-# 2. Node deps
-cd apps/server && npm install
-cd ../web && npm install
-cd ../..
+# 2. Node deps (install from the workspace root)
+npm install
 
 # 3. Configure
+#    You MUST create .env and set at least one LLM key before running experiments.
 cp .env.example .env        # set your LLM key(s); ClickHouse host is optional
 
 # 4a. Dev (hot reload): two terminals
@@ -107,8 +108,23 @@ cd apps/web    && npm run dev      # Vite dev server on http://localhost:5173 (p
 # open http://localhost:5173
 
 # 4b. Or production-style (server serves the built SPA)
-cd apps/web && npm run build
-cd ../server && npm run dev        # open http://localhost:8765
+npm run build:web
+npm run build:server
+cd apps/server && npm start        # open http://localhost:8765
+```
+
+### Run with Docker
+
+```bash
+# Create and configure environment first
+cp .env.example .env
+# edit .env and set at least one LLM key
+
+# Build and start both services
+docker compose up --build
+
+# Frontend (nginx)  -> http://localhost
+# Backend API       -> http://localhost:8765
 ```
 
 You can also set the provider, model, and API key at runtime in the **Settings**

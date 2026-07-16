@@ -1,4 +1,4 @@
-import type { Market, MarketDetail, OutcomeEntry, EventSummary } from '../types';
+import type { Market, MarketDetail, OutcomeEntry, EventSummary } from '../types/index.js';
 
 interface GammaTag {
   label?: string;

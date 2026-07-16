@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildServer } from '../server';
+import { buildServer } from '../server.js';
 
 async function makeApp() {
   const app = await buildServer();

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { buildServer } from '../server';
-import { db } from '../db';
+import { buildServer } from '../server.js';
+import { db } from '../db/index.js';
 
 describe('settings routes', () => {
   beforeEach(() => {

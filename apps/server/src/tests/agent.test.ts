@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildServer } from '../server';
+import { buildServer } from '../server.js';
 
 // These routes spawn a Python subprocess (introspect.py / analysis_cli.py).
 // In CI / isolated worktrees the interpreter may be absent, in which case the

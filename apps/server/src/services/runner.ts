@@ -2,8 +2,8 @@ import { spawn } from 'child_process';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { config } from '../config';
-// import type { ExperimentRow } from '../types'; // available when needed
+import { config } from '../config.js';
+// import type { ExperimentRow } from '../types/index.js'; // available when needed
 
 export interface RunHandle {
   runId: string;

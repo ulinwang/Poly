@@ -1,5 +1,5 @@
-import { buildServer } from './server';
-import { config } from './config';
+import { buildServer } from './server.js';
+import { config } from './config.js';
 
 async function main() {
   const app = await buildServer();

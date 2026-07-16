@@ -4,13 +4,15 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files first for better layer caching
-COPY apps/web/package*.json ./
-RUN npm ci
+# Copy workspace root manifests and the web app manifest first for caching.
+# The root package-lock.json is required because this is an npm workspace.
+COPY package*.json ./
+COPY apps/web/package*.json ./apps/web/
+RUN npm ci --workspace apps/web
 
 # Copy source and build
-COPY apps/web/ ./
-RUN npm run build
+COPY apps/web/ ./apps/web/
+RUN npm run build --workspace apps/web
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
@@ -38,7 +40,7 @@ RUN echo 'server { \
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy built frontend from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 
 EXPOSE 80
 

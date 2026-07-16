@@ -6,7 +6,7 @@ import {
   searchExperiments,
   getExperimentStats,
   getExperiment,
-} from '../db/experiments';
+} from '../db/experiments.js';
 import {
   createRunHandle,
   emitEvent,
@@ -14,14 +14,14 @@ import {
   pauseRun,
   checkpointPathFor,
   eventLogPathFor,
-} from '../services/runner';
-import type { ExperimentConfig, ExperimentRow } from '../types';
-import { getApiSettingsDecrypted } from '../db/settings';
-import { getApiKeyDecrypted } from '../db/apikeys';
+} from '../services/runner.js';
+import type { ExperimentConfig, ExperimentRow } from '../types/index.js';
+import { getApiSettingsDecrypted } from '../db/settings.js';
+import { getApiKeyDecrypted } from '../db/apikeys.js';
 import fs from 'fs';
 import readline from 'readline';
 
-import type { RunHandle } from '../services/runner';
+import type { RunHandle } from '../services/runner.js';
 
 const runs = new Map<string, RunHandle>();
 

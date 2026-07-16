@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { buildServer } from '../server';
-import { eventLogPathFor } from '../services/runner';
+import { buildServer } from '../server.js';
+import { eventLogPathFor } from '../services/runner.js';
 import {
   saveExperiment,
   getExperiment,
   repairOrphanedRuns,
-} from '../db/experiments';
+} from '../db/experiments.js';
 
 describe('experiments routes', () => {
   it('GET /api/v1/experiments returns list and stats shape', async () => {

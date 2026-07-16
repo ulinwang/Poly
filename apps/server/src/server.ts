@@ -8,15 +8,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import marketsRoutes from './routes/markets';
-import eventsRoutes from './routes/events';
-import experimentsRoutes from './routes/experiments';
-import settingsRoutes from './routes/settings';
-import keysRoutes from './routes/keys';
-import providersRoutes from './routes/providers';
-import agentRoutes from './routes/agent';
-import analysisRoutes from './routes/analysis';
-import { repairOrphanedRuns } from './db/experiments';
+import marketsRoutes from './routes/markets.js';
+import eventsRoutes from './routes/events.js';
+import experimentsRoutes from './routes/experiments.js';
+import settingsRoutes from './routes/settings.js';
+import keysRoutes from './routes/keys.js';
+import providersRoutes from './routes/providers.js';
+import agentRoutes from './routes/agent.js';
+import analysisRoutes from './routes/analysis.js';
+import { repairOrphanedRuns } from './db/experiments.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 

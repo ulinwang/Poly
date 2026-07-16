@@ -1,6 +1,6 @@
-import { db } from './index';
-import { encrypt, decrypt } from './crypto';
-import type { ApiKey, ApiKeyDecrypted } from '../types';
+import { db } from './index.js';
+import { encrypt, decrypt } from './crypto.js';
+import type { ApiKey, ApiKeyDecrypted } from '../types/index.js';
 
 /** Raw row shape as stored in SQLite. `api_key` holds the encrypted blob. */
 interface ApiKeyRow {

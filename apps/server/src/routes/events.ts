@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { listPolymarketEvents } from '../services/polymarket';
+import { listPolymarketEvents } from '../services/polymarket.js';
 
 // Browse-page feed: Polymarket events grouped server-side. Each event keeps its
 // sub-markets together so multi-result events (matches, multi-candidate races,

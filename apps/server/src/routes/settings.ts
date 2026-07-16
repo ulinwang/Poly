@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { getApiSettings, getApiSettingsDecrypted, saveApiSettings } from '../db/settings';
-import { providerBaseUrl } from '../providers';
-import type { ApiSettings } from '../types';
+import { getApiSettings, getApiSettingsDecrypted, saveApiSettings } from '../db/settings.js';
+import { providerBaseUrl } from '../providers.js';
+import type { ApiSettings } from '../types/index.js';
 
 export default async function settingsRoutes(app: FastifyInstance) {
   app.get('/api', async () => {

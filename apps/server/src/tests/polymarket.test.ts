@@ -5,7 +5,7 @@ import {
   isBinaryMarket,
   eventToSummary,
   type GammaMarket,
-} from '../services/polymarket';
+} from '../services/polymarket.js';
 
 describe('deriveYesPrice', () => {
   it('parses outcomePrices JSON string (Yes is index 0)', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { buildServer } from '../server';
-import { db } from '../db';
-import { getApiKeyDecrypted } from '../db/apikeys';
+import { buildServer } from '../server.js';
+import { db } from '../db/index.js';
+import { getApiKeyDecrypted } from '../db/apikeys.js';
 
 describe('api keys routes', () => {
   beforeEach(() => {

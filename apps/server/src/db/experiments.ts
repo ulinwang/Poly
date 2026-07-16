@@ -1,5 +1,5 @@
-import { db } from './index';
-import type { ExperimentRow } from '../types';
+import { db } from './index.js';
+import type { ExperimentRow } from '../types/index.js';
 
 const allowedCols = new Set([
   'id', 'slug', 'n_agents', 'n_ticks', 'persona_set',

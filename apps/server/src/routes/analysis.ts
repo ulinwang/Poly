@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { spawn } from 'child_process';
-import { config } from '../config';
+import { config } from '../config.js';
 
 interface AnalysisResult {
   available: boolean;

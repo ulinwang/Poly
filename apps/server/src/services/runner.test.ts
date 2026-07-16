@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
-import { spawnRun, createRunHandle, pauseRun } from './runner';
-import { config } from '../config';
+import { spawnRun, createRunHandle, pauseRun } from './runner.js';
+import { config } from '../config.js';
 
 const mockSpawn = vi.fn();
 

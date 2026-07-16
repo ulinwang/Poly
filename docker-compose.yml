@@ -22,4 +22,5 @@ services:
       - HOST=0.0.0.0
       - NODE_ENV=production
       - DATA_DIR=/app/apps/server/data
+      - POLY_ROOT=/app
     restart: unless-stopped

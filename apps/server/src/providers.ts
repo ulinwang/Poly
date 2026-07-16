@@ -7,7 +7,7 @@
 //   - Native-only providers (e.g. Anthropic) omit `base_url` and use a
 //     litellm-prefixed model id (e.g. "anthropic/claude-..."), routed by
 //     litellm directly.
-import type { ProviderInfo } from './types';
+import type { ProviderInfo } from './types/index.js';
 
 export interface ProviderCatalogEntry extends ProviderInfo {
   /** OpenAI-compatible API base; omitted for litellm-native providers. */

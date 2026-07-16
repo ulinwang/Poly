@@ -3,7 +3,7 @@ import {
   listPolymarketMarkets,
   getPolymarketMarket,
   getPolymarketEventMarkets,
-} from '../services/polymarket';
+} from '../services/polymarket.js';
 
 const CATEGORIES = [
   'Trending', 'Breaking', 'Politics', 'Sports', 'Crypto',

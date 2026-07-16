@@ -1,6 +1,6 @@
-import { db } from './index';
-import type { ApiSettings } from '../types';
-import { encrypt, decrypt } from './crypto';
+import { db } from './index.js';
+import type { ApiSettings } from '../types/index.js';
+import { encrypt, decrypt } from './crypto.js';
 
 /** Raw row shape as stored in SQLite. `api_key` holds the encrypted blob. */
 interface ApiSettingsRow {
