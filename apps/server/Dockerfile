@@ -7,8 +7,7 @@
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS node-builder
 
-# Install native build tools required by better-sqlite3 and a Python interpreter
-# (some npm packages may run Python scripts during install).
+# better-sqlite3 needs node-gyp (Python) + a C++ toolchain to compile on musl.
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
@@ -34,8 +33,8 @@ RUN cd apps/server && npm prune --production
 # -----------------------------------------------------------------------------
 FROM node:20-alpine AS python-builder
 
-# uv + build tooling + Python headers for any packages that need compilation.
-RUN apk add --no-cache curl python3 python3-dev build-base gcc g++ musl-dev linux-headers
+# Minimal set for uv + any Python packages that still need compilation on musl.
+RUN apk add --no-cache curl python3 python3-dev gcc g++ musl-dev
 
 WORKDIR /app
 

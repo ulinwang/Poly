@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
     restart: unless-stopped
@@ -23,4 +23,25 @@ services:
       - NODE_ENV=production
       - DATA_DIR=/app/apps/server/data
       - POLY_ROOT=/app
+      - POLYMETL_RPC_URL=https://1rpc.io/matic
+      - POLYMETL_CLICKHOUSE_HOST=clickhouse
+      - POLYMETL_CLICKHOUSE_PORT=9000
+      - POLYMETL_CLICKHOUSE_USER=default
+      - POLYMETL_CLICKHOUSE_PASSWORD=
+      - POLYMETL_CLICKHOUSE_DATABASE=polymetl
+      - POLYMETL_CHAIN_ID=137
+    depends_on:
+      - clickhouse
     restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
