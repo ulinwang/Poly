@@ -15,22 +15,22 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   }, [debouncedSearch, setSearchQuery]);
 
   return (
-    <header className="sticky top-0 z-50 bg-white dark:bg-surface-900 border-b border-surface-200 dark:border-surface-700">
+    <header className="sticky top-0 z-50 bg-white/80 dark:bg-surface-900/80 backdrop-blur-md border-b border-surface-200 dark:border-surface-700">
       <div className="flex items-center h-14 px-4 lg:px-6 gap-4">
         {/* Left: mobile menu + logo */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <button
             onClick={onMenuClick}
-            className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 lg:hidden"
+            className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors lg:hidden"
             aria-label={t('nav.openMenu')}
           >
             <Menu className="w-5 h-5 text-surface-600 dark:text-surface-400" />
           </button>
-          <a href="#/markets" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
+          <a href="#/markets" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-surface-900 dark:text-white hidden sm:block">
+            <span className="text-lg font-bold text-surface-900 dark:text-white hidden sm:block tracking-tight">
               {t('app.name')}
             </span>
           </a>
@@ -45,7 +45,7 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder={t('nav.searchMarkets')}
-              className="w-full pl-9 pr-4 py-2 bg-surface-100 dark:bg-surface-800 border-0 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none"
+              className="w-full pl-9 pr-4 py-2 bg-surface-100 dark:bg-surface-800 border-0 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none transition-shadow"
             />
           </div>
         </div>

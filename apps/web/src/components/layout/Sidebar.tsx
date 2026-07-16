@@ -50,7 +50,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
         <button
           onClick={toggleSidebar}
           title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-          className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700/60"
+          className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors"
         >
           {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
@@ -70,17 +70,17 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               onClick={onNavigate}
               title={collapsed ? label : undefined}
               className={`group relative flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
-                px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 active
-                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/60'
+                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 shadow-sm'
+                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200'
               }`}
             >
               <span className="relative flex-shrink-0">
                 <Icon className="w-5 h-5" />
                 {showBadge && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 bg-success text-white
-                    text-[10px] font-semibold rounded-full flex items-center justify-center">
+                    text-[10px] font-semibold rounded-full flex items-center justify-center shadow-sm">
                     {runningCount}
                   </span>
                 )}
@@ -89,8 +89,8 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
 
               {/* tooltip when collapsed */}
               {collapsed && (
-                <span className="absolute left-full ml-2 px-2 py-1 bg-surface-800 text-white text-xs
-                  rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+                <span className="absolute left-full ml-2 px-2.5 py-1.5 bg-surface-800 dark:bg-surface-700 text-white text-xs
+                  rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg">
                   {label}
                 </span>
               )}
@@ -105,8 +105,8 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
           title={t('lang.label')}
           className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
-            px-3 py-2.5 rounded-lg text-sm font-medium text-surface-600 dark:text-surface-400
-            hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors`}
+            px-3 py-2.5 rounded-xl text-sm font-medium text-surface-600 dark:text-surface-400
+            hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200 transition-all`}
         >
           <Languages className="w-5 h-5 flex-shrink-0" />
           {!collapsed && <span>{locale === 'zh' ? t('lang.en') : t('lang.zh')}</span>}
@@ -115,8 +115,8 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
           onClick={toggleDarkMode}
           title={darkMode ? t('theme.light') : t('theme.dark')}
           className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
-            px-3 py-2.5 rounded-lg text-sm font-medium text-surface-600 dark:text-surface-400
-            hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors`}
+            px-3 py-2.5 rounded-xl text-sm font-medium text-surface-600 dark:text-surface-400
+            hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200 transition-all`}
         >
           {darkMode ? <Sun className="w-5 h-5 flex-shrink-0" /> : <Moon className="w-5 h-5 flex-shrink-0" />}
           {!collapsed && <span>{darkMode ? t('theme.light') : t('theme.dark')}</span>}

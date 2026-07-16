@@ -314,7 +314,7 @@ const SingleEventCard = memo(function SingleEventCard({ event }: { event: EventS
   return (
     <a
       href={`#/markets/${target}`}
-      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
+      className="card card-hover p-5 flex flex-col gap-4 group"
     >
       {/* Header */}
       <div className="flex items-start gap-3">
@@ -371,7 +371,7 @@ const EventCard = memo(function EventCard({ event }: { event: EventSummary }) {
   return (
     <a
       href={`#/markets/${target}`}
-      className="card p-5 hover:shadow-md transition-shadow flex flex-col gap-4 group"
+      className="card card-hover p-5 flex flex-col gap-4 group"
     >
       {/* Header */}
       <div className="flex items-start gap-3">

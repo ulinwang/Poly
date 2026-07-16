@@ -54,19 +54,64 @@
     background-color: #0f172a;
     color: #f8fafc;
   }
+
+  /* Smooth scroll and reduced motion preference */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
 }
 
 @layer components {
   .card {
     background-color: white;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
   }
 
   .dark .card {
     background-color: #1e293b;
     border-color: #334155;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 15px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .card-hover:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 15px rgba(0, 0, 0, 0.25);
   }
 
   .btn-primary {
@@ -75,11 +120,17 @@
     color: white;
     border-radius: 0.5rem;
     font-weight: 500;
-    transition: background-color 0.15s;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
 
   .btn-primary:hover {
     background-color: #0f766e;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-primary:active {
+    transform: scale(0.98);
   }
 
   .btn-primary:disabled {
@@ -93,7 +144,7 @@
     color: #334155;
     border-radius: 0.5rem;
     font-weight: 500;
-    transition: background-color 0.15s;
+    transition: all 0.15s ease;
   }
 
   .dark .btn-secondary {
@@ -109,6 +160,10 @@
     background-color: #475569;
   }
 
+  .btn-secondary:active {
+    transform: scale(0.98);
+  }
+
   .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -116,6 +171,7 @@
     border: 1px solid #cbd5e1;
     border-radius: 0.5rem;
     font-size: 0.875rem;
+    transition: all 0.15s ease;
   }
 
   .dark .input {
@@ -124,10 +180,18 @@
     color: #f8fafc;
   }
 
+  .input:hover {
+    border-color: #94a3b8;
+  }
+
+  .dark .input:hover {
+    border-color: #64748b;
+  }
+
   .input:focus {
     outline: none;
     border-color: transparent;
-    box-shadow: 0 0 0 2px #0d9488;
+    box-shadow: 0 0 0 2px #0d9488, 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
   .badge {
@@ -157,5 +221,44 @@
   .badge-warn {
     background-color: rgba(245, 158, 11, 0.12);
     color: #d97706;
+  }
+
+  /* Navigation link with indicator */
+  .nav-item {
+    position: relative;
+    transition: all 0.15s ease;
+  }
+
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0);
+    width: 3px;
+    height: 20px;
+    background-color: #0d9488;
+    border-radius: 0 2px 2px 0;
+    transition: transform 0.15s ease;
+  }
+
+  .nav-item.active::before {
+    transform: translateY(-50%) scaleY(1);
+  }
+
+  /* Page fade-in animation */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 0.3s ease-out;
   }
 }
