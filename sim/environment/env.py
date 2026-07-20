@@ -90,6 +90,19 @@ class AgentRuntime:
     # first, de-duplicated by post_id, and posts by *followed* authors are
     # retained preferentially over crowd posts when trimming to capacity.
     social_memory: dict = None
+    # Per-agent runtime statistics for cost / latency tracking. Written by
+    # the runner after each decide() call; emitted in the settled summary.
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_latency_ms: int = 0
+    n_decisions: int = 0
+    n_errors: int = 0
+    n_holds: int = 0
+    n_timeouts: int = 0
+    # Token budget (0 = unlimited). When exceeded, the runner forces HOLD and
+    # flags the agent so it stops burning tokens for the rest of the run.
+    token_budget: int = 0
+    budget_exceeded: bool = False
 
     def __post_init__(self):
         if self.memory is None:

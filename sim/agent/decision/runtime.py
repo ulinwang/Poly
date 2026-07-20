@@ -11,6 +11,7 @@ agent's posterior explicit without hard-coding any trading rule.
 from __future__ import annotations
 
 import json
+import signal
 import time
 import urllib.error
 from typing import Any, Callable, Optional
@@ -32,6 +33,50 @@ from agent.decision.types import AgentSnapshot, Decision, MarketSnapshot
 from agent.info import SearchResult, search_web
 from agent.personas.persona import Persona
 from agent.prompt.builder import build_clob_system_prompt, build_user_prompt
+
+
+class _DecisionTimeout(Exception):
+    """Raised when decide() exceeds its hard wall-clock timeout."""
+
+
+class _TimeoutGuard:
+    """Hard timeout guard using SIGALRM (Unix main-thread only).
+
+    The LLM calls inside decide() are blocking; without a signal-based
+    timeout a stuck provider can freeze the whole experiment tick. This
+    guard raises _DecisionTimeout after `seconds` wall-clock seconds so
+    decide() can return a HOLD with timeout_exceeded=True instead of
+    hanging forever.
+    """
+
+    def __init__(self, seconds: float):
+        self.seconds = seconds
+        self._old_handler = None
+
+    def __enter__(self):
+        if self.seconds <= 0:
+            return self
+        # Only install in the main thread of the main interpreter.
+        try:
+            self._old_handler = signal.signal(
+                signal.SIGALRM, self._handler,
+            )
+            signal.setitimer(signal.ITIMER_REAL, self.seconds)
+        except (ValueError, AttributeError):
+            # Not in main thread or signal not available (e.g. Windows);
+            # fall back to no hard timeout.
+            self._old_handler = None
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._old_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, self._old_handler)
+        return False
+
+    @staticmethod
+    def _handler(signum, frame):  # noqa: ARG001
+        raise _DecisionTimeout(f"decide() exceeded hard timeout")
 
 
 # Max web-search (get_information) round-trips per tick. Bounds the
@@ -625,6 +670,9 @@ def decide(
     started = time.time()
     raw = ""
     api_error = ""
+    timeout_exceeded = False
+    prompt_tokens = 0
+    completion_tokens = 0
     parsed = {
         "order_type": "HOLD", "outcome": "YES", "side": "BUY",
         "price": 0.5, "size_usd": 0.0, "reasoning": "",
@@ -632,143 +680,153 @@ def decide(
     belief_update = None
     forum_activity = None
     try:
-        base_call_kwargs: dict[str, Any] = dict(
-            base_url=base_url, api_key=api_key, model=model,
-            temperature=temperature, timeout=timeout,
-        )
-        if thinking is not None:
-            base_call_kwargs["thinking"] = thinking
-
-        if belief_tools:
-            belief_result = call_with_retry(
-                call_fn,
-                max_attempts=max_attempts,
-                **base_call_kwargs,
-                system_prompt=system_prompt,
-                user_prompt=_append_belief_stage_prompt(
-                    user_prompt, prompt_language,
-                ),
-                tools=belief_tools,
-                tool_choice=_forced_tool_choice("update_belief"),
+        with _TimeoutGuard(timeout):
+            base_call_kwargs: dict[str, Any] = dict(
+                base_url=base_url, api_key=api_key, model=model,
+                temperature=temperature, timeout=timeout,
             )
-            belief_update = _parse_belief_result(belief_result)
-            if belief_update is None:
-                raw = _stage_raw(belief_stage=belief_result)
-                parsed["reasoning"] = (
-                    belief_result.get("text", "")[:280]
-                    or "belief_stage_missing_update_belief"
-                )
-                api_error = "parse: missing update_belief in belief stage"
-            else:
-                if trade_tools:
-                    trade_user_prompt = _append_trade_stage_prompt(
-                        user_prompt, belief_update, prompt_language,
-                    )
-                    if use_loop:
-                        trade_result, forum_activity = _run_trade_stage_loop(
-                            call_fn=call_fn,
-                            continue_fn=continue_fn,
-                            base_call_kwargs=base_call_kwargs,
-                            max_attempts=max_attempts,
-                            system_prompt=system_prompt,
-                            trade_user_prompt=trade_user_prompt,
-                            trade_tools=_drop_loop_tools(
-                                trade_tools, info=not use_info,
-                                forum=not use_forum,
-                            ),
-                            tick_size=tick_size,
-                            use_info=use_info,
-                            search_backend=search_backend,
-                            on_info_query=on_info_query,
-                            forum=_forum,
-                            agent_id=_forum_agent_id,
-                            tick=tick,
-                            on_forum_action=on_forum_action,
-                        )
-                    else:
-                        # No loop: strip ALL non-terminating tools so the
-                        # LLM converges in a single call.
-                        trade_tools_eff = _drop_loop_tools(
-                            trade_tools, info=True, forum=True,
-                        )
-                        trade_result = call_with_retry(
-                            call_fn,
-                            max_attempts=max_attempts,
-                            **base_call_kwargs,
-                            system_prompt=system_prompt,
-                            user_prompt=trade_user_prompt,
-                            tools=trade_tools_eff,
-                            tool_choice="auto",
-                        )
-                    raw = _stage_raw(
-                        belief_stage=belief_result,
-                        trade_stage=trade_result,
-                    )
-                    parsed = parse_tool_call(
-                        trade_result.get("tool_call"), tick_size=tick_size,
-                    )
-                    # Surface the trade-stage reasoning for display: prefer the
-                    # thinking-mode chain-of-thought, then any prose in `text`
-                    # (e.g. tool_choice=auto and it declined to call).
-                    if not parsed["reasoning"]:
-                        parsed["reasoning"] = (
-                            trade_result.get("reasoning_content")
-                            or trade_result.get("text", "")
-                        )[:600]
-                else:
-                    raw = _stage_raw(belief_stage=belief_result)
-                    parsed = {
-                        "order_type": "UPDATE_BELIEF", "outcome": "YES",
-                        "side": "BUY", "price": belief_update["yes_prob"],
-                        "size_usd": 0.0,
-                        "reasoning": belief_update.get("rationale", ""),
-                    }
-        else:
-            if use_loop:
-                # No belief stage: run the bounded loop directly on the full
-                # tool set (belief tool already absent here).
-                result, forum_activity = _run_trade_stage_loop(
-                    call_fn=call_fn,
-                    continue_fn=continue_fn,
-                    base_call_kwargs=base_call_kwargs,
-                    max_attempts=max_attempts,
-                    system_prompt=system_prompt,
-                    trade_user_prompt=user_prompt,
-                    trade_tools=_drop_loop_tools(
-                        tools, info=not use_info, forum=not use_forum,
-                    ),
-                    tick_size=tick_size,
-                    use_info=use_info,
-                    search_backend=search_backend,
-                    on_info_query=on_info_query,
-                    forum=_forum,
-                    agent_id=_forum_agent_id,
-                    tick=tick,
-                    on_forum_action=on_forum_action,
-                )
-            else:
-                tools_eff = _drop_loop_tools(tools, info=True, forum=True)
-                result = call_with_retry(
+            if thinking is not None:
+                base_call_kwargs["thinking"] = thinking
+
+            if belief_tools:
+                belief_result = call_with_retry(
                     call_fn,
                     max_attempts=max_attempts,
                     **base_call_kwargs,
                     system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    tools=tools_eff,
-                    tool_choice="auto",
+                    user_prompt=_append_belief_stage_prompt(
+                        user_prompt, prompt_language,
+                    ),
+                    tools=belief_tools,
+                    tool_choice=_forced_tool_choice("update_belief"),
                 )
-            raw = result.get("raw", "")
-            parsed = parse_tool_call(result.get("tool_call"), tick_size=tick_size)
-            # Back-compat path for configs that disable the explicit
-            # two-stage belief tool.
-            if parsed["order_type"] != "UPDATE_BELIEF":
-                belief_update = _parse_belief_result(result)
+                prompt_tokens += belief_result.get("prompt_tokens", 0)
+                completion_tokens += belief_result.get("completion_tokens", 0)
+                belief_update = _parse_belief_result(belief_result)
+                if belief_update is None:
+                    raw = _stage_raw(belief_stage=belief_result)
+                    parsed["reasoning"] = (
+                        belief_result.get("text", "")[:280]
+                        or "belief_stage_missing_update_belief"
+                    )
+                    api_error = "parse: missing update_belief in belief stage"
+                else:
+                    if trade_tools:
+                        trade_user_prompt = _append_trade_stage_prompt(
+                            user_prompt, belief_update, prompt_language,
+                        )
+                        if use_loop:
+                            trade_result, forum_activity = _run_trade_stage_loop(
+                                call_fn=call_fn,
+                                continue_fn=continue_fn,
+                                base_call_kwargs=base_call_kwargs,
+                                max_attempts=max_attempts,
+                                system_prompt=system_prompt,
+                                trade_user_prompt=trade_user_prompt,
+                                trade_tools=_drop_loop_tools(
+                                    trade_tools, info=not use_info,
+                                    forum=not use_forum,
+                                ),
+                                tick_size=tick_size,
+                                use_info=use_info,
+                                search_backend=search_backend,
+                                on_info_query=on_info_query,
+                                forum=_forum,
+                                agent_id=_forum_agent_id,
+                                tick=tick,
+                                on_forum_action=on_forum_action,
+                            )
+                        else:
+                            # No loop: strip ALL non-terminating tools so the
+                            # LLM converges in a single call.
+                            trade_tools_eff = _drop_loop_tools(
+                                trade_tools, info=True, forum=True,
+                            )
+                            trade_result = call_with_retry(
+                                call_fn,
+                                max_attempts=max_attempts,
+                                **base_call_kwargs,
+                                system_prompt=system_prompt,
+                                user_prompt=trade_user_prompt,
+                                tools=trade_tools_eff,
+                                tool_choice="auto",
+                            )
+                        prompt_tokens += trade_result.get("prompt_tokens", 0)
+                        completion_tokens += trade_result.get("completion_tokens", 0)
+                        raw = _stage_raw(
+                            belief_stage=belief_result,
+                            trade_stage=trade_result,
+                        )
+                        parsed = parse_tool_call(
+                            trade_result.get("tool_call"), tick_size=tick_size,
+                        )
+                        # Surface the trade-stage reasoning for display: prefer the
+                        # thinking-mode chain-of-thought, then any prose in `text`
+                        # (e.g. tool_choice=auto and it declined to call).
+                        if not parsed["reasoning"]:
+                            parsed["reasoning"] = (
+                                trade_result.get("reasoning_content")
+                                or trade_result.get("text", "")
+                            )[:600]
+                    else:
+                        raw = _stage_raw(belief_stage=belief_result)
+                        parsed = {
+                            "order_type": "UPDATE_BELIEF", "outcome": "YES",
+                            "side": "BUY", "price": belief_update["yes_prob"],
+                            "size_usd": 0.0,
+                            "reasoning": belief_update.get("rationale", ""),
+                        }
             else:
-                belief_update = parsed.get("belief_update")
-            if not parsed["reasoning"]:
-                parsed["reasoning"] = (
-                    result.get("reasoning_content") or result.get("text", "")
-                )[:600]
+                if use_loop:
+                    # No belief stage: run the bounded loop directly on the full
+                    # tool set (belief tool already absent here).
+                    result, forum_activity = _run_trade_stage_loop(
+                        call_fn=call_fn,
+                        continue_fn=continue_fn,
+                        base_call_kwargs=base_call_kwargs,
+                        max_attempts=max_attempts,
+                        system_prompt=system_prompt,
+                        trade_user_prompt=user_prompt,
+                        trade_tools=_drop_loop_tools(
+                            tools, info=not use_info, forum=not use_forum,
+                        ),
+                        tick_size=tick_size,
+                        use_info=use_info,
+                        search_backend=search_backend,
+                        on_info_query=on_info_query,
+                        forum=_forum,
+                        agent_id=_forum_agent_id,
+                        tick=tick,
+                        on_forum_action=on_forum_action,
+                    )
+                else:
+                    tools_eff = _drop_loop_tools(tools, info=True, forum=True)
+                    result = call_with_retry(
+                        call_fn,
+                        max_attempts=max_attempts,
+                        **base_call_kwargs,
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        tools=tools_eff,
+                        tool_choice="auto",
+                    )
+                prompt_tokens += result.get("prompt_tokens", 0)
+                completion_tokens += result.get("completion_tokens", 0)
+                raw = result.get("raw", "")
+                parsed = parse_tool_call(result.get("tool_call"), tick_size=tick_size)
+                # Back-compat path for configs that disable the explicit
+                # two-stage belief tool.
+                if parsed["order_type"] != "UPDATE_BELIEF":
+                    belief_update = _parse_belief_result(result)
+                else:
+                    belief_update = parsed.get("belief_update")
+                if not parsed["reasoning"]:
+                    parsed["reasoning"] = (
+                        result.get("reasoning_content") or result.get("text", "")
+                    )[:600]
+    except _DecisionTimeout as exc:
+        api_error = f"timeout: {exc}"
+        timeout_exceeded = True
     except (urllib.error.HTTPError, urllib.error.URLError, OSError) as exc:
         api_error = f"http: {exc}"
     except (ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -786,4 +844,7 @@ def decide(
         raw_response=raw, api_latency_ms=latency_ms, api_error=api_error,
         belief_update=belief_update,
         forum_activity=forum_activity,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        timeout_exceeded=timeout_exceeded,
     )

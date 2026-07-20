@@ -85,3 +85,11 @@ class Decision:
     #    "follows": [target_agent_id, ...]}
     # None when the forum was inactive this tick.
     forum_activity: dict | None = None
+    # Token usage for this decision (aggregated across all LLM calls in the
+    # bounded loop). Used by the runner to enforce per-agent budgets and to
+    # report cost in the settled summary.
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    # True when decide() aborted because the hard wall-clock timeout was
+    # exceeded (not an API error). The runner maps this to api_error.
+    timeout_exceeded: bool = False

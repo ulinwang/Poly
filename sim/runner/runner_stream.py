@@ -43,6 +43,12 @@ log = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict], None]
 
+# Global LLM concurrency limiter. The current tick loop is sequential (one
+# agent at a time), but if it is later parallelized (e.g. thread pool), this
+# semaphore caps the number of simultaneous in-flight LLM calls so provider
+# rate limits are not overwhelmed. Default 4.
+_LLM_SEMAPHORE = threading.Semaphore(4)
+
 
 def _ensure_priors_json(slug: str, data_dir: Path) -> dict:
     """Return priors dict; create `data/priors_<slug>.json` if absent."""
@@ -401,32 +407,71 @@ def _run_tick_loop(
                     on_event("forum_follow", payload)
 
             try:
-                decision = decide(
-                    persona=agent.persona,
-                    question=meta["question"],
-                    description=meta.get("description", ""),
-                    end_date=meta.get("end_date_iso", ""),
-                    market=market_snap, agent=agent_snap,
-                    api_key=api_key,
-                    base_url=base_url,
-                    model=model,
-                    tick_size=priors["tick_size"],
-                    temperature=temperature,
-                    timeout=settings.DEEPSEEK_TIMEOUT,
-                    max_attempts=3,
-                    info_enabled=True,
-                    on_info_query=_on_info_query,
-                    forum=sim.forum,
-                    agent_id=aid,
-                    tick=tick,
-                    forum_enabled=True,
-                    on_forum_action=_on_forum_action,
-                )
+                with _LLM_SEMAPHORE:
+                    decision = decide(
+                        persona=agent.persona,
+                        question=meta["question"],
+                        description=meta.get("description", ""),
+                        end_date=meta.get("end_date_iso", ""),
+                        market=market_snap, agent=agent_snap,
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=model,
+                        tick_size=priors["tick_size"],
+                        temperature=temperature,
+                        timeout=settings.DEEPSEEK_TIMEOUT,
+                        max_attempts=3,
+                        info_enabled=True,
+                        on_info_query=_on_info_query,
+                        forum=sim.forum,
+                        agent_id=aid,
+                        tick=tick,
+                        forum_enabled=True,
+                        on_forum_action=_on_forum_action,
+                    )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {
                     "tick": tick, "agent_id": aid, "message": str(exc),
                 })
+                agent.n_errors += 1
                 continue
+
+            # --- Track per-agent stats ---
+            agent.n_decisions += 1
+            agent.total_prompt_tokens += decision.prompt_tokens
+            agent.total_completion_tokens += decision.completion_tokens
+            agent.total_latency_ms += decision.api_latency_ms
+            if decision.timeout_exceeded:
+                agent.n_timeouts += 1
+            if decision.api_error:
+                agent.n_errors += 1
+            if decision.order_type == "HOLD":
+                agent.n_holds += 1
+
+            # Budget check: once an agent exceeds its token budget, force
+            # HOLD for the rest of the run and flag it. 0 = unlimited.
+            if agent.token_budget > 0 and not agent.budget_exceeded:
+                total_tokens = agent.total_prompt_tokens + agent.total_completion_tokens
+                if total_tokens >= agent.token_budget:
+                    agent.budget_exceeded = True
+                    decision = type(decision)(
+                        order_type="HOLD", outcome=decision.outcome,
+                        side=decision.side, price=decision.price,
+                        size_usd=0.0,
+                        reasoning=f"token_budget_exceeded ({total_tokens}>={agent.token_budget})",
+                        raw_response=decision.raw_response,
+                        api_latency_ms=decision.api_latency_ms,
+                        api_error=f"budget: token_budget_exceeded",
+                        prompt_tokens=decision.prompt_tokens,
+                        completion_tokens=decision.completion_tokens,
+                        timeout_exceeded=decision.timeout_exceeded,
+                    )
+                    on_event("agent_budget_exceeded", {
+                        "tick": tick, "agent_id": aid,
+                        "total_tokens": total_tokens,
+                        "budget": agent.token_budget,
+                    })
+
             actions[aid] = decision
             on_event("agent_decision", {
                 "tick": tick, "agent_id": aid,
@@ -439,6 +484,8 @@ def _run_tick_loop(
                 "reasoning": (decision.reasoning or "").strip()[:400],
                 "api_latency_ms": int(decision.api_latency_ms),
                 "api_error": decision.api_error or "",
+                "prompt_tokens": int(decision.prompt_tokens),
+                "completion_tokens": int(decision.completion_tokens),
                 "elapsed_s": round(time.time() - t0, 2),
             })
 
@@ -464,6 +511,25 @@ def _run_tick_loop(
 
     # 6. Settle (no-op for unresolved markets) + final summary.
     pnl = env.settle()
+    agent_stats = {
+        a.agent_id: {
+            "persona_type": a.persona.persona_type,
+            "n_decisions": a.n_decisions,
+            "n_errors": a.n_errors,
+            "n_holds": a.n_holds,
+            "n_timeouts": a.n_timeouts,
+            "total_prompt_tokens": a.total_prompt_tokens,
+            "total_completion_tokens": a.total_completion_tokens,
+            "total_tokens": a.total_prompt_tokens + a.total_completion_tokens,
+            "total_latency_ms": a.total_latency_ms,
+            "avg_latency_ms": (
+                round(a.total_latency_ms / a.n_decisions, 1)
+                if a.n_decisions else 0
+            ),
+            "budget_exceeded": a.budget_exceeded,
+        }
+        for a in sim.agents
+    }
     on_event("settled", {
         "pnl": {int(k): float(v) for k, v in pnl.items()},
         "n_actions": len(sim.actions_log),
@@ -472,5 +538,6 @@ def _run_tick_loop(
         "wall_seconds": round(
             (dt.datetime.utcnow() - started_at).total_seconds(), 1,
         ),
+        "agent_stats": agent_stats,
     })
     on_event("done", {"sim_id": sim.sim_id})
