@@ -72,8 +72,8 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               className={`group relative flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
                 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 active
-                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 shadow-sm'
-                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200'
+                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 shadow-sm border-l-2 border-primary-500'
+                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200 border-l-2 border-transparent'
               }`}
             >
               <span className="relative flex-shrink-0">

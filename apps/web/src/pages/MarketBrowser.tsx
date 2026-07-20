@@ -4,6 +4,8 @@ import {
   Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useShallow } from 'zustand/react/shallow';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
 import { useI18n } from '../lib/i18n';
@@ -48,7 +50,7 @@ export default function MarketBrowser() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
-  const events = useMarketStore((s) => s.events);
+  const events = useMarketStore(useShallow((s) => s.events));
   const setEvents = useMarketStore((s) => s.setEvents);
   const appendEvents = useMarketStore((s) => s.appendEvents);
   const category = useMarketStore((s) => s.category);
@@ -169,7 +171,7 @@ export default function MarketBrowser() {
 
       {/* Section title */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-surface-900 dark:text-white">
+        <h2 className="text-2xl font-semibold tracking-tight text-surface-900 dark:text-white">
           {category === 'All' ? t('market.all') : category}
         </h2>
         <div className="flex items-center gap-3">
@@ -187,7 +189,7 @@ export default function MarketBrowser() {
 
       {/* Event grid */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="card p-5 space-y-4 animate-pulse">
               <div className="flex items-start gap-3">
@@ -204,17 +206,12 @@ export default function MarketBrowser() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-surface-400">
-          <p className="text-lg mb-1">{t('market.noneFound')}</p>
+          <Search className="w-12 h-12 mx-auto mb-4 text-surface-300 dark:text-surface-600" />
+          <p className="text-lg mb-1 font-medium">{t('market.noneFound')}</p>
           <p className="text-sm">{t('market.adjustSearch')}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((ev) => (
-            ev.is_single
-              ? <SingleEventCard key={ev.event_slug} event={ev} />
-              : <EventCard key={ev.event_slug} event={ev} />
-          ))}
-        </div>
+        <VirtualEventGrid events={filtered} />
       )}
 
       {/* Infinite-scroll sentinel + load-more indicator. The category tabs are a
@@ -233,6 +230,73 @@ export default function MarketBrowser() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Responsive virtualized grid: only renders the rows that are actually in the
+// viewport. Column count is derived from the container width so the layout
+// stays in sync with the Tailwind breakpoints below.
+function VirtualEventGrid({ events }: { events: EventSummary[] }) {
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Match the Tailwind breakpoints used below: md=768px, xl=1280px.
+  const cols = width >= 1280 ? 3 : width >= 768 ? 2 : 1;
+  const rows = Math.ceil(events.length / cols);
+
+  const virtualizer = useVirtualizer({
+    count: rows,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 260,
+    overscan: 3,
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="h-[calc(100vh-240px)] overflow-y-auto scrollbar-hide"
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const start = virtualRow.index * cols;
+          const rowEvents = events.slice(start, start + cols);
+          return (
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              className="absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {rowEvents.map((ev) => (
+                  ev.is_single
+                    ? <SingleEventCard key={ev.event_slug} event={ev} />
+                    : <EventCard key={ev.event_slug} event={ev} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -291,6 +355,7 @@ function Thumbnail({
         src={src!}
         alt=""
         loading="lazy"
+        decoding="async"
         onError={() => setFailed(true)}
         className={`${size} rounded-xl object-cover flex-shrink-0 bg-surface-100 dark:bg-surface-700`}
       />

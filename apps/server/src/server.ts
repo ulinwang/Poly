@@ -1,9 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// config imported for potential future use
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +20,16 @@ import { repairOrphanedRuns } from './db/experiments.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 
+// Comma-separated list of allowed origins; falls back to the local dev and
+// production (nginx) origins used by this project.
+const allowedOrigins = (process.env.POLY_CORS_ORIGINS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (allowedOrigins.length === 0) {
+  allowedOrigins.push('http://localhost:8080', 'http://localhost:5173');
+}
+
 export async function buildServer() {
   // Repair zombie runs left as 'running' by a previous process that died
   // without finishing them. Paused (resumable) runs are left alone.
@@ -32,8 +42,17 @@ export async function buildServer() {
     logger: isDev,
   });
 
+  await app.register(compress, { global: true });
+
   await app.register(cors, {
-    origin: '*',
+    origin: (origin, cb) => {
+      // Allow same-origin and non-browser requests (no Origin header).
+      if (!origin || allowedOrigins.includes(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error('Not allowed by CORS'), false);
+    },
     credentials: true,
   });
 
@@ -52,6 +71,8 @@ export async function buildServer() {
     // wildcard:true serves any file under dist dynamically, so newly-hashed
     // assets after a frontend rebuild are picked up without a server restart.
     wildcard: true,
+    maxAge: '1y',
+    immutable: true,
   });
 
   app.setNotFoundHandler((req, reply) => {

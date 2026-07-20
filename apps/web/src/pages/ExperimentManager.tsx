@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   FlaskConical, Clock, CheckCircle, XCircle, AlertCircle,
   RefreshCw, Search, ChevronLeft, ChevronRight, Filter, ArrowLeft, LayoutGrid,
 } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import type { Experiment } from '../types';
@@ -126,7 +127,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FlaskConical className="w-5 h-5 text-primary-600" />
-          <h1 className="text-xl font-bold text-surface-900 dark:text-white">{t('exp.title')}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-surface-900 dark:text-white">{t('exp.title')}</h1>
           <span className="text-sm text-surface-400">({t('exp.marketCount', { count: groups.length })})</span>
         </div>
         <button
@@ -185,39 +186,110 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {groups.map((g) => (
-            <button
-              key={g.slug}
-              onClick={() => onSelect(g.slug)}
-              className="card p-4 text-left hover:shadow-md transition-shadow flex flex-col gap-3"
+        <VirtualExperimentGrid groups={groups} onSelect={onSelect} statusColors={statusColors} statusIcons={statusIcons} />
+      )}
+    </div>
+  );
+}
+
+// Responsive virtualized grid for experiment market cards. Only renders the
+// rows that are actually in the viewport; column count follows the container
+// width (md=2, xl=3).
+function VirtualExperimentGrid({
+  groups,
+  onSelect,
+  statusColors,
+  statusIcons,
+}: {
+  groups: MarketGroup[];
+  onSelect: (slug: string) => void;
+  statusColors: Record<string, string>;
+  statusIcons: Record<string, React.ReactNode>;
+}) {
+  const { t } = useI18n();
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const cols = width >= 1280 ? 3 : width >= 768 ? 2 : 1;
+  const rows = Math.ceil(groups.length / cols);
+
+  const virtualizer = useVirtualizer({
+    count: rows,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 140,
+    overscan: 3,
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="h-[calc(100vh-280px)] overflow-y-auto scrollbar-hide"
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const start = virtualRow.index * cols;
+          const rowGroups = groups.slice(start, start + cols);
+          return (
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              className="absolute top-0 left-0 w-full"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-medium text-surface-800 dark:text-surface-100 line-clamp-2">
-                  {g.question || g.slug}
-                </span>
-                <span className="badge text-[10px] bg-surface-100 dark:bg-surface-800 text-surface-500 flex-shrink-0">
-                  {g.total === 1 ? t('exp.runsOne', { count: g.total }) : t('exp.runsMany', { count: g.total })}
-                </span>
-              </div>
-              {g.question && (
-                <div className="text-xs text-surface-400 truncate -mt-1">{g.slug}</div>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {STATUS_ORDER.filter((s) => g.statusCounts[s]).map((s) => (
-                  <span
-                    key={s}
-                    className={`badge text-[10px] inline-flex items-center gap-1 ${statusColors[s] || ''}`}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {rowGroups.map((g) => (
+                  <button
+                    key={g.slug}
+                    onClick={() => onSelect(g.slug)}
+                    className="card card-hover p-4 text-left flex flex-col gap-3"
                   >
-                    {statusIcons[s]}
-                    {g.statusCounts[s]} {t(`exp.status.${s}`)}
-                  </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-surface-800 dark:text-surface-100 line-clamp-2">
+                        {g.question || g.slug}
+                      </span>
+                      <span className="badge text-[10px] bg-surface-100 dark:bg-surface-800 text-surface-500 flex-shrink-0">
+                        {g.total === 1 ? t('exp.runsOne', { count: g.total }) : t('exp.runsMany', { count: g.total })}
+                      </span>
+                    </div>
+                    {g.question && (
+                      <div className="text-xs text-surface-400 truncate -mt-1">{g.slug}</div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {STATUS_ORDER.filter((s) => g.statusCounts[s]).map((s) => (
+                        <span
+                          key={s}
+                          className={`badge text-[10px] inline-flex items-center gap-1 ${statusColors[s] || ''}`}
+                        >
+                          {statusIcons[s]}
+                          {g.statusCounts[s]} {t(`exp.status.${s}`)}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
                 ))}
               </div>
-            </button>
-          ))}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

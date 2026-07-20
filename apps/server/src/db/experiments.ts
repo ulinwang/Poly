@@ -31,6 +31,20 @@ export function saveExperiment(exp: Partial<ExperimentRow>): void {
   stmt.run(clean as Record<string, unknown>);
 }
 
+/**
+ * Batch-save experiments inside a single transaction. Useful when importing or
+ * repairing many rows at once. Existing single-row upsert semantics are kept:
+ * for each row, UPDATE first; when no row matches, INSERT OR REPLACE.
+ */
+export function saveExperiments(exps: Partial<ExperimentRow>[]): void {
+  const tx = db.transaction((rows: Partial<ExperimentRow>[]) => {
+    for (const exp of rows) {
+      saveExperiment(exp);
+    }
+  });
+  tx(exps);
+}
+
 export function getExperiments(limit = 100): ExperimentRow[] {
   return db.prepare('SELECT * FROM experiments ORDER BY created_at DESC LIMIT ?').all(limit) as ExperimentRow[];
 }

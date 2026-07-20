@@ -382,17 +382,57 @@ export default async function experimentsRoutes(app: FastifyInstance) {
         }
       }
 
+      // Throttle live SSE output: within each 100ms window, collapse duplicate
+      // high-frequency events of the same kind for the same entity (e.g. one
+      // agent_decision per agent per window). The durable NDJSON log still
+      // records every event; this only affects the browser-facing stream.
+      const throttleWindowMs = 100;
+      const lastSent = new Map<string, number>();
+
       const timer = setInterval(() => {
+        const now = Date.now();
+        const toSend: Array<{ kind: string; data: Record<string, unknown> }> = [];
+
         while (idx < handle.queue.length) {
           const ev = handle.queue[idx++];
           if (ev.kind === '__end__') {
+            // Flush any pending events, then send the terminal marker.
+            for (const pending of toSend) {
+              reply.raw.write(`event: ${pending.kind}\ndata: ${JSON.stringify(pending.data)}\n\n`);
+            }
             reply.raw.write(`event: end\ndata: {}\n\n`);
             clearInterval(timer);
             reply.raw.end();
             return;
           }
+
+          // Key used to collapse duplicates: kind + agent_id when present.
+          const entityKey = (ev.data.agent_id ?? ev.data.agentId ?? ev.data.id ?? '').toString();
+          const throttleKey = entityKey ? `${ev.kind}:${entityKey}` : ev.kind;
+          const last = lastSent.get(throttleKey) ?? 0;
+
+          if (now - last >= throttleWindowMs) {
+            toSend.push(ev);
+            lastSent.set(throttleKey, now);
+          } else {
+            // Collapse: keep only the latest event for this key in the window.
+            const existingIdx = toSend.findIndex((p) => {
+              const pKey = (p.data.agent_id ?? p.data.agentId ?? p.data.id ?? '').toString();
+              return (pKey ? `${p.kind}:${pKey}` : p.kind) === throttleKey;
+            });
+            if (existingIdx >= 0) {
+              toSend[existingIdx] = ev;
+            } else {
+              toSend.push(ev);
+            }
+            lastSent.set(throttleKey, now);
+          }
+        }
+
+        for (const ev of toSend) {
           reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
         }
+
         if (handle.finished && idx >= handle.queue.length) {
           reply.raw.write(`event: end\ndata: {}\n\n`);
           clearInterval(timer);
@@ -400,7 +440,7 @@ export default async function experimentsRoutes(app: FastifyInstance) {
           return;
         }
         reply.raw.write(`event: ping\ndata: {}\n\n`);
-      }, 250);
+      }, 100);
 
       req.raw.on('close', () => {
         clearInterval(timer);
