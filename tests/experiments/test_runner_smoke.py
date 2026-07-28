@@ -1,44 +1,66 @@
-"""Runner happy path with a real SpaceX dry-run.
-
-Skips when wallet_features rows or cached personas are missing
-(non-thesis dev environments)."""
+"""Hermetic runner dry-run smoke test (no ClickHouse, network, or LLM)."""
 from __future__ import annotations
 
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import yaml
+
+from tests._helpers import make_test_population
 
 
-SLUG = "will-the-chopsticks-catch-spacex-starship-flight-test-11-superheavy-booster"
-
-
-def _spacex_priors_exists() -> bool:
-    return Path("data") / f"priors_{SLUG}.json" in Path("data").glob("priors_*.json")
-
-
-def _personas_cached() -> bool:
-    p = Path("data/wallet_personas.json")
-    if not p.exists():
-        return False
-    try:
-        cache = json.loads(p.read_text())
-    except Exception:    # noqa: BLE001
-        return False
-    # cache is keyed by condition_id; spacex condition starts with 0x2f6384.
-    return any(k.startswith("0x2f6384adfb9c0045") for k in cache)
-
-
-@unittest.skipUnless(_personas_cached(), "spacex personas not cached locally")
 class RunnerDryRunTest(unittest.TestCase):
     def test_dry_run_writes_full_tree(self):
-        from experiments.runner import run_experiment
+        from experiments import runner
+
+        meta = {
+            "condition_id": "condition-1",
+            "slug": "runner-smoke",
+            "question": "Will the runner smoke test pass?",
+            "description": "Hermetic test market",
+            "end_date_iso": "2027-01-01",
+            "winning_idx": -1,
+        }
+        priors = {
+            "condition_id": "condition-1",
+            "n_ticks": 2,
+            "signal_mu": 0.5,
+            "tick_size": 0.01,
+            "taker_fee_bps": 0.0,
+            "bootstrap": {
+                "anchor_yes": 0.5,
+                "spread": 0.04,
+                "depth_per_level": 10.0,
+                "depth_levels": 2,
+                "source": "test_fixture",
+            },
+        }
 
         with tempfile.TemporaryDirectory() as d:
-            exp_id = run_experiment(
-                "experiments/configs/exp001_baseline.yaml",
-                output_dir=d, dry_run=True,
-            )
+            config = yaml.safe_load(Path(
+                "research/experiments/configs/exp001_baseline.yaml"
+            ).read_text())
+            config["market"]["slug"] = meta["slug"]
+            config["output"]["dual_write_clickhouse"] = False
+            config_path = Path(d) / "smoke.yaml"
+            config_path.write_text(yaml.safe_dump(config))
+
+            with (
+                mock.patch.object(runner, "get_market_meta", return_value=meta),
+                mock.patch.object(
+                    runner,
+                    "init_agents",
+                    return_value=(make_test_population(3), priors),
+                ),
+            ):
+                exp_id = runner.run_experiment(
+                    config_path,
+                    output_dir=d,
+                    dry_run=True,
+                )
             base = Path(d) / exp_id
 
             self.assertTrue((base / "meta.json").exists())
@@ -54,16 +76,16 @@ class RunnerDryRunTest(unittest.TestCase):
                     f"missing raw/{f}.parquet",
                 )
 
-            # analysis/ — pnl + summary + at least 2 tables
+            # analysis/ — pnl + summary + the table that does not require CH
             self.assertTrue(
                 (base / "analysis" / "pnl_by_persona.parquet").exists())
             self.assertTrue((base / "analysis" / "summary.json").exists())
             tables = list((base / "analysis" / "tables").glob("*.md"))
-            self.assertGreaterEqual(len(tables), 2)
+            self.assertGreaterEqual(len(tables), 1)
 
-            # figure/ — at least 4 of 6 in dry-run
+            # figure/ — price path + PnL are available without live ticks/CH
             figs = list((base / "figure").glob("*.png"))
-            self.assertGreaterEqual(len(figs), 4)
+            self.assertGreaterEqual(len(figs), 2)
 
 
 if __name__ == "__main__":

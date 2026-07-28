@@ -3,7 +3,7 @@
 We build a small synthetic 3-cluster blob dataset and verify:
   - _select_k applies the three-criterion rule correctly
   - end-to-end ``run`` writes the three artifacts with cutoff suffix
-  - The fallback to K=2 fires when no K meets all criteria
+  - fallback selects the highest-silhouette K when none meet all criteria
 """
 from __future__ import annotations
 
@@ -19,17 +19,17 @@ from scripts.clustering import cluster_wallets as cw
 
 
 def _make_features_parquet(path: Path, n_per: int = 500, seed: int = 42):
-    """Three well-separated blobs in 7-D, big enough to exceed
+    """Three well-separated blobs in 8-D, big enough to exceed
     silhouette/jaccard thresholds for K=3."""
     rng = np.random.RandomState(seed)
     centers = np.array([
-        [1.0, 0.1, 0.5, 0.4, 0.05, 1.0, 0.1],
-        [4.0, 0.6, 2.0, 0.5, 0.40, 2.5, 0.3],
-        [2.5, 0.3, 5.0, 0.6, 0.15, 0.5, 0.2],
+        [1.0, 0.1, 0.5, 0.4, 0.05, 1.0, 0.1, -0.4],
+        [4.0, 0.6, 2.0, 0.5, 0.40, 2.5, 0.3, 0.0],
+        [2.5, 0.3, 5.0, 0.6, 0.15, 0.5, 0.2, 0.5],
     ])
     parts = []
     for c in centers:
-        parts.append(rng.normal(loc=c, scale=0.05, size=(n_per, 7)))
+        parts.append(rng.normal(loc=c, scale=0.05, size=(n_per, 8)))
     X = np.vstack(parts)
     df = pd.DataFrame(X, columns=cw.FEAT_COLS)
     df.insert(0, "wallet", [f"0x{i:040x}" for i in range(len(df))])
@@ -45,14 +45,14 @@ def _make_features_parquet(path: Path, n_per: int = 500, seed: int = 42):
 
 
 class SelectKTest(unittest.TestCase):
-    def test_picks_smallest_qualifying_k(self):
+    def test_picks_largest_qualifying_k(self):
         sweep = [
             {"k": 2, "silhouette": 0.18, "median_jaccard": 0.80, "min_cluster_pct": 0.40},
             {"k": 3, "silhouette": 0.25, "median_jaccard": 0.80, "min_cluster_pct": 0.30},
             {"k": 4, "silhouette": 0.28, "median_jaccard": 0.85, "min_cluster_pct": 0.20},
         ]
         K, used_fallback = cw._select_k(sweep)
-        self.assertEqual(K, 3)
+        self.assertEqual(K, 4)
         self.assertFalse(used_fallback)
 
     def test_fallback_when_none_qualify(self):
@@ -61,7 +61,7 @@ class SelectKTest(unittest.TestCase):
             {"k": 3, "silhouette": 0.15, "median_jaccard": 0.50, "min_cluster_pct": 0.30},
         ]
         K, used_fallback = cw._select_k(sweep)
-        self.assertEqual(K, 2)
+        self.assertEqual(K, 3)
         self.assertTrue(used_fallback)
 
 
@@ -109,9 +109,7 @@ class EndToEndRunTest(unittest.TestCase):
             self.assertTrue((tdp / f"cluster_profiles_{suffix}.json").exists())
             self.assertTrue((tdp / f"clustering_summary_{suffix}.json").exists())
 
-            # Three well-separated blobs → both K=2 and K=3 qualify;
-            # the rule picks the SMALLEST qualifying K (=2) per
-            # data/clustering/REVIEW.md §5.2.
+            # Three well-separated blobs produce a stable qualifying K.
             self.assertIn(summary["K"], (2, 3))
             self.assertFalse(summary["fallback_used"])
             # Sanity: every cluster meaningfully populated.

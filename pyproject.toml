@@ -39,6 +39,12 @@ dependencies = [
 	"ddgs>=6.0",
 ]
 
+[dependency-groups]
+dev = [
+	"pytest>=8.3,<10",
+	"pytest-cov>=6,<8",
+]
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -49,5 +55,24 @@ build-backend = "setuptools.build_meta"
 # no import statements needed rewriting during the reorg.
 [tool.setuptools.packages.find]
 where = ["sim", "research", "."]
-include = ["agent*", "environment*", "evaluation*", "experiments*", "viz*", "scripts*", "data*"]
+include = ["agent*", "environment*", "evaluation*", "experiments*", "runner*", "viz*", "scripts*", "data*"]
 exclude = ["tests*", "docs*", "output*", "figures*", "tables*", "apps*", "legacy*"]
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+addopts = [
+	"--strict-config",
+	"--strict-markers",
+	"-p",
+	"no:pytest_ethereum",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["sim"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 65

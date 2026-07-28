@@ -21,11 +21,11 @@ import json
 import logging
 import threading
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable, Optional
 
-from agent.decision import decide
+from agent.decision import Decision, decide
 from agent.factory import init_agents, build_synthetic_population
 from agent.features.market import derive_priors
 from data.query.markets import get_market_meta
@@ -35,7 +35,10 @@ from environment.seeders.from_clob_history import seed as seed_from_clob
 from evaluation.metrics.macro import compute_tick_metrics
 from evaluation.metrics.micro import snapshot_all
 
-from checkpoint import load_checkpoint, rng_from_state, save_checkpoint
+try:
+    from .checkpoint import load_checkpoint, rng_from_state, save_checkpoint
+except ImportError:  # Direct execution from sim/runner.
+    from checkpoint import load_checkpoint, rng_from_state, save_checkpoint
 
 
 log = logging.getLogger(__name__)
@@ -71,6 +74,40 @@ def _market_snapshot_dict(sim) -> dict:
         "n_actions": len(sim.actions_log),
         "n_fills": len(sim.fills_log),
     }
+
+
+def _budget_hold_decision(
+    *,
+    total_tokens: int,
+    token_budget: int,
+    decision: Decision | None = None,
+) -> Decision:
+    """Return a zero-cost HOLD after an agent exhausts its token budget.
+
+    When ``decision`` is provided, retain its audit metadata and any belief
+    or forum side effects from the just-completed call. Subsequent ticks pass
+    no decision, so no provider call or token consumption occurs.
+    """
+    reason = f"token_budget_exceeded ({total_tokens}>={token_budget})"
+    if decision is not None:
+        return replace(
+            decision,
+            order_type="HOLD",
+            size_usd=0.0,
+            reasoning=reason,
+            api_error="budget: token_budget_exceeded",
+        )
+    return Decision(
+        order_type="HOLD",
+        outcome="YES",
+        side="BUY",
+        price=0.5,
+        size_usd=0.0,
+        reasoning=reason,
+        raw_response="",
+        api_latency_ms=0,
+        api_error="budget: token_budget_exceeded",
+    )
 
 
 def run_stream(
@@ -381,6 +418,41 @@ def _run_tick_loop(
             agent = next(a for a in sim.agents if a.agent_id == aid)
             t0 = time.time()
 
+            # A budget-exhausted agent must not call the provider again.
+            # Emit a deterministic HOLD for the remaining ticks instead.
+            if agent.budget_exceeded:
+                total_tokens = (
+                    agent.total_prompt_tokens + agent.total_completion_tokens
+                )
+                decision = _budget_hold_decision(
+                    total_tokens=total_tokens,
+                    token_budget=agent.token_budget,
+                )
+                agent.n_holds += 1
+                on_event("agent_budget_hold", {
+                    "tick": tick,
+                    "agent_id": aid,
+                    "total_tokens": total_tokens,
+                    "budget": agent.token_budget,
+                })
+                actions[aid] = decision
+                on_event("agent_decision", {
+                    "tick": tick, "agent_id": aid,
+                    "persona_type": agent.persona.persona_type,
+                    "order_type": decision.order_type,
+                    "outcome": decision.outcome,
+                    "side": decision.side,
+                    "price": float(decision.price),
+                    "size_usd": float(decision.size_usd),
+                    "reasoning": decision.reasoning,
+                    "api_latency_ms": 0,
+                    "api_error": decision.api_error,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "elapsed_s": 0.0,
+                })
+                continue
+
             # Log every live web search this agent runs this tick. Web
             # search is NOT bit-for-bit reproducible (results change over
             # time); emitting the actual query + results preserves
@@ -454,17 +526,12 @@ def _run_tick_loop(
                 total_tokens = agent.total_prompt_tokens + agent.total_completion_tokens
                 if total_tokens >= agent.token_budget:
                     agent.budget_exceeded = True
-                    decision = type(decision)(
-                        order_type="HOLD", outcome=decision.outcome,
-                        side=decision.side, price=decision.price,
-                        size_usd=0.0,
-                        reasoning=f"token_budget_exceeded ({total_tokens}>={agent.token_budget})",
-                        raw_response=decision.raw_response,
-                        api_latency_ms=decision.api_latency_ms,
-                        api_error=f"budget: token_budget_exceeded",
-                        prompt_tokens=decision.prompt_tokens,
-                        completion_tokens=decision.completion_tokens,
-                        timeout_exceeded=decision.timeout_exceeded,
+                    if decision.order_type != "HOLD":
+                        agent.n_holds += 1
+                    decision = _budget_hold_decision(
+                        total_tokens=total_tokens,
+                        token_budget=agent.token_budget,
+                        decision=decision,
                     )
                     on_event("agent_budget_exceeded", {
                         "tick": tick, "agent_id": aid,

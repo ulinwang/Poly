@@ -14,6 +14,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked Python dependencies
+        run: uv sync --frozen
+
+      - name: Run Python regression suite
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: "true"
+        run: >
+          uv run pytest -q
+          --cov=sim
+          --cov-report=term-missing
+          --cov-report=xml
+
+      - name: Minimize uv cache
+        if: always()
+        run: uv cache prune --ci
+
   server:
     name: Server
     runs-on: ubuntu-latest

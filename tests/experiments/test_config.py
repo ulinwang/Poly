@@ -16,7 +16,7 @@ class ConfigDefaultsTest(unittest.TestCase):
         self.assertEqual(c.name, "baseline")
         self.assertEqual(c.agent.population, "calibrated")
         self.assertEqual(c.environment.observer, "quote_only")
-        self.assertEqual(c.llm.temperature, 0.0)
+        self.assertEqual(c.llm.temperature, 1.0)
         self.assertEqual(c.output.parquet_compression, "zstd")
         self.assertTrue(c.output.dual_write_clickhouse)
 

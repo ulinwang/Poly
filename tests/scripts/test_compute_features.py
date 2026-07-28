@@ -18,13 +18,15 @@ from scripts.clustering import compute_features as cf
 from tests.data._stub_ch import StubCH
 
 
-# 13 columns, matching cf.COLS.
+# 16 columns, matching cf.COLS.
 def _row(wallet: str, total_notional: float, tx_count: int):
     return (
         wallet,
         # log_notional, top_market_share, n_markets_per_log_dollar,
         # mean_price, tail_trade_pct, log_active_days, price_std,
         2.0, 0.5, 1.0, 0.4, 0.1, 1.5, 0.2,
+        # trades_per_day, trade_size_cv, burstiness,
+        2.5, 0.8, -0.1,
         # n_markets, tx_count, total_notional, past_accuracy, n_resolved_prior
         3, tx_count, total_notional, 0.55, 6,
     )
