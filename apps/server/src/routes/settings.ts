@@ -1,7 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { getApiSettings, getApiSettingsDecrypted, saveApiSettings } from '../db/settings.js';
 import { providerBaseUrl } from '../providers.js';
+import { normalizeLlmBaseUrl, validateOutboundLlmUrl } from '../security/outbound-url.js';
 import type { ApiSettings } from '../types/index.js';
+
+const CONNECTION_TEST_TIMEOUT_MS = 10_000;
 
 export default async function settingsRoutes(app: FastifyInstance) {
   app.get('/api', async () => {
@@ -41,9 +44,9 @@ export default async function settingsRoutes(app: FastifyInstance) {
   app.post('/test', async (req) => {
     const body = req.body as ApiSettings;
     const provider = body.provider;
-    // Use the supplied key if present; otherwise fall back to the stored
-    // (decrypted) key so "Test" works without re-entering the key.
-    const apiKey = body.api_key || getApiSettingsDecrypted()?.api_key || '';
+    const suppliedApiKey = body.api_key?.trim() || '';
+    const stored = getApiSettingsDecrypted();
+    const apiKey = suppliedApiKey || stored?.api_key || '';
     const model = body.model;
     const baseUrl = body.base_url || providerBaseUrl(provider);
 
@@ -53,6 +56,27 @@ export default async function settingsRoutes(app: FastifyInstance) {
     if (!model) {
       return { ok: false, message: 'Model is required' };
     }
+
+    // A stored secret is bound to the provider and endpoint it was saved with.
+    // Callers must supply a new key before probing any other destination.
+    if (!suppliedApiKey) {
+      const storedBaseUrl = stored?.base_url || (stored ? providerBaseUrl(stored.provider) : undefined);
+      let endpointMatches = baseUrl === storedBaseUrl;
+      if (baseUrl && storedBaseUrl) {
+        try {
+          endpointMatches = normalizeLlmBaseUrl(baseUrl) === normalizeLlmBaseUrl(storedBaseUrl);
+        } catch {
+          endpointMatches = false;
+        }
+      }
+      if (!stored || provider !== stored.provider || !endpointMatches) {
+        return {
+          ok: false,
+          message: 'Enter an API key before testing a different provider or endpoint',
+        };
+      }
+    }
+
     // litellm-native providers (no OpenAI-compatible base URL) — skip the
     // OpenAI-style live probe; the agent runner reaches them via litellm.
     if (provider === 'anthropic' || !baseUrl) {
@@ -60,8 +84,11 @@ export default async function settingsRoutes(app: FastifyInstance) {
     }
 
     try {
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
+      const safeBaseUrl = await validateOutboundLlmUrl(baseUrl);
+      const resp = await fetch(`${safeBaseUrl}/chat/completions`, {
         method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(CONNECTION_TEST_TIMEOUT_MS),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -75,10 +102,12 @@ export default async function settingsRoutes(app: FastifyInstance) {
       if (resp.ok) {
         return { ok: true, message: 'Connection successful' };
       }
-      const errText = await resp.text().catch(() => '');
-      return { ok: false, message: `HTTP ${resp.status}: ${errText.slice(0, 200)}` };
+      return { ok: false, message: `Provider returned HTTP ${resp.status}` };
     } catch (err) {
-      return { ok: false, message: `Network error: ${(err as Error).message}` };
+      if (err instanceof Error && err.message.startsWith('Endpoint ')) {
+        return { ok: false, message: err.message };
+      }
+      return { ok: false, message: 'Network error while contacting provider' };
     }
   });
 
