@@ -124,7 +124,12 @@ docker compose up --build
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
+| `POLY_LLM_ENDPOINT_ALLOWLIST` | 允许访问私网或 HTTP 自定义 LLM 端点的精确 origin（逗号分隔） |
 | `POLYMETL_CLICKHOUSE_*` | ClickHouse 连接（可选） |
+
+自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
+服务等私网端点，请精确放行其 origin，例如
+`POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`。
 
 > 切勿提交 `.env`。
 

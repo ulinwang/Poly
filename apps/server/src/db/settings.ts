@@ -1,6 +1,8 @@
 import { db } from './index.js';
 import type { ApiSettings } from '../types/index.js';
 import { encrypt, decrypt } from './crypto.js';
+import { providerBaseUrl } from '../providers.js';
+import { normalizeLlmBaseUrl } from '../security/outbound-url.js';
 
 /** Raw row shape as stored in SQLite. `api_key` holds the encrypted blob. */
 interface ApiSettingsRow {
@@ -65,17 +67,29 @@ export function getApiSettingsDecrypted(): ApiSettings | undefined {
 }
 
 /**
- * Persist settings. If `api_key` is a non-empty string it is encrypted and
- * stored; otherwise the previously stored (encrypted) key is preserved.
+ * Persist settings. A non-empty `api_key` is encrypted and stored. An omitted
+ * key is preserved only while its provider and effective endpoint stay the
+ * same; changing either clears the old secret instead of silently rebinding it.
  */
 export function saveApiSettings(settings: Omit<ApiSettings, 'id'> & { id?: number }): number {
   let encryptedKey: string;
   if (settings.api_key && settings.api_key.length > 0) {
     encryptedKey = encrypt(settings.api_key);
   } else {
-    // Preserve existing key when caller does not supply a new one.
     const prev = getLatestRow();
-    encryptedKey = prev?.api_key ?? '';
+    const previousBaseUrl = prev?.base_url || (prev ? providerBaseUrl(prev.provider) : undefined);
+    const nextBaseUrl = settings.base_url || providerBaseUrl(settings.provider);
+    let sameEndpoint = previousBaseUrl === nextBaseUrl;
+    if (previousBaseUrl && nextBaseUrl) {
+      try {
+        sameEndpoint =
+          normalizeLlmBaseUrl(previousBaseUrl) === normalizeLlmBaseUrl(nextBaseUrl);
+      } catch {
+        sameEndpoint = false;
+      }
+    }
+    encryptedKey =
+      prev && prev.provider === settings.provider && sameEndpoint ? prev.api_key : '';
   }
 
   const stmt = db.prepare(`

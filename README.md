@@ -144,7 +144,13 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
+| `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_*` | ClickHouse connection (optional) |
+
+Custom LLM endpoints must use HTTPS and resolve to public IP addresses by
+default. To use an intentionally private endpoint such as a local model server,
+allowlist its exact origin (for example,
+`POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`).
 
 > Never commit `.env`.
 
