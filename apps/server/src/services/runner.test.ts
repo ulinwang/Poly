@@ -110,6 +110,28 @@ describe('spawnRun', () => {
     expect(onEvent).toHaveBeenCalledWith('__end__', {});
   });
 
+  it('marks a runner-reported error without logging its message', () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), { logger });
+
+    mockChild.stdout.emit(
+      'data',
+      '{"kind":"error","data":{"message":"provider secret response"}}\n',
+    );
+
+    expect(handle.failed).toBe(true);
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain('provider secret response');
+    expect(logger.error).toHaveBeenCalledWith(
+      { runId: 'r1' },
+      'experiment runner reported a failure event',
+    );
+  });
+
   it('sends SIGTERM when handle.cancel is set', () => {
     vi.useFakeTimers();
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
@@ -132,6 +154,35 @@ describe('spawnRun', () => {
     );
     expect(onEvent).toHaveBeenCalledWith('__end__', {});
     expect(handle.finished).toBe(true);
+  });
+
+  it('logs lifecycle metadata without logging runner stderr contents', () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), { logger });
+
+    mockChild.stderr.emit('data', 'provider response with secret-prompt-content');
+    mockChild.emit('exit', 1, null);
+
+    const serializedLogs = JSON.stringify([
+      logger.info.mock.calls,
+      logger.warn.mock.calls,
+      logger.error.mock.calls,
+    ]);
+    expect(serializedLogs).not.toContain('secret-prompt-content');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'r1', exitCode: 1 }),
+      'experiment runner exited unsuccessfully',
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'r1', stderrBytes: expect.any(Number) }),
+      'experiment runner wrote diagnostic output',
+    );
+    expect(handle.failed).toBe(true);
   });
 
   it('does not duplicate __end__ when exit follows a prior __end__', () => {

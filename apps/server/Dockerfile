@@ -67,7 +67,6 @@ WORKDIR /app
 
 # Node server artifacts (built in stage 1).
 COPY --from=node-builder /app/apps/server/dist ./apps/server/dist
-COPY --from=node-builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=node-builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=node-builder /app/apps/web/dist ./apps/web/dist
 COPY --from=node-builder /app/node_modules ./node_modules
@@ -80,8 +79,10 @@ COPY --from=python-builder /app/research ./research
 COPY --from=python-builder /app/data ./data
 COPY --from=python-builder /app/pyproject.toml ./pyproject.toml
 
-# SQLite data directory (mounted at runtime for persistence).
-RUN mkdir -p /app/apps/server/data
+# SQLite/checkpoint/event-log data directory. The named runtime volume inherits
+# this ownership on first creation, allowing the backend to stay non-root.
+RUN mkdir -p /app/apps/server/data \
+    && chown -R node:node /app/apps/server/data
 
 ENV PORT=8765
 ENV HOST=0.0.0.0
@@ -92,4 +93,7 @@ ENV POLY_ROOT=/app
 EXPOSE 8765
 
 WORKDIR /app/apps/server
+USER node
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:8765/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/index.js"]

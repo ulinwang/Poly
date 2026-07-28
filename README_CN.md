@@ -102,17 +102,34 @@ cd apps/server && npm start        # 打开 http://localhost:8765
 cp .env.example .env
 # 编辑 .env，至少填写一个 LLM key
 
-# 构建并启动全部服务
+# 生成生产环境必需的密钥，并保存到 .env
 export POLY_API_TOKEN="$(openssl rand -hex 32)"
-docker compose up --build
+export POLY_SECRET="$(openssl rand -hex 32)"
+export POLYMETL_CLICKHOUSE_PASSWORD="$(openssl rand -hex 32)"
+docker compose up --build --wait
 
-# 前端（nginx） -> http://localhost:8080
-# 后端 API      -> http://localhost:8765
+# 前端及代理 API -> http://localhost:8080
+# 就绪检查       -> http://localhost:8080/api/v1/health/ready
 ```
 
 也可在「设置」页运行时切换供应商/模型/API key，无需重启。
 
-> **端口** —— 开发前端 **5173**，后端/API + 生产 SPA **8765**。
+生产 Compose 只发布 nginx 的 **8080** 端口。后端和 ClickHouse 位于私有
+Compose 网络，`/api` 由 nginx 转发。后端以非 root 的 `node` 用户运行，
+SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
+
+健康检查会按依赖顺序控制服务启动。Fastify 输出带请求 ID 的结构化 JSON
+日志，并脱敏 Authorization、Cookie、API key 和 token。可用
+`POLY_LOG_LEVEL` 调整日志级别。
+
+完整的构建、启动、健康、非 root、网络隔离及清理冒烟测试：
+
+```bash
+./scripts/compose-smoke.sh
+```
+
+> **开发端口** —— Vite **5173**，Fastify **8765**；生产仅发布 nginx
+> **8080**。
 
 ## 配置
 
@@ -127,14 +144,21 @@ docker compose up --build
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
 | `POLY_API_READ_TOKEN` | 可选的只读 API Bearer Token，至少 32 个字符 |
+| `POLY_LOG_LEVEL` | 后端结构化日志级别（默认 `info`） |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | 允许访问私网或 HTTP 自定义 LLM 端点的精确 origin（逗号分隔） |
-| `POLYMETL_CLICKHOUSE_*` | ClickHouse 连接（可选） |
+| `POLYMETL_CLICKHOUSE_USER` | 本地/非 Compose 用户；Compose 固定为 `poly` |
+| `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
+| `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse 数据库（默认 `polymetl`） |
 
 自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
 服务等私网端点，请精确放行其 origin，例如
 `POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`。
 
 > 切勿提交 `.env`。
+
+默认部署不会发布 ClickHouse 端口。管理操作优先使用
+`docker compose exec clickhouse clickhouse-client`。若确需外部访问，应使用
+显式的本地 Compose override，并保留非默认用户名和密码。
 
 ### API 认证
 
@@ -173,7 +197,10 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 [GitHub Actions 工作流](.github/workflows/ci.yml)会在每个 Pull Request
 以及每次推送到 `master` 时运行。它使用 `npm ci` 安装锁定的 Node 依赖并缓存
 npm 下载，然后在 Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。
-两个 workspace 使用独立任务运行，便于快速定位失败环节。
+两个 workspace 使用独立任务运行，便于快速定位失败环节。部署文件或后端源码
+变化时，按路径触发的
+[Compose 冒烟工作流](.github/workflows/compose-smoke.yml)还会构建、启动、
+健康检查并清理生产栈。
 
 > `sim/` 下的 Python 包通过多包根 `pyproject` 配置保留历史顶层导入名
 > （`import agent`、`environment`、`experiments`、`data`、`evaluation` …）。

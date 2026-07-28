@@ -120,18 +120,36 @@ cd apps/server && npm start        # open http://localhost:8765
 cp .env.example .env
 # edit .env and set at least one LLM key
 
-# Build and start both services
+# Generate the required production secrets once and store them in .env
 export POLY_API_TOKEN="$(openssl rand -hex 32)"
-docker compose up --build
+export POLY_SECRET="$(openssl rand -hex 32)"
+export POLYMETL_CLICKHOUSE_PASSWORD="$(openssl rand -hex 32)"
+docker compose up --build --wait
 
-# Frontend (nginx)  -> http://localhost:8080
-# Backend API       -> http://localhost:8765
+# Frontend and proxied API -> http://localhost:8080
+# Readiness check          -> http://localhost:8080/api/v1/health/ready
 ```
 
 You can also set the provider, model, and API key at runtime in the **Settings**
 page — no restart needed.
 
-> **Ports** — dev frontend **5173**, backend/API + production SPA **8765**.
+The production Compose stack publishes only nginx on port **8080**. The backend
+and ClickHouse stay on private Compose networks; nginx proxies `/api` to the
+backend. The backend runs as the non-root `node` user and stores SQLite,
+checkpoints, and event logs in the `backend-data` named volume.
+
+Health checks gate service startup in dependency order. Fastify emits structured
+JSON request logs with generated request IDs and redacts authorization headers,
+cookies, API keys, and tokens. Set `POLY_LOG_LEVEL` to adjust verbosity.
+
+Run the complete build/start/health/non-root/network/shutdown smoke test with:
+
+```bash
+./scripts/compose-smoke.sh
+```
+
+> **Development ports** — Vite **5173**, Fastify **8765**. Production publishes
+> nginx on **8080** only.
 
 ## Configuration
 
@@ -147,11 +165,14 @@ Settings page (where they are encrypted at rest).
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
 | `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
 | `POLY_API_READ_TOKEN` | optional read-only bearer token for API clients, minimum 32 characters |
+| `POLY_LOG_LEVEL` | structured backend log level (default `info`) |
 | `POLY_MAX_EXPERIMENT_AGENTS` | maximum agents per experiment (default `100`) |
 | `POLY_MAX_EXPERIMENT_TICKS` | maximum ticks per experiment (default `200`) |
 | `POLY_MAX_ACTIVE_RUNS` | maximum concurrently active experiments (default `2`) |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
-| `POLYMETL_CLICKHOUSE_*` | ClickHouse connection (optional) |
+| `POLYMETL_CLICKHOUSE_USER` | local/non-Compose ClickHouse user; Compose fixes this to `poly` |
+| `POLYMETL_CLICKHOUSE_PASSWORD` | non-empty ClickHouse password required by Compose |
+| `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database (default `polymetl`) |
 
 Experiment limits are enforced by the server. The web UI reads the effective
 limits from `GET /api/v1/experiments/limits`, so operator overrides stay in sync
@@ -163,6 +184,11 @@ allowlist its exact origin (for example,
 `POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`).
 
 > Never commit `.env`.
+
+ClickHouse ports are intentionally not published by the default stack. For
+administration, prefer `docker compose exec clickhouse clickhouse-client`.
+External publishing requires an explicit local Compose override and must retain
+the non-default user and password.
 
 ### API authentication
 
@@ -204,7 +230,10 @@ The [GitHub Actions workflow](.github/workflows/ci.yml) runs on every pull
 request and every push to `master`. It installs the locked Node dependencies
 with `npm ci`, caches npm downloads, and runs server lint/tests/build plus web
 lint/build on Node.js 20. The two workspaces run as separate jobs so failures
-are easier to identify.
+are easier to identify. A path-filtered
+[Compose smoke workflow](.github/workflows/compose-smoke.yml) also builds,
+starts, health-checks, and tears down the production stack when deployment
+files or backend sources change.
 
 > The Python `sim/` packages keep their historical top-level import names
 > (`import agent`, `environment`, `experiments`, `data`, `evaluation`, …) via a

@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import crypto from 'node:crypto';
 import cors from '@fastify/cors';
 import compress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
@@ -16,6 +17,7 @@ import keysRoutes from './routes/keys.js';
 import providersRoutes from './routes/providers.js';
 import agentRoutes from './routes/agent.js';
 import analysisRoutes from './routes/analysis.js';
+import healthRoutes from './routes/health.js';
 import { repairOrphanedRuns } from './db/experiments.js';
 import { config } from './config.js';
 import { installAuthentication } from './auth.js';
@@ -24,6 +26,17 @@ import type { SpawnOptions, RunHandle } from './services/runner.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 const isTest = !!process.env.VITEST || process.env.NODE_ENV === 'test';
+
+export const LOG_REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["x-api-key"]',
+  'req.body.api_key',
+  'req.body.token',
+  'res.headers["set-cookie"]',
+  'api_key',
+  'apiSettings.api_key',
+] as const;
 
 export interface BuildServerOptions {
   authRequired?: boolean;
@@ -48,15 +61,34 @@ if (allowedOrigins.length === 0) {
 }
 
 export async function buildServer(options: BuildServerOptions = {}) {
+  const app = Fastify({
+    logger: isTest
+      ? false
+      : {
+          level: isDev ? 'debug' : config.LOG_LEVEL,
+          redact: {
+            paths: [...LOG_REDACT_PATHS],
+            censor: '[REDACTED]',
+          },
+        },
+    // Generate request IDs locally rather than trusting an unvalidated client
+    // header. Fastify includes this ID in every request log record.
+    requestIdHeader: false,
+    genReqId: () => crypto.randomUUID(),
+  });
+
   // Repair zombie runs left as 'running' by a previous process that died
   // without finishing them. Paused (resumable) runs are left alone.
   const repaired = repairOrphanedRuns();
   if (repaired > 0) {
-    console.warn(`[startup] marked ${repaired} orphaned running experiment(s) as error`);
+    app.log.warn(
+      { repairedExperiments: repaired },
+      'marked orphaned running experiments as error',
+    );
   }
 
-  const app = Fastify({
-    logger: isDev,
+  app.addHook('onSend', async (req, reply) => {
+    reply.header('X-Request-ID', req.id);
   });
 
   await app.register(compress, { global: true });
@@ -93,6 +125,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(providersRoutes, { prefix: '/api/v1/providers' });
   await app.register(agentRoutes, { prefix: '/api/v1/agent' });
   await app.register(analysisRoutes, { prefix: '/api/v1/analysis' });
+  await app.register(healthRoutes, { prefix: '/api/v1/health' });
 
   const distPath = path.resolve(__dirname, '../../web/dist');
   await app.register(fastifyStatic, {

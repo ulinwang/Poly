@@ -3,6 +3,7 @@ import type { ChildProcessWithoutNullStreams } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
+import type { FastifyBaseLogger } from 'fastify';
 // import type { ExperimentRow } from '../types/index.js'; // available when needed
 
 export interface RunHandle {
@@ -31,6 +32,10 @@ export interface RunHandle {
   checkpointPath: string | null;
   /** Live child process, used to deliver SIGUSR1 (pause) / SIGTERM (cancel). */
   child: ChildProcessWithoutNullStreams | null;
+  /** Structured logger inherited from the Fastify process, when available. */
+  logger: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'> | null;
+  /** True when the runner failed before producing a normal terminal event. */
+  failed: boolean;
 }
 
 const HISTORY_CAP = 2000;
@@ -64,6 +69,8 @@ export function createRunHandle(
     pauseRequested: false,
     checkpointPath: null,
     child: null,
+    logger: null,
+    failed: false,
   };
 }
 
@@ -95,7 +102,13 @@ export function emitEvent(handle: RunHandle, kind: string, data: Record<string, 
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     fs.appendFileSync(logPath, JSON.stringify({ kind, data }) + '\n');
   } catch (err) {
-    console.error('[runner] failed to append event log', err);
+    handle.logger?.error(
+      {
+        runId: handle.runId,
+        errorType: err instanceof Error ? err.name : 'UnknownError',
+      },
+      'failed to append experiment event log',
+    );
   }
   if (kind === 'settled') {
     handle.finalMetrics = data;
@@ -113,6 +126,8 @@ export interface SpawnOptions {
   resumeCheckpoint?: string;
   /** Where the Python side writes its checkpoint when paused. */
   checkpointOut?: string;
+  /** Structured lifecycle logger. API keys and runner stderr are never logged. */
+  logger?: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'>;
 }
 
 export function spawnRun(
@@ -122,14 +137,30 @@ export function spawnRun(
 ): void {
   // Back-compat: callers may still pass a bare apiSettings object.
   const opts: SpawnOptions =
-    options && ('apiSettings' in options || 'resumeCheckpoint' in options || 'checkpointOut' in options)
+    options &&
+    ('apiSettings' in options ||
+      'resumeCheckpoint' in options ||
+      'checkpointOut' in options ||
+      'logger' in options)
       ? (options as SpawnOptions)
       : { apiSettings: options as SpawnOptions['apiSettings'] };
-  const { apiSettings, resumeCheckpoint, checkpointOut } = opts;
+  const { apiSettings, resumeCheckpoint, checkpointOut, logger } = opts;
+  handle.logger = logger ?? null;
+  handle.failed = false;
 
   const child = spawn(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
     cwd: config.REPO_ROOT,
   });
+  logger?.info(
+    {
+      runId: handle.runId,
+      nAgents: handle.nAgents,
+      nTicks: handle.nTicks,
+      personaSet: handle.personaSet,
+      resumed: Boolean(resumeCheckpoint),
+    },
+    'experiment runner started',
+  );
   handle.child = child;
   // Reset transient pause state for a fresh spawn (resume clears `paused`).
   handle.paused = false;
@@ -169,6 +200,13 @@ export function spawnRun(
           handle.paused = true;
           handle.checkpointPath = (event.data.checkpoint as string) ?? handle.checkpointPath;
         }
+        if (event.kind === 'error') {
+          handle.failed = true;
+          logger?.error(
+            { runId: handle.runId },
+            'experiment runner reported a failure event',
+          );
+        }
         if (event.kind === '__end__') {
           handle.finished = true;
         }
@@ -179,8 +217,11 @@ export function spawnRun(
   });
 
   child.stderr.setEncoding('utf8');
+  let stderrBytes = 0;
   child.stderr.on('data', (chunk: string) => {
-    console.error('[runner_cli.py stderr]', chunk.trimEnd());
+    // stderr may contain provider responses or prompt fragments. Track only
+    // its size and log lifecycle metadata after exit.
+    stderrBytes += Buffer.byteLength(chunk);
   });
 
   let pauseSent = false;
@@ -211,6 +252,15 @@ export function spawnRun(
   child.on('error', (err) => {
     clearInterval(cancelCheck);
     handle.child = null;
+    handle.failed = true;
+    logger?.error(
+      {
+        runId: handle.runId,
+        errorType: err.name,
+        errorCode: 'code' in err ? err.code : undefined,
+      },
+      'experiment runner process error',
+    );
     if (!handle.finished) {
       onEvent('error', { message: err.message });
       handle.finished = true;
@@ -218,14 +268,25 @@ export function spawnRun(
     }
   });
 
-  child.on('exit', (code) => {
+  child.on('exit', (code, signal) => {
     clearInterval(cancelCheck);
     handle.child = null;
+    if (stderrBytes > 0) {
+      logger?.warn(
+        { runId: handle.runId, stderrBytes },
+        'experiment runner wrote diagnostic output',
+      );
+    }
     if (!handle.finished) {
       // A non-zero exit that is not an intentional pause OR cancel is a real
       // error. A cancelled run exits non-zero when force-killed (SIGKILL),
       // which is expected — don't surface it as an error.
       if (code !== 0 && !handle.paused && !handle.cancel) {
+        handle.failed = true;
+        logger?.error(
+          { runId: handle.runId, exitCode: code, signal },
+          'experiment runner exited unsuccessfully',
+        );
         onEvent('error', { message: `process exited with code ${code}` });
       }
       if (handle.cancel) {
@@ -234,6 +295,19 @@ export function spawnRun(
       handle.finished = true;
       onEvent('__end__', {});
     }
+    logger?.info(
+      {
+        runId: handle.runId,
+        status: handle.failed
+          ? 'error'
+          : handle.cancel
+            ? 'cancelled'
+            : handle.paused
+              ? 'paused'
+              : 'completed',
+      },
+      'experiment runner stopped',
+    );
   });
 }
 
