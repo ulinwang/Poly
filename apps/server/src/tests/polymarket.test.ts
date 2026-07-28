@@ -1,11 +1,52 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   deriveYesPrice,
   deriveOutcomes,
   isBinaryMarket,
   eventToSummary,
+  getPolymarketEventMarkets,
+  getPolymarketMarket,
+  listPolymarketEvents,
+  listPolymarketMarkets,
   type GammaMarket,
 } from '../services/polymarket.js';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe('Gamma API failure handling', () => {
+  it('returns empty/null results when Gamma is unavailable without a cache entry', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('upstream unavailable')));
+
+    await expect(listPolymarketMarkets('', 1, false, 91_001)).resolves.toEqual([]);
+    await expect(listPolymarketEvents('', 1, 91_001)).resolves.toEqual([]);
+    await expect(getPolymarketMarket('missing-with-upstream-down')).resolves.toBeNull();
+    await expect(getPolymarketEventMarkets('missing-event-with-upstream-down')).resolves.toEqual([]);
+  });
+
+  it('serves a stale market page when a refresh fails', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ slug: 'cached-market', question: 'Cached market?' }],
+      })
+      .mockRejectedValueOnce(new Error('upstream unavailable'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await listPolymarketMarkets('', 1, false, 91_002);
+    expect(first).toHaveLength(1);
+    expect(first[0].slug).toBe('cached-market');
+
+    vi.advanceTimersByTime(30_001);
+
+    const stale = await listPolymarketMarkets('', 1, false, 91_002);
+    expect(stale).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('deriveYesPrice', () => {
   it('parses outcomePrices JSON string (Yes is index 0)', () => {
