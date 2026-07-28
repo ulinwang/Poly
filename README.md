@@ -147,8 +147,15 @@ Settings page (where they are encrypted at rest).
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
 | `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
 | `POLY_API_READ_TOKEN` | optional read-only bearer token for API clients, minimum 32 characters |
+| `POLY_MAX_EXPERIMENT_AGENTS` | maximum agents per experiment (default `100`) |
+| `POLY_MAX_EXPERIMENT_TICKS` | maximum ticks per experiment (default `200`) |
+| `POLY_MAX_ACTIVE_RUNS` | maximum concurrently active experiments (default `2`) |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_*` | ClickHouse connection (optional) |
+
+Experiment limits are enforced by the server. The web UI reads the effective
+limits from `GET /api/v1/experiments/limits`, so operator overrides stay in sync
+without requiring a separate frontend build.
 
 Custom LLM endpoints must use HTTPS and resolve to public IP addresses by
 default. To use an intentionally private endpoint such as a local model server,

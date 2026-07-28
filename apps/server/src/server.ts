@@ -19,6 +19,8 @@ import analysisRoutes from './routes/analysis.js';
 import { repairOrphanedRuns } from './db/experiments.js';
 import { config } from './config.js';
 import { installAuthentication } from './auth.js';
+import type { ExperimentLimits } from './routes/experiments.js';
+import type { SpawnOptions, RunHandle } from './services/runner.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 const isTest = !!process.env.VITEST || process.env.NODE_ENV === 'test';
@@ -27,6 +29,12 @@ export interface BuildServerOptions {
   authRequired?: boolean;
   operatorToken?: string;
   readerToken?: string;
+  experimentLimits?: Partial<ExperimentLimits>;
+  spawnExperiment?: (
+    handle: RunHandle,
+    onEvent: (kind: string, data: Record<string, unknown>) => void,
+    options?: SpawnOptions,
+  ) => void;
 }
 
 // Comma-separated list of allowed origins; falls back to the local dev and
@@ -75,7 +83,11 @@ export async function buildServer(options: BuildServerOptions = {}) {
 
   await app.register(marketsRoutes, { prefix: '/api/v1/markets' });
   await app.register(eventsRoutes, { prefix: '/api/v1/events' });
-  await app.register(experimentsRoutes, { prefix: '/api/v1/experiments' });
+  await app.register(experimentsRoutes, {
+    prefix: '/api/v1/experiments',
+    limits: options.experimentLimits,
+    spawnRun: options.spawnExperiment,
+  });
   await app.register(settingsRoutes, { prefix: '/api/v1/settings' });
   await app.register(keysRoutes, { prefix: '/api/v1/keys' });
   await app.register(providersRoutes, { prefix: '/api/v1/providers' });

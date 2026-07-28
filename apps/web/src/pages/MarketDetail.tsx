@@ -7,7 +7,23 @@ import {
 import { api } from '../lib/api';
 import { useMarketStore, useExperimentStore, useSettingsStore } from '../stores';
 import { useI18n } from '../lib/i18n';
-import type { MarketDetail as MarketDetailType, Experiment, Market, ApiKey } from '../types';
+import type {
+  MarketDetail as MarketDetailType,
+  Experiment,
+  ExperimentLimits,
+  Market,
+  ApiKey,
+} from '../types';
+
+const DEFAULT_EXPERIMENT_LIMITS: ExperimentLimits = {
+  max_agents: 100,
+  max_ticks: 200,
+  max_active_runs: 2,
+  max_slug_length: 200,
+  max_seed: 0xffff_ffff,
+  min_temperature: 0,
+  max_temperature: 2,
+};
 
 const statusStyle: Record<string, string> = {
   running: 'bg-success/15 text-success',
@@ -48,6 +64,8 @@ export default function MarketDetail() {
   const [seed, setSeed] = useState(0);
   const [personaSet, setPersonaSet] = useState<'archetype' | 'calibrated' | 'no_signal'>('archetype');
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [experimentLimits, setExperimentLimits] =
+    useState<ExperimentLimits>(DEFAULT_EXPERIMENT_LIMITS);
   // Empty string = use the default API settings (no api_key_id sent).
   const [apiKeyId, setApiKeyId] = useState('');
   const [starting, setStarting] = useState(false);
@@ -95,6 +113,14 @@ export default function MarketDetail() {
     api.listApiKeys()
       .then((res) => setApiKeys(res.keys))
       .catch((err) => console.error('Failed to load API keys:', err));
+    api.getExperimentLimits()
+      .then((limits) => {
+        setExperimentLimits(limits);
+        setNAgents((value) => Math.min(Math.max(1, value), limits.max_agents));
+        setNTicks((value) => Math.min(Math.max(1, value), limits.max_ticks));
+        setSeed((value) => Math.min(Math.max(0, value), limits.max_seed));
+      })
+      .catch((err) => console.error('Failed to load experiment limits:', err));
   }, []);
 
   const handleStart = async () => {
@@ -417,18 +443,27 @@ export default function MarketDetail() {
         <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
           {t('detail.newExperiment')}
         </h3>
+        <p className="text-xs text-surface-400 mb-4">
+          {t('detail.experimentLimits', {
+            agents: experimentLimits.max_agents,
+            ticks: experimentLimits.max_ticks,
+            active: experimentLimits.max_active_runs,
+          })}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-surface-500 mb-1">
               <Users className="w-3 h-3 inline mr-1" />
               {t('detail.agentCount', { count: nAgents })}
             </label>
-            {/* Slider for quick adjustment + number field for exact / large values. */}
             <div className="flex items-center gap-2">
-              <input type="range" min="3" max="100" value={Math.min(nAgents, 100)}
+              <input type="range" min="1" max={experimentLimits.max_agents} value={nAgents}
                 onChange={(e) => setNAgents(Number(e.target.value))} className="flex-1" />
-              <input type="number" min="1" value={nAgents}
-                onChange={(e) => setNAgents(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              <input type="number" min="1" max={experimentLimits.max_agents} value={nAgents}
+                onChange={(e) => setNAgents(Math.min(
+                  experimentLimits.max_agents,
+                  Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                ))}
                 className="input w-20 py-1 text-sm" />
             </div>
           </div>
@@ -437,12 +472,14 @@ export default function MarketDetail() {
               <Clock className="w-3 h-3 inline mr-1" />
               {t('detail.tickCount', { count: nTicks })}
             </label>
-            {/* Slider caps at 200 for dragging; type a larger number for 500+. */}
             <div className="flex items-center gap-2">
-              <input type="range" min="1" max="200" value={Math.min(nTicks, 200)}
+              <input type="range" min="1" max={experimentLimits.max_ticks} value={nTicks}
                 onChange={(e) => setNTicks(Number(e.target.value))} className="flex-1" />
-              <input type="number" min="1" value={nTicks}
-                onChange={(e) => setNTicks(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              <input type="number" min="1" max={experimentLimits.max_ticks} value={nTicks}
+                onChange={(e) => setNTicks(Math.min(
+                  experimentLimits.max_ticks,
+                  Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                ))}
                 className="input w-20 py-1 text-sm" />
             </div>
           </div>
@@ -460,8 +497,12 @@ export default function MarketDetail() {
             <label className="block text-xs text-surface-500 mb-1">
               {t('detail.seed')}
             </label>
-            <input type="number" min="0" step="1" value={seed}
-              onChange={(e) => setSeed(Number.isFinite(e.target.valueAsNumber) ? Math.trunc(e.target.valueAsNumber) : 0)}
+            <input type="number" min="0" max={experimentLimits.max_seed} step="1" value={seed}
+              onChange={(e) => setSeed(
+                Number.isFinite(e.target.valueAsNumber)
+                  ? Math.min(experimentLimits.max_seed, Math.max(0, Math.trunc(e.target.valueAsNumber)))
+                  : 0,
+              )}
               className="input" />
             <p className="mt-1 text-[10px] text-surface-400">{t('detail.seedHint')}</p>
           </div>

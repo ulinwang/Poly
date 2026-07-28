@@ -95,6 +95,16 @@ export interface ExperimentConfig {
   temperature?: number;
 }
 
+export interface ExperimentLimits {
+  max_agents: number;
+  max_ticks: number;
+  max_active_runs: number;
+  max_slug_length: number;
+  max_seed: number;
+  min_temperature: number;
+  max_temperature: number;
+}
+
 export interface Experiment {
   id: string;
   slug: string;

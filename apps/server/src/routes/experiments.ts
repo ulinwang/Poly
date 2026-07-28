@@ -1,4 +1,8 @@
-import type { FastifyInstance } from 'fastify';
+import type {
+  FastifyInstance,
+  FastifyPluginOptions,
+  FastifyReply,
+} from 'fastify';
 import crypto from 'crypto';
 import {
   saveExperiment,
@@ -10,7 +14,7 @@ import {
 import {
   createRunHandle,
   emitEvent,
-  spawnRun,
+  spawnRun as spawnRunDefault,
   pauseRun,
   checkpointPathFor,
   eventLogPathFor,
@@ -20,10 +24,193 @@ import { getApiSettingsDecrypted } from '../db/settings.js';
 import { getApiKeyDecrypted } from '../db/apikeys.js';
 import fs from 'fs';
 import readline from 'readline';
+import { config } from '../config.js';
 
-import type { RunHandle } from '../services/runner.js';
+import type { RunHandle, SpawnOptions } from '../services/runner.js';
 
-const runs = new Map<string, RunHandle>();
+const PERSONA_SETS = ['archetype', 'calibrated', 'no_signal'] as const;
+const EXPERIMENT_STATUSES = [
+  'queued',
+  'running',
+  'paused',
+  'completed',
+  'cancelled',
+  'error',
+] as const;
+const CREATE_BODY_KEYS = new Set([
+  'slug',
+  'n_agents',
+  'n_ticks',
+  'persona_set',
+  'api_key_id',
+  'seed',
+  'temperature',
+]);
+
+export interface ExperimentLimits {
+  maxAgents: number;
+  maxTicks: number;
+  maxActiveRuns: number;
+  maxSlugLength: number;
+  maxSeed: number;
+  minTemperature: number;
+  maxTemperature: number;
+  maxPageSize: number;
+}
+
+interface ExperimentsRouteOptions extends FastifyPluginOptions {
+  limits?: Partial<ExperimentLimits>;
+  spawnRun?: (
+    handle: RunHandle,
+    onEvent: (kind: string, data: Record<string, unknown>) => void,
+    options?: SpawnOptions,
+  ) => void;
+}
+
+const DEFAULT_LIMITS: ExperimentLimits = {
+  maxAgents: config.MAX_EXPERIMENT_AGENTS,
+  maxTicks: config.MAX_EXPERIMENT_TICKS,
+  maxActiveRuns: config.MAX_ACTIVE_RUNS,
+  maxSlugLength: 200,
+  maxSeed: 0xffff_ffff,
+  minTemperature: 0,
+  maxTemperature: 2,
+  maxPageSize: 1_000,
+};
+
+function validateLimits(limits: ExperimentLimits): void {
+  const positiveIntegerLimits = [
+    limits.maxAgents,
+    limits.maxTicks,
+    limits.maxActiveRuns,
+    limits.maxSlugLength,
+    limits.maxPageSize,
+  ];
+  if (
+    positiveIntegerLimits.some(
+      (value) => !Number.isSafeInteger(value) || value < 1,
+    )
+  ) {
+    throw new Error('Experiment count limits must be positive integers');
+  }
+  if (!Number.isSafeInteger(limits.maxSeed) || limits.maxSeed < 0) {
+    throw new Error('Experiment max seed must be a non-negative integer');
+  }
+  if (
+    !Number.isFinite(limits.minTemperature) ||
+    !Number.isFinite(limits.maxTemperature) ||
+    limits.minTemperature > limits.maxTemperature
+  ) {
+    throw new Error('Experiment temperature limits are invalid');
+  }
+}
+
+function createBodyError(value: unknown, limits: ExperimentLimits): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return 'Request body must be a JSON object';
+  }
+  const body = value as Record<string, unknown>;
+  const unexpectedKey = Object.keys(body).find((key) => !CREATE_BODY_KEYS.has(key));
+  if (unexpectedKey) {
+    return `Unknown request field: ${unexpectedKey}`;
+  }
+  if (typeof body.slug !== 'string' || body.slug.trim().length === 0) {
+    return 'slug must be a non-empty string';
+  }
+  if (body.slug.length > limits.maxSlugLength) {
+    return `slug must be at most ${limits.maxSlugLength} characters`;
+  }
+  if (
+    typeof body.n_agents !== 'number' ||
+    !Number.isSafeInteger(body.n_agents) ||
+    body.n_agents < 1 ||
+    body.n_agents > limits.maxAgents
+  ) {
+    return `n_agents must be an integer between 1 and ${limits.maxAgents}`;
+  }
+  if (
+    typeof body.n_ticks !== 'number' ||
+    !Number.isSafeInteger(body.n_ticks) ||
+    body.n_ticks < 1 ||
+    body.n_ticks > limits.maxTicks
+  ) {
+    return `n_ticks must be an integer between 1 and ${limits.maxTicks}`;
+  }
+  if (
+    typeof body.persona_set !== 'string' ||
+    !PERSONA_SETS.includes(body.persona_set as (typeof PERSONA_SETS)[number])
+  ) {
+    return `persona_set must be one of: ${PERSONA_SETS.join(', ')}`;
+  }
+  if (
+    body.seed !== undefined &&
+    (typeof body.seed !== 'number' ||
+      !Number.isSafeInteger(body.seed) ||
+      body.seed < 0 ||
+      body.seed > limits.maxSeed)
+  ) {
+    return `seed must be an integer between 0 and ${limits.maxSeed}`;
+  }
+  if (
+    body.temperature !== undefined &&
+    (typeof body.temperature !== 'number' ||
+      !Number.isFinite(body.temperature) ||
+      body.temperature < limits.minTemperature ||
+      body.temperature > limits.maxTemperature)
+  ) {
+    return `temperature must be between ${limits.minTemperature} and ${limits.maxTemperature}`;
+  }
+  if (
+    body.api_key_id !== undefined &&
+    (typeof body.api_key_id !== 'number' ||
+      !Number.isSafeInteger(body.api_key_id) ||
+      body.api_key_id < 1)
+  ) {
+    return 'api_key_id must be a positive integer';
+  }
+  return null;
+}
+
+function sendBadRequest(reply: FastifyReply, message: string) {
+  return reply.status(400).send({ message });
+}
+
+function rejectUnknownQueryKeys(
+  query: unknown,
+  allowedKeys: readonly string[],
+  reply: FastifyReply,
+) {
+  if (!query || typeof query !== 'object' || Array.isArray(query)) return;
+  const allowed = new Set(allowedKeys);
+  const unexpectedKey = Object.keys(query).find((key) => !allowed.has(key));
+  if (unexpectedKey) {
+    return sendBadRequest(reply, `Unknown query parameter: ${unexpectedKey}`);
+  }
+}
+
+function createExperimentSchema(limits: ExperimentLimits) {
+  return {
+    body: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['slug', 'n_agents', 'n_ticks', 'persona_set'],
+      properties: {
+        slug: { type: 'string', minLength: 1, maxLength: limits.maxSlugLength },
+        n_agents: { type: 'integer', minimum: 1, maximum: limits.maxAgents },
+        n_ticks: { type: 'integer', minimum: 1, maximum: limits.maxTicks },
+        persona_set: { type: 'string', enum: [...PERSONA_SETS] },
+        api_key_id: { type: 'integer', minimum: 1 },
+        seed: { type: 'integer', minimum: 0, maximum: limits.maxSeed, default: 0 },
+        temperature: {
+          type: 'number',
+          minimum: limits.minTemperature,
+          maximum: limits.maxTemperature,
+          default: 0,
+        },
+      },
+    },
+  } as const;
+}
 
 /**
  * Replay a run's full NDJSON event log to an open SSE response, one line at a
@@ -98,33 +285,104 @@ function rowToExperiment(row: ExperimentRow): Record<string, unknown> {
   };
 }
 
-export default async function experimentsRoutes(app: FastifyInstance) {
-  app.get('', async (req) => {
-    const { status, slug, limit = '20', offset = '0' } = req.query as Record<string, string>;
-    const { rows, total } = getExperimentsFiltered(
-      status || undefined,
-      slug || undefined,
-      parseInt(limit, 10) || 20,
-      parseInt(offset, 10) || 0,
-    );
-    return {
-      experiments: rows.map(rowToExperiment),
-      total,
-      limit: parseInt(limit, 10) || 20,
-      offset: parseInt(offset, 10) || 0,
-    };
-  });
+export default async function experimentsRoutes(
+  app: FastifyInstance,
+  routeOptions: ExperimentsRouteOptions,
+) {
+  const limits: ExperimentLimits = { ...DEFAULT_LIMITS, ...routeOptions.limits };
+  validateLimits(limits);
+  const spawnExperiment = routeOptions.spawnRun ?? spawnRunDefault;
+  const runs = new Map<string, RunHandle>();
+  const activeRunCount = () =>
+    [...runs.values()].filter((handle) => !handle.finished && !handle.paused).length;
 
-  app.get('/search', async (req) => {
-    const { q = '', limit = '20' } = req.query as Record<string, string>;
-    if (!q) return { experiments: [] };
-    const rows = searchExperiments(q, parseInt(limit, 10) || 20);
-    return { experiments: rows.map(rowToExperiment) };
-  });
+  app.get(
+    '',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            status: { type: 'string', enum: [...EXPERIMENT_STATUSES] },
+            slug: { type: 'string', maxLength: limits.maxSlugLength },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: limits.maxPageSize,
+              default: 20,
+            },
+            offset: { type: 'integer', minimum: 0, maximum: 1_000_000, default: 0 },
+          },
+        },
+      },
+      preValidation: async (req, reply) =>
+        rejectUnknownQueryKeys(req.query, ['status', 'slug', 'limit', 'offset'], reply),
+    },
+    async (req) => {
+      const { status, slug, limit = 20, offset = 0 } = req.query as {
+        status?: string;
+        slug?: string;
+        limit?: number;
+        offset?: number;
+      };
+      const { rows, total } = getExperimentsFiltered(
+        status || undefined,
+        slug || undefined,
+        limit,
+        offset,
+      );
+      return {
+        experiments: rows.map(rowToExperiment),
+        total,
+        limit,
+        offset,
+      };
+    },
+  );
+
+  app.get(
+    '/search',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['q'],
+          properties: {
+            q: { type: 'string', minLength: 1, maxLength: limits.maxSlugLength },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: limits.maxPageSize,
+              default: 20,
+            },
+          },
+        },
+      },
+      preValidation: async (req, reply) =>
+        rejectUnknownQueryKeys(req.query, ['q', 'limit'], reply),
+    },
+    async (req) => {
+      const { q, limit = 20 } = req.query as { q: string; limit?: number };
+      const rows = searchExperiments(q, limit);
+      return { experiments: rows.map(rowToExperiment) };
+    },
+  );
 
   app.get('/stats', async () => {
     return getExperimentStats();
   });
+
+  app.get('/limits', async () => ({
+    max_agents: limits.maxAgents,
+    max_ticks: limits.maxTicks,
+    max_active_runs: limits.maxActiveRuns,
+    max_slug_length: limits.maxSlugLength,
+    max_seed: limits.maxSeed,
+    min_temperature: limits.minTemperature,
+    max_temperature: limits.maxTemperature,
+  }));
 
   app.get('/:expId', async (req, reply) => {
     const { expId } = req.params as { expId: string };
@@ -192,66 +450,83 @@ export default async function experimentsRoutes(app: FastifyInstance) {
     };
   }
 
-  // Decrypt the key only here, kept in memory and handed to the Python
-  // subprocess; never persisted or returned to the client. When `apiKeyId` is
-  // given, use that named key (its provider's key/base_url/model); otherwise
-  // fall back to the single default api_settings.
-  function currentApiSettings(apiKeyId?: number | null) {
-    if (apiKeyId != null) {
-      const k = getApiKeyDecrypted(apiKeyId);
-      if (k && k.api_key) {
-        return { api_key: k.api_key, base_url: k.base_url, model: k.model };
-      }
-      // Selected key vanished (e.g. deleted) — fall through to default.
-    }
+  // Decrypt keys only immediately before spawning the Python subprocess.
+  function defaultApiSettings() {
     const settings = getApiSettingsDecrypted();
     return settings
       ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
       : undefined;
   }
 
-  app.post('', async (req) => {
-    const body = req.body as ExperimentConfig;
-    const runId = crypto.randomBytes(12).toString('hex').slice(0, 12);
-    const seed = Number.isFinite(body.seed as number) ? Number(body.seed) : 0;
-    const temperature = Number.isFinite(body.temperature as number)
-      ? Number(body.temperature)
-      : 0;
-    const apiKeyId = Number.isFinite(body.api_key_id as number)
-      ? Number(body.api_key_id)
-      : null;
-    const handle = createRunHandle(
-      runId,
-      body.slug,
-      body.n_agents,
-      body.n_ticks,
-      body.persona_set,
-      seed,
-      temperature,
-    );
-    runs.set(runId, handle);
+  function namedApiSettings(apiKeyId: number) {
+    const key = getApiKeyDecrypted(apiKeyId);
+    if (!key?.api_key?.trim()) return undefined;
+    return { api_key: key.api_key, base_url: key.base_url, model: key.model };
+  }
 
-    saveExperiment({
-      id: runId,
-      slug: body.slug,
-      n_agents: body.n_agents,
-      n_ticks: body.n_ticks,
-      persona_set: body.persona_set,
-      status: 'running',
-      started_at: new Date().toISOString(),
-      finished_at: null,
-      result_summary: null,
-      seed,
-      api_key_id: apiKeyId,
+  function sendCapacityExceeded(reply: FastifyReply) {
+    reply.header('Retry-After', '5');
+    return reply.status(429).send({
+      message: `Active experiment limit reached (${limits.maxActiveRuns})`,
     });
+  }
 
-    spawnRun(handle, makeOnEvent(runId, handle), {
-      apiSettings: currentApiSettings(apiKeyId),
-      checkpointOut: checkpointPathFor(runId),
-    });
+  app.post(
+    '',
+    {
+      schema: createExperimentSchema(limits),
+      preValidation: async (req, reply) => {
+        const error = createBodyError(req.body, limits);
+        if (error) return sendBadRequest(reply, error);
+      },
+    },
+    async (req, reply) => {
+      const body = req.body as ExperimentConfig & { seed: number; temperature: number };
+      const apiKeyId = body.api_key_id ?? null;
+      const apiSettings =
+        apiKeyId === null ? defaultApiSettings() : namedApiSettings(apiKeyId);
+      if (apiKeyId !== null && !apiSettings) {
+        return sendBadRequest(reply, 'api_key_id does not reference a usable key');
+      }
+      if (activeRunCount() >= limits.maxActiveRuns) {
+        return sendCapacityExceeded(reply);
+      }
 
-    return { run_id: runId };
-  });
+      const runId = crypto.randomBytes(12).toString('hex').slice(0, 12);
+      const slug = body.slug.trim();
+      const handle = createRunHandle(
+        runId,
+        slug,
+        body.n_agents,
+        body.n_ticks,
+        body.persona_set,
+        body.seed,
+        body.temperature,
+      );
+      runs.set(runId, handle);
+
+      saveExperiment({
+        id: runId,
+        slug,
+        n_agents: body.n_agents,
+        n_ticks: body.n_ticks,
+        persona_set: body.persona_set,
+        status: 'running',
+        started_at: new Date().toISOString(),
+        finished_at: null,
+        result_summary: null,
+        seed: body.seed,
+        api_key_id: apiKeyId,
+      });
+
+      spawnExperiment(handle, makeOnEvent(runId, handle), {
+        apiSettings,
+        checkpointOut: checkpointPathFor(runId),
+      });
+
+      return { run_id: runId };
+    },
+  );
 
   app.post('/:expId/cancel', async (req, reply) => {
     const { expId } = req.params as { expId: string };
@@ -309,6 +584,15 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       reply.status(409);
       return { message: 'Experiment is not paused / has no checkpoint' };
     }
+    const apiSettings =
+      row.api_key_id == null ? defaultApiSettings() : namedApiSettings(row.api_key_id);
+    if (row.api_key_id != null && !apiSettings) {
+      reply.status(409);
+      return { message: 'The API key selected for this experiment is no longer usable' };
+    }
+    if (activeRunCount() >= limits.maxActiveRuns) {
+      return sendCapacityExceeded(reply);
+    }
 
     // Reuse the same expId so the client keeps observing one run; build a
     // fresh RunHandle (the prior one's child has exited).
@@ -328,9 +612,8 @@ export default async function experimentsRoutes(app: FastifyInstance) {
       finished_at: null,
     });
 
-    spawnRun(handle, makeOnEvent(expId, handle), {
-      // Reuse the same named key the run was started with (if any).
-      apiSettings: currentApiSettings(row.api_key_id),
+    spawnExperiment(handle, makeOnEvent(expId, handle), {
+      apiSettings,
       resumeCheckpoint: row.checkpoint_path,
       checkpointOut: checkpointPathFor(expId),
     });
