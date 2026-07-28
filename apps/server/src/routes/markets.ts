@@ -13,7 +13,7 @@ const CATEGORIES = [
 export default async function marketsRoutes(app: FastifyInstance) {
   app.get('', async (req, _reply) => {
     const {
-      q = '', limit = '30', live_only = '', offset = '0',
+      q = '', limit = '30', live_only = '', offset = '0', category = '',
     } = req.query as Record<string, string>;
     const limitNum = parseInt(limit, 10) || 30;
     const offsetNum = parseInt(offset, 10) || 0;
@@ -22,6 +22,7 @@ export default async function marketsRoutes(app: FastifyInstance) {
       limitNum,
       live_only === '1' || live_only === 'true',
       offsetNum,
+      category,
     );
     // Approximate: if the page is full there is likely another page.
     const hasMore = markets.length >= limitNum;

@@ -169,7 +169,7 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/markets` | GET | List live markets (supports `q`, `category`, `limit`, `offset`) |
+| `/markets` | GET | List live markets (supports `q`, case-insensitive exact `category`, `live_only`, `limit`, `offset`) |
 | `/markets/:slug` | GET | Market detail (fetched by slug; includes `event_slug`) |
 | `/experiments` | GET / POST | List / create-and-start experiments |
 | `/experiments/:id` | GET | Experiment detail |
