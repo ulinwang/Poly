@@ -16,7 +16,12 @@ export interface AuthenticationOptions {
 }
 
 const PUBLIC_READ_PREFIXES = ['/api/v1/markets', '/api/v1/events'];
-const PUBLIC_READ_PATHS = ['/api/v1/providers', '/api/v1/auth/config'];
+const PUBLIC_READ_PATHS = [
+  '/api/v1/providers',
+  '/api/v1/auth/config',
+  '/api/v1/health/live',
+  '/api/v1/health/ready',
+];
 
 function isPublicRequest(req: FastifyRequest): boolean {
   if (req.method === 'OPTIONS') return true;

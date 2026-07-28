@@ -51,8 +51,15 @@ active runs by default. Override these server-authoritative limits with
 `POLY_MAX_ACTIVE_RUNS`. The effective values are exposed by
 `GET /api/v1/experiments/limits` for the web UI.
 
+Production logging is structured JSON at `POLY_LOG_LEVEL` (`info` by default).
+Fastify generates a UUID request ID, returns it as `X-Request-ID`, and redacts
+authorization headers, cookies, API keys, and tokens. Runner lifecycle logs
+contain run IDs and exit metadata, never provider stderr, prompts, or keys.
+
 ## API
 
+- `GET /api/v1/health/live` (public liveness probe)
+- `GET /api/v1/health/ready` (public SQLite/data-volume readiness probe)
 - `GET /api/v1/markets?q=&limit=&live_only=`
 - `GET /api/v1/markets/categories`
 - `GET /api/v1/markets/:slug`

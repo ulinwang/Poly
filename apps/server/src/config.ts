@@ -15,6 +15,15 @@ function positiveIntegerEnv(name: string, fallback: number): number {
   return value;
 }
 
+function logLevelEnv(): string {
+  const value = (process.env.POLY_LOG_LEVEL || 'info').trim().toLowerCase();
+  const allowed = new Set(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']);
+  if (!allowed.has(value)) {
+    throw new Error('POLY_LOG_LEVEL must be a valid Pino log level');
+  }
+  return value;
+}
+
 export const config = {
   PORT: parseInt(process.env.PORT || '8765', 10),
   HOST: process.env.HOST || '127.0.0.1',
@@ -22,6 +31,7 @@ export const config = {
   NODE_ENV: process.env.NODE_ENV || 'production',
   API_TOKEN: process.env.POLY_API_TOKEN || '',
   API_READ_TOKEN: process.env.POLY_API_READ_TOKEN || '',
+  LOG_LEVEL: logLevelEnv(),
   MAX_EXPERIMENT_AGENTS: positiveIntegerEnv('POLY_MAX_EXPERIMENT_AGENTS', 100),
   MAX_EXPERIMENT_TICKS: positiveIntegerEnv('POLY_MAX_EXPERIMENT_TICKS', 200),
   MAX_ACTIVE_RUNS: positiveIntegerEnv('POLY_MAX_ACTIVE_RUNS', 2),

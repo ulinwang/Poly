@@ -6,47 +6,98 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - edge
     restart: unless-stopped
 
   backend:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    ports:
-      - "8765:8765"
+    expose:
+      - "8765"
     volumes:
-      - ./apps/server/data:/app/apps/server/data
+      - backend-data:/app/apps/server/data
     environment:
-      - PORT=8765
-      - HOST=0.0.0.0
-      - NODE_ENV=production
-      - POLY_API_TOKEN=${POLY_API_TOKEN:?Set POLY_API_TOKEN to a 32+ character secret}
-      - POLY_API_READ_TOKEN=${POLY_API_READ_TOKEN:-}
-      - POLY_MAX_EXPERIMENT_AGENTS=${POLY_MAX_EXPERIMENT_AGENTS:-100}
-      - POLY_MAX_EXPERIMENT_TICKS=${POLY_MAX_EXPERIMENT_TICKS:-200}
-      - POLY_MAX_ACTIVE_RUNS=${POLY_MAX_ACTIVE_RUNS:-2}
-      - DATA_DIR=/app/apps/server/data
-      - POLY_ROOT=/app
-      - POLYMETL_RPC_URL=https://1rpc.io/matic
-      - POLYMETL_CLICKHOUSE_HOST=clickhouse
-      - POLYMETL_CLICKHOUSE_PORT=9000
-      - POLYMETL_CLICKHOUSE_USER=default
-      - POLYMETL_CLICKHOUSE_PASSWORD=
-      - POLYMETL_CLICKHOUSE_DATABASE=polymetl
-      - POLYMETL_CHAIN_ID=137
+      PORT: "8765"
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      POLY_API_TOKEN: ${POLY_API_TOKEN:?Set POLY_API_TOKEN to a 32+ character secret}
+      POLY_API_READ_TOKEN: ${POLY_API_READ_TOKEN:-}
+      POLY_SECRET: ${POLY_SECRET:?Set POLY_SECRET for stored API-key encryption}
+      POLY_LOG_LEVEL: ${POLY_LOG_LEVEL:-info}
+      POLY_MAX_EXPERIMENT_AGENTS: ${POLY_MAX_EXPERIMENT_AGENTS:-100}
+      POLY_MAX_EXPERIMENT_TICKS: ${POLY_MAX_EXPERIMENT_TICKS:-200}
+      POLY_MAX_ACTIVE_RUNS: ${POLY_MAX_ACTIVE_RUNS:-2}
+      DATA_DIR: /app/apps/server/data
+      POLY_ROOT: /app
+      POLYMETL_RPC_URL: https://1rpc.io/matic
+      POLYMETL_CLICKHOUSE_HOST: clickhouse
+      POLYMETL_CLICKHOUSE_PORT: "9000"
+      POLYMETL_CLICKHOUSE_USER: poly
+      POLYMETL_CLICKHOUSE_PASSWORD: ${POLYMETL_CLICKHOUSE_PASSWORD:?Set a non-empty ClickHouse password}
+      POLYMETL_CLICKHOUSE_DATABASE: ${POLYMETL_CLICKHOUSE_DATABASE:-polymetl}
+      POLYMETL_CHAIN_ID: "137"
     depends_on:
-      - clickhouse
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8765/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    networks:
+      - edge
+      - data
+    init: true
     restart: unless-stopped
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
-    ports:
-      - "9000:9000"
-      - "8123:8123"
+    expose:
+      - "9000"
+      - "8123"
+    environment:
+      CLICKHOUSE_DB: ${POLYMETL_CLICKHOUSE_DATABASE:-polymetl}
+      CLICKHOUSE_USER: poly
+      CLICKHOUSE_PASSWORD: ${POLYMETL_CLICKHOUSE_PASSWORD:?Set a non-empty ClickHouse password}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'clickhouse-client --user "$${CLICKHOUSE_USER}" --password "$${CLICKHOUSE_PASSWORD}" --query "SELECT 1"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - data
     restart: unless-stopped
 
 volumes:
+  backend-data:
   clickhouse-data:
+
+networks:
+  edge:
+  data:
+    internal: true

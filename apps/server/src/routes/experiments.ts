@@ -442,7 +442,9 @@ export default async function experimentsRoutes(
             ? parseFloat(((handle.tickElapsedTotal / handle.tickCount) * 1000).toFixed(2))
             : undefined,
         };
-        if (!handle.cancel) {
+        if (handle.failed) {
+          payload.status = 'error';
+        } else if (!handle.cancel) {
           payload.status = 'completed';
         }
         saveExperiment(payload);
@@ -522,6 +524,7 @@ export default async function experimentsRoutes(
       spawnExperiment(handle, makeOnEvent(runId, handle), {
         apiSettings,
         checkpointOut: checkpointPathFor(runId),
+        logger: app.log,
       });
 
       return { run_id: runId };
@@ -616,6 +619,7 @@ export default async function experimentsRoutes(
       apiSettings,
       resumeCheckpoint: row.checkpoint_path,
       checkpointOut: checkpointPathFor(expId),
+      logger: app.log,
     });
 
     return { run_id: expId, resumed: true };
