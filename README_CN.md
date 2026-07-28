@@ -103,6 +103,7 @@ cp .env.example .env
 # 编辑 .env，至少填写一个 LLM key
 
 # 构建并启动全部服务
+export POLY_API_TOKEN="$(openssl rand -hex 32)"
 docker compose up --build
 
 # 前端（nginx） -> http://localhost:8080
@@ -124,6 +125,8 @@ docker compose up --build
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
+| `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
+| `POLY_API_READ_TOKEN` | 可选的只读 API Bearer Token，至少 32 个字符 |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | 允许访问私网或 HTTP 自定义 LLM 端点的精确 origin（逗号分隔） |
 | `POLYMETL_CLICKHOUSE_*` | ClickHouse 连接（可选） |
 
@@ -132,6 +135,26 @@ docker compose up --build
 `POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`。
 
 > 切勿提交 `.env`。
+
+### API 认证
+
+生产模式在未配置 `POLY_API_TOKEN` 时会拒绝启动。可使用
+`openssl rand -hex 32` 生成高熵 token。Web 界面会提示输入，token 仅保存在
+当前标签页的 `sessionStorage` 中；API 与 SSE 请求通过
+`Authorization: Bearer <token>` 发送，服务端不会接受 URL 查询参数中的凭据。
+
+市场/事件浏览和静态供应商目录保持公开只读。设置、密钥、实验及历史/SSE、
+供应商模型发现、Agent 内省和数据分析均需要认证。可选
+`POLY_API_READ_TOKEN` 只能访问受保护的 GET/HEAD 路由，修改请求返回 HTTP 403。
+Nginx 会原样转发 `Authorization` 请求头。
+
+开发模式（在 `apps/server` 中运行 `npm run dev`）默认不启用认证；设置
+`POLY_API_TOKEN` 即可在本地启用。直接调用 API：
+
+```bash
+curl -H "Authorization: Bearer $POLY_API_TOKEN" \
+  http://localhost:8765/api/v1/experiments
+```
 
 ## 开发
 

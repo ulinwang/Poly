@@ -31,6 +31,15 @@ const zh: Dict = {
   'lang.zh': '中文',
   'lang.en': 'English',
 
+  // ── Authentication ─────────────────────────────────────────────────
+  'auth.title': 'Operator 认证',
+  'auth.subtitle': '请输入服务端配置的 POLY_API_TOKEN 以访问实验、设置和分析数据。',
+  'auth.tokenPlaceholder': 'Operator token',
+  'auth.unlock': '进入 Poly',
+  'auth.verifying': '验证中…',
+  'auth.invalid': 'Token 无效，请检查后重试。',
+  'auth.sessionHint': 'Token 仅保存在当前浏览器标签页，关闭标签页后会被清除。',
+
   // ── Error boundary ─────────────────────────────────────────────────
   'error.title': '出错了',
   'error.unexpected': '发生了意外错误。',
@@ -299,6 +308,15 @@ const en: Dict = {
   'lang.label': 'Language',
   'lang.zh': '中文',
   'lang.en': 'English',
+
+  // ── Authentication ─────────────────────────────────────────────────
+  'auth.title': 'Operator authentication',
+  'auth.subtitle': 'Enter the server POLY_API_TOKEN to access experiments, settings, and analysis data.',
+  'auth.tokenPlaceholder': 'Operator token',
+  'auth.unlock': 'Open Poly',
+  'auth.verifying': 'Verifying…',
+  'auth.invalid': 'Invalid token. Check it and try again.',
+  'auth.sessionHint': 'The token is kept only in this browser tab and is cleared when the tab closes.',
 
   // ── Error boundary ─────────────────────────────────────────────────
   'error.title': 'Something went wrong',

@@ -21,11 +21,15 @@ export default async function providersRoutes(app: FastifyInstance) {
   // Dynamically list a provider's available models via its OpenAI-compatible
   // `GET {base_url}/models` endpoint. Falls back to the static catalog when the
   // provider is litellm-native (no base_url), has no key, or the fetch fails.
-  // The API key is read from stored settings, or overridden via ?api_key= for
-  // the "testing before save" case. The key is never logged.
+  // The API key is read only from encrypted server-side settings. Secrets are
+  // deliberately rejected in query strings because URLs are commonly logged.
   app.get<{ Params: { id: string }; Querystring: { api_key?: string } }>(
     '/:id/models',
-    async (req): Promise<ModelsResponse> => {
+    async (req, reply): Promise<ModelsResponse | { message: string }> => {
+      if (req.query?.api_key !== undefined) {
+        reply.status(400);
+        return { message: 'API keys must not be sent in query strings' };
+      }
       const { id } = req.params;
       const entry = PROVIDER_CATALOG.find((p) => p.id === id);
       const catalogModels = entry?.models ?? [];
@@ -45,20 +49,14 @@ export default async function providersRoutes(app: FastifyInstance) {
         };
       }
 
-      const queryKey = req.query?.api_key;
-      const apiKey = queryKey || getApiSettingsDecrypted()?.api_key || '';
+      const apiKey = getApiSettingsDecrypted()?.api_key || '';
       if (!apiKey) {
         return { models: catalogModels, source: 'catalog', message: 'no api key' };
       }
 
-      // Serve from cache only when a stored key is used (not a per-request
-      // override), so an override always reflects the key it was given.
-      const useCache = !queryKey;
-      if (useCache) {
-        const cached = modelsCache.get(id);
-        if (cached && cached.expires > Date.now()) {
-          return cached.data;
-        }
+      const cached = modelsCache.get(id);
+      if (cached && cached.expires > Date.now()) {
+        return cached.data;
       }
 
       try {
@@ -84,9 +82,7 @@ export default async function providersRoutes(app: FastifyInstance) {
           };
         }
         const data: ModelsResponse = { models, source: 'live' };
-        if (useCache) {
-          modelsCache.set(id, { expires: Date.now() + MODELS_CACHE_TTL_MS, data });
-        }
+        modelsCache.set(id, { expires: Date.now() + MODELS_CACHE_TTL_MS, data });
         return data;
       } catch (err) {
         return {

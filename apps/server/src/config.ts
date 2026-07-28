@@ -10,6 +10,8 @@ export const config = {
   HOST: process.env.HOST || '127.0.0.1',
   DATA_DIR: process.env.DATA_DIR || './data',
   NODE_ENV: process.env.NODE_ENV || 'production',
+  API_TOKEN: process.env.POLY_API_TOKEN || '',
+  API_READ_TOKEN: process.env.POLY_API_READ_TOKEN || '',
   GAMMA_API_BASE: 'https://gamma-api.polymarket.com',
   // Absolute path to the repo root, used as the cwd when spawning the Python
   // simulation core. Override with POLY_ROOT for non-standard layouts.

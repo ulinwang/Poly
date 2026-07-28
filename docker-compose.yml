@@ -21,6 +21,8 @@ services:
       - PORT=8765
       - HOST=0.0.0.0
       - NODE_ENV=production
+      - POLY_API_TOKEN=${POLY_API_TOKEN:?Set POLY_API_TOKEN to a 32+ character secret}
+      - POLY_API_READ_TOKEN=${POLY_API_READ_TOKEN:-}
       - DATA_DIR=/app/apps/server/data
       - POLY_ROOT=/app
       - POLYMETL_RPC_URL=https://1rpc.io/matic

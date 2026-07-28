@@ -121,6 +121,7 @@ cp .env.example .env
 # edit .env and set at least one LLM key
 
 # Build and start both services
+export POLY_API_TOKEN="$(openssl rand -hex 32)"
 docker compose up --build
 
 # Frontend (nginx)  -> http://localhost:8080
@@ -144,6 +145,8 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
+| `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
+| `POLY_API_READ_TOKEN` | optional read-only bearer token for API clients, minimum 32 characters |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_*` | ClickHouse connection (optional) |
 
@@ -153,6 +156,28 @@ allowlist its exact origin (for example,
 `POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`).
 
 > Never commit `.env`.
+
+### API authentication
+
+Production mode fails closed unless `POLY_API_TOKEN` is configured. Generate a
+high-entropy token with `openssl rand -hex 32`. The web UI prompts for it and
+keeps it only in the current tab's `sessionStorage`; API and SSE requests send
+it as `Authorization: Bearer <token>`. Tokens are never accepted in query
+strings.
+
+Market/event browsing and the static provider catalog remain public read-only
+routes. Settings, keys, experiments and their history/SSE streams, provider
+model discovery, agent introspection, and analysis require authentication. An
+optional `POLY_API_READ_TOKEN` can access protected GET/HEAD routes but receives
+HTTP 403 for mutations. Nginx forwards the `Authorization` header unchanged.
+
+Development mode (`npm run dev` in `apps/server`) remains unauthenticated by
+default; set `POLY_API_TOKEN` to opt in locally. Direct API clients use:
+
+```bash
+curl -H "Authorization: Bearer $POLY_API_TOKEN" \
+  http://localhost:8765/api/v1/experiments
+```
 
 ## Development
 

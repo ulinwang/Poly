@@ -36,9 +36,14 @@ backend/
 npm install
 npm run dev        # development with tsx watch
 npm run build      # compile to dist/
-npm start          # run compiled output
+POLY_API_TOKEN="$(openssl rand -hex 32)" npm start
 npm test           # vitest
 ```
+
+Production mode requires a `POLY_API_TOKEN` of at least 32 characters. Send it
+as `Authorization: Bearer <token>`. `POLY_API_READ_TOKEN` optionally grants
+read-only access to protected routes; mutation attempts return HTTP 403.
+Development mode is unauthenticated by default; set `POLY_API_TOKEN` to opt in.
 
 ## API
 

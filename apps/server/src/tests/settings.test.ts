@@ -452,9 +452,20 @@ describe('settings routes', () => {
     global.fetch = mockFetch as unknown as typeof fetch;
 
     const app = await buildServer();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        api_key: 'sk-test',
+        temperature: 0.7,
+        max_tokens: 2048,
+      },
+    });
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/providers/deepseek/models?api_key=sk-test',
+      url: '/api/v1/providers/deepseek/models',
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
@@ -472,15 +483,25 @@ describe('settings routes', () => {
     global.fetch = mockFetch as unknown as typeof fetch;
 
     const app = await buildServer();
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        api_key: 'sk-test',
+        temperature: 0.7,
+        max_tokens: 2048,
+      },
+    });
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/providers/deepseek/models?api_key=sk-test',
+      url: '/api/v1/providers/openai/models',
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.source).toBe('catalog');
-    // Static catalog models for deepseek.
-    expect(body.models).toContain('deepseek-v4-flash');
+    expect(body.models).toContain('gpt-4o');
     expect(body.message).toContain('401');
   });
 
@@ -500,11 +521,21 @@ describe('settings routes', () => {
     const app = await buildServer();
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/providers/anthropic/models?api_key=sk-test',
+      url: '/api/v1/providers/anthropic/models',
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.source).toBe('catalog');
     expect(body.models).toContain('anthropic/claude-opus-4-8');
+  });
+
+  it('GET /providers/:id/models rejects API keys in query strings', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/providers/deepseek/models?api_key=sk-query-secret',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).message).toContain('query strings');
   });
 });
