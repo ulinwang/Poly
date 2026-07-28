@@ -119,6 +119,9 @@ export const api = {
       avg_ticks: number;
     }>('/api/v1/experiments/stats'),
 
+  getExperimentLimits: () =>
+    fetchJson<import('../types').ExperimentLimits>('/api/v1/experiments/limits'),
+
   getExperiment: (id: string) =>
     fetchJson<{ experiment: import('../types').Experiment }>(`/api/v1/experiments/${id}`),
 

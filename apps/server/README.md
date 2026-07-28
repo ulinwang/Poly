@@ -45,6 +45,12 @@ as `Authorization: Bearer <token>`. `POLY_API_READ_TOKEN` optionally grants
 read-only access to protected routes; mutation attempts return HTTP 403.
 Development mode is unauthenticated by default; set `POLY_API_TOKEN` to opt in.
 
+Experiment requests are capped at 100 agents, 200 ticks, and 2 concurrently
+active runs by default. Override these server-authoritative limits with
+`POLY_MAX_EXPERIMENT_AGENTS`, `POLY_MAX_EXPERIMENT_TICKS`, and
+`POLY_MAX_ACTIVE_RUNS`. The effective values are exposed by
+`GET /api/v1/experiments/limits` for the web UI.
+
 ## API
 
 - `GET /api/v1/markets?q=&limit=&live_only=`
@@ -53,6 +59,7 @@ Development mode is unauthenticated by default; set `POLY_API_TOKEN` to opt in.
 - `GET /api/v1/experiments?status=&slug=&limit=&offset=`
 - `GET /api/v1/experiments/search?q=&limit=`
 - `GET /api/v1/experiments/stats`
+- `GET /api/v1/experiments/limits`
 - `GET /api/v1/experiments/:id`
 - `POST /api/v1/experiments`
 - `POST /api/v1/experiments/:id/cancel`

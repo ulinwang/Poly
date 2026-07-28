@@ -23,6 +23,9 @@ services:
       - NODE_ENV=production
       - POLY_API_TOKEN=${POLY_API_TOKEN:?Set POLY_API_TOKEN to a 32+ character secret}
       - POLY_API_READ_TOKEN=${POLY_API_READ_TOKEN:-}
+      - POLY_MAX_EXPERIMENT_AGENTS=${POLY_MAX_EXPERIMENT_AGENTS:-100}
+      - POLY_MAX_EXPERIMENT_TICKS=${POLY_MAX_EXPERIMENT_TICKS:-200}
+      - POLY_MAX_ACTIVE_RUNS=${POLY_MAX_ACTIVE_RUNS:-2}
       - DATA_DIR=/app/apps/server/data
       - POLY_ROOT=/app
       - POLYMETL_RPC_URL=https://1rpc.io/matic

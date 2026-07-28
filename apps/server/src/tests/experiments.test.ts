@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -7,10 +7,18 @@ import { eventLogPathFor } from '../services/runner.js';
 import {
   saveExperiment,
   getExperiment,
+  getExperimentsFiltered,
   repairOrphanedRuns,
 } from '../db/experiments.js';
 
 describe('experiments routes', () => {
+  const validExperiment = {
+    slug: 'market',
+    n_agents: 2,
+    n_ticks: 3,
+    persona_set: 'archetype',
+  };
+
   it('GET /api/v1/experiments returns list and stats shape', async () => {
     const app = await buildServer();
     const res = await app.inject({ method: 'GET', url: '/api/v1/experiments' });
@@ -109,6 +117,145 @@ describe('experiments routes', () => {
     expect(getExperiment(runId)?.api_key_id).toBe(keyId);
 
     await app.inject({ method: 'POST', url: `/api/v1/experiments/${runId}/cancel` });
+  });
+
+  it('rejects malformed and oversized create requests before saving or spawning', async () => {
+    const spawnExperiment = vi.fn();
+    const app = await buildServer({
+      experimentLimits: {
+        maxAgents: 2,
+        maxTicks: 5,
+        maxSlugLength: 10,
+        maxSeed: 100,
+        minTemperature: 0,
+        maxTemperature: 1,
+      },
+      spawnExperiment,
+    });
+    const totalBefore = getExperimentsFiltered(undefined, undefined, 1, 0).total;
+    const invalidPayloads: Array<Record<string, unknown>> = [
+      { ...validExperiment, slug: undefined },
+      { ...validExperiment, n_agents: '2' },
+      { ...validExperiment, n_ticks: -1 },
+      { ...validExperiment, n_agents: 3 },
+      { ...validExperiment, n_ticks: 6 },
+      { ...validExperiment, slug: '           ' },
+      { ...validExperiment, slug: 'market-name-too-long' },
+      { ...validExperiment, persona_set: 'unknown' },
+      { ...validExperiment, seed: -1 },
+      { ...validExperiment, seed: 101 },
+      { ...validExperiment, temperature: 1.1 },
+      { ...validExperiment, api_key_id: '1' },
+      { ...validExperiment, unexpected: true },
+    ];
+
+    for (const payload of invalidPayloads) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/experiments',
+        payload,
+      });
+      expect(response.statusCode, JSON.stringify(payload)).toBe(400);
+    }
+
+    const nonFiniteResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      headers: { 'content-type': 'application/json' },
+      payload:
+        '{"slug":"market","n_agents":2,"n_ticks":3,"persona_set":"archetype","temperature":1e400}',
+    });
+    expect(nonFiniteResponse.statusCode).toBe(400);
+    expect(getExperimentsFiltered(undefined, undefined, 1, 0).total).toBe(totalBefore);
+    expect(spawnExperiment).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rejects an unknown API key without falling back to default settings', async () => {
+    const spawnExperiment = vi.fn();
+    const app = await buildServer({ spawnExperiment });
+    const totalBefore = getExperimentsFiltered(undefined, undefined, 1, 0).total;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      payload: { ...validExperiment, api_key_id: 2_147_483_647 },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toContain('usable key');
+    expect(getExperimentsFiltered(undefined, undefined, 1, 0).total).toBe(totalBefore);
+    expect(spawnExperiment).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('exposes effective limits and rejects a concurrent run above capacity', async () => {
+    const spawnExperiment = vi.fn();
+    const app = await buildServer({
+      experimentLimits: { maxAgents: 8, maxTicks: 12, maxActiveRuns: 1 },
+      spawnExperiment,
+    });
+    const totalBefore = getExperimentsFiltered(undefined, undefined, 1, 0).total;
+
+    const limitsResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/experiments/limits',
+    });
+    expect(limitsResponse.statusCode).toBe(200);
+    expect(JSON.parse(limitsResponse.body)).toMatchObject({
+      max_agents: 8,
+      max_ticks: 12,
+      max_active_runs: 1,
+    });
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      payload: validExperiment,
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/experiments',
+      payload: { ...validExperiment, slug: 'second-market' },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    expect(second.headers['retry-after']).toBe('5');
+    expect(getExperimentsFiltered(undefined, undefined, 1, 0).total).toBe(totalBefore + 1);
+    expect(spawnExperiment).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('validates list and search query parameters', async () => {
+    const app = await buildServer({ spawnExperiment: vi.fn() });
+    const invalidUrls = [
+      '/api/v1/experiments?limit=0',
+      '/api/v1/experiments?limit=1001',
+      '/api/v1/experiments?offset=-1',
+      '/api/v1/experiments?status=unknown',
+      '/api/v1/experiments?unexpected=true',
+      '/api/v1/experiments/search',
+      '/api/v1/experiments/search?q=',
+      '/api/v1/experiments/search?q=market&limit=1001',
+    ];
+
+    for (const url of invalidUrls) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(400);
+    }
+
+    const validList = await app.inject({
+      method: 'GET',
+      url: '/api/v1/experiments?limit=2&offset=0&status=running',
+    });
+    const validSearch = await app.inject({
+      method: 'GET',
+      url: '/api/v1/experiments/search?q=market&limit=2',
+    });
+    expect(validList.statusCode).toBe(200);
+    expect(validSearch.statusCode).toBe(200);
+    await app.close();
   });
 
   it('GET /:id/replay returns the recorded events array (skips __end__)', async () => {
