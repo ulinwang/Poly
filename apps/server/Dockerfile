@@ -67,7 +67,6 @@ WORKDIR /app
 
 # Node server artifacts (built in stage 1).
 COPY --from=node-builder /app/apps/server/dist ./apps/server/dist
-COPY --from=node-builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=node-builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=node-builder /app/apps/web/dist ./apps/web/dist
 COPY --from=node-builder /app/node_modules ./node_modules
