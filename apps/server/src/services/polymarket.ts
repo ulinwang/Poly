@@ -66,9 +66,9 @@ async function fetchGammaMarkets(offset = 0, limit = 100): Promise<GammaMarket[]
     const json = (await resp.json()) as GammaMarket[];
     cache.set(key, { data: json, ts: now });
     return json;
-  } catch (err) {
+  } catch {
     if (hit) return hit.data;
-    throw err;
+    return [];
   }
 }
 
@@ -88,9 +88,9 @@ async function fetchGammaMarketBySlug(slug: string): Promise<GammaMarket | null>
     const json = (await resp.json()) as GammaMarket[];
     cache.set(key, { data: json, ts: now });
     return json[0] ?? null;
-  } catch (err) {
+  } catch {
     if (hit) return hit.data[0] ?? null;
-    throw err;
+    return null;
   }
 }
 
@@ -121,9 +121,9 @@ async function fetchGammaEventBySlug(slug: string): Promise<GammaEvent | null> {
     const json = (await resp.json()) as GammaEvent[];
     eventCache.set(key, { data: json, ts: now });
     return json[0] ?? null;
-  } catch (err) {
+  } catch {
     if (hit) return hit.data[0] ?? null;
-    throw err;
+    return null;
   }
 }
 
@@ -143,9 +143,9 @@ async function fetchGammaEvents(offset = 0, limit = 30): Promise<GammaEvent[]> {
     const json = (await resp.json()) as GammaEvent[];
     eventListCache.set(key, { data: json, ts: now });
     return json;
-  } catch (err) {
+  } catch {
     if (hit) return hit.data;
-    throw err;
+    return [];
   }
 }
 
