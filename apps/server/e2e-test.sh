@@ -6,9 +6,13 @@ TMPDIR="${TMPDIR:-/tmp}"
 
 PASS=0
 FAIL=0
+AUTH_ARGS=()
+if [ -n "${POLY_API_TOKEN:-}" ]; then
+  AUTH_ARGS=(-H "Authorization: Bearer $POLY_API_TOKEN")
+fi
 
 http_code() {
-  curl -s -o /dev/null -w "%{http_code}" "$@"
+  curl -s -o /dev/null -w "%{http_code}" "${AUTH_ARGS[@]}" "$@"
 }
 
 assert_ok() {
@@ -53,6 +57,7 @@ assert_ok "$BASE_URL/api/v1/experiments?limit=10&offset=0"
 
 # Create experiment
 CREATE_RESP=$(curl -s -X POST "$BASE_URL/api/v1/experiments" \
+  "${AUTH_ARGS[@]}" \
   -H "Content-Type: application/json" \
   -d '{"slug":"e2e-test","n_agents":4,"n_ticks":5,"persona_set":"archetype"}')
 RUN_ID=$(echo "$CREATE_RESP" | sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p')
@@ -63,7 +68,7 @@ assert_status 200 "$BASE_URL/api/v1/experiments/$RUN_ID"
 echo ""
 echo "3. SSE Events Stream"
 EVENTS_FILE=$(mktemp "$TMPDIR/e2e-events.XXXXXX")
-curl -sN "$BASE_URL/api/v1/experiments/$RUN_ID/events?replay=0" > "$EVENTS_FILE" &
+curl -sN "${AUTH_ARGS[@]}" "$BASE_URL/api/v1/experiments/$RUN_ID/events?replay=0" > "$EVENTS_FILE" &
 CURL_PID=$!
 sleep 2.5
 kill "$CURL_PID" 2>/dev/null || true
@@ -80,6 +85,7 @@ echo ""
 echo "4. Cancel Experiment"
 # Create a longer-running experiment to cancel
 CREATE_RESP2=$(curl -s -X POST "$BASE_URL/api/v1/experiments" \
+  "${AUTH_ARGS[@]}" \
   -H "Content-Type: application/json" \
   -d '{"slug":"e2e-cancel","n_agents":4,"n_ticks":200,"persona_set":"archetype"}')
 RUN_ID2=$(echo "$CREATE_RESP2" | sed -n 's/.*"run_id":"\([^"]*\)".*/\1/p')

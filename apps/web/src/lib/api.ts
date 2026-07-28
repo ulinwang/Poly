@@ -1,18 +1,43 @@
+import { authorizationHeaders } from './auth';
+
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  for (const [name, value] of Object.entries(authorizationHeaders())) {
+    headers.set(name, value);
+  }
   const resp = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    headers,
   });
   if (!resp.ok) {
     const txt = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${txt}`);
+    throw new ApiError(resp.status, `HTTP ${resp.status}: ${txt}`);
   }
   return resp.json() as Promise<T>;
 }
 
 export const api = {
+  // Authentication
+  getAuthConfig: () =>
+    fetchJson<{ required: boolean; mode: 'bearer' | 'disabled' }>('/api/v1/auth/config'),
+
+  verifyAuthentication: () =>
+    fetchJson<{ authenticated: true; role: 'operator' | 'reader' }>('/api/v1/auth/verify'),
+
   // Markets
   listMarkets: (params?: {
     q?: string; live_only?: boolean; limit?: number; category?: string; offset?: number;

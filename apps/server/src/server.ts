@@ -17,8 +17,17 @@ import providersRoutes from './routes/providers.js';
 import agentRoutes from './routes/agent.js';
 import analysisRoutes from './routes/analysis.js';
 import { repairOrphanedRuns } from './db/experiments.js';
+import { config } from './config.js';
+import { installAuthentication } from './auth.js';
 
 const isDev = process.env.NODE_ENV === 'development';
+const isTest = !!process.env.VITEST || process.env.NODE_ENV === 'test';
+
+export interface BuildServerOptions {
+  authRequired?: boolean;
+  operatorToken?: string;
+  readerToken?: string;
+}
 
 // Comma-separated list of allowed origins; falls back to the local dev and
 // production (nginx) origins used by this project.
@@ -30,7 +39,7 @@ if (allowedOrigins.length === 0) {
   allowedOrigins.push('http://localhost:8080', 'http://localhost:5173');
 }
 
-export async function buildServer() {
+export async function buildServer(options: BuildServerOptions = {}) {
   // Repair zombie runs left as 'running' by a previous process that died
   // without finishing them. Paused (resumable) runs are left alone.
   const repaired = repairOrphanedRuns();
@@ -54,6 +63,14 @@ export async function buildServer() {
       cb(new Error('Not allowed by CORS'), false);
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  const operatorToken = options.operatorToken ?? config.API_TOKEN;
+  await installAuthentication(app, {
+    required: options.authRequired ?? (isTest ? false : !isDev || !!operatorToken.trim()),
+    operatorToken,
+    readerToken: options.readerToken ?? config.API_READ_TOKEN,
   });
 
   await app.register(marketsRoutes, { prefix: '/api/v1/markets' });

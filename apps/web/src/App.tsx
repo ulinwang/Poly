@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from './components/layout/MainLayout';
 import ErrorBoundary from './components/ErrorBoundary';
+import AuthGate from './components/AuthGate';
 import MarketBrowser from './pages/MarketBrowser';
 import { useSettingsStore } from './stores';
 
@@ -32,32 +33,34 @@ function App() {
   return (
     <ErrorBoundary>
       <DarkModeInit />
-      <HashRouter>
-        <Routes>
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<Navigate to="/markets" replace />} />
-            <Route path="/markets" element={<MarketBrowser />} />
-            <Route path="/markets/:slug" element={
-              <Suspense fallback={<PageLoader />}><MarketDetail /></Suspense>
-            } />
-            <Route path="/experiments" element={
-              <Suspense fallback={<PageLoader />}><ExperimentManager /></Suspense>
-            } />
-            <Route path="/experiments/:id" element={
-              <Suspense fallback={<PageLoader />}><ExperimentLive /></Suspense>
-            } />
-            <Route path="/agent" element={
-              <Suspense fallback={<PageLoader />}><AgentInfo /></Suspense>
-            } />
-            <Route path="/analysis" element={
-              <Suspense fallback={<PageLoader />}><DataAnalysis /></Suspense>
-            } />
-            <Route path="/settings/*" element={
-              <Suspense fallback={<PageLoader />}><Settings /></Suspense>
-            } />
-          </Route>
-        </Routes>
-      </HashRouter>
+      <AuthGate>
+        <HashRouter>
+          <Routes>
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<Navigate to="/markets" replace />} />
+              <Route path="/markets" element={<MarketBrowser />} />
+              <Route path="/markets/:slug" element={
+                <Suspense fallback={<PageLoader />}><MarketDetail /></Suspense>
+              } />
+              <Route path="/experiments" element={
+                <Suspense fallback={<PageLoader />}><ExperimentManager /></Suspense>
+              } />
+              <Route path="/experiments/:id" element={
+                <Suspense fallback={<PageLoader />}><ExperimentLive /></Suspense>
+              } />
+              <Route path="/agent" element={
+                <Suspense fallback={<PageLoader />}><AgentInfo /></Suspense>
+              } />
+              <Route path="/analysis" element={
+                <Suspense fallback={<PageLoader />}><DataAnalysis /></Suspense>
+              } />
+              <Route path="/settings/*" element={
+                <Suspense fallback={<PageLoader />}><Settings /></Suspense>
+              } />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </AuthGate>
     </ErrorBoundary>
   );
 }

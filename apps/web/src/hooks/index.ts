@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useExperimentStore } from '../stores';
 import { applyEvent } from '../lib/applyEvent';
 import { api } from '../lib/api';
+import { consumeSse } from '../lib/sse';
 
 /**
  * Domain events whose only effect is to mutate store state — dispatched
@@ -36,73 +37,82 @@ export function useSSE(runId: string | null, replay: number = 1) {
     const url = new URL(`/api/v1/experiments/${runId}/events`, window.location.origin);
     url.searchParams.set('replay', String(replay));
 
-    const es = new EventSource(url.toString());
+    const controller = new AbortController();
     let connected = false;
+    let terminal = false;
 
-    es.onopen = () => {
-      connected = true;
-      setRunning(true);
-    };
-
-    // Pure store-mutating events all flow through the shared dispatcher so the
-    // kind→store mapping is defined once (also reused by the replay player).
-    for (const kind of SSE_DOMAIN_EVENTS) {
-      es.addEventListener(kind, (e: MessageEvent) => {
-        const data = JSON.parse(e.data);
-        applyEvent(useExperimentStore.getState(), kind, data);
-      });
-    }
-
-    // ── Lifecycle events: apply the event, then drive connection state ──
-    es.addEventListener('done', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      applyEvent(useExperimentStore.getState(), 'done', data);
-      setRunning(false);
-      es.close();
-    });
-
-    es.addEventListener('error', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        applyEvent(useExperimentStore.getState(), 'error', data);
-      } catch {
-        setError('SSE connection error');
+    const handleMessage = ({ event, data }: { event: string; data: string }) => {
+      if ((SSE_DOMAIN_EVENTS as readonly string[]).includes(event)) {
+        applyEvent(useExperimentStore.getState(), event, JSON.parse(data));
+        return;
       }
-      setRunning(false);
-    });
-
-    es.addEventListener('cancelled', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      applyEvent(useExperimentStore.getState(), 'cancelled', data);
-      setRunning(false);
-      es.close();
-    });
-
-    es.addEventListener('paused', (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      applyEvent(useExperimentStore.getState(), 'paused', data);
-      setRunning(false);
-      setPaused(true);
-      es.close();
-    });
-
-    es.addEventListener('end', () => {
-      setRunning(false);
-      es.close();
-    });
-
-    es.addEventListener('ping', () => {
-      // keep-alive, do nothing
-    });
-
-    es.onerror = () => {
-      if (connected) {
-        console.warn('SSE connection interrupted, retrying...');
+      if (event === 'done') {
+        applyEvent(useExperimentStore.getState(), 'done', JSON.parse(data));
+        terminal = true;
+        setRunning(false);
+        controller.abort();
+        return;
+      }
+      if (event === 'error') {
+        try {
+          applyEvent(useExperimentStore.getState(), 'error', JSON.parse(data));
+        } catch {
+          setError('SSE connection error');
+        }
+        setRunning(false);
+        return;
+      }
+      if (event === 'cancelled') {
+        applyEvent(useExperimentStore.getState(), 'cancelled', JSON.parse(data));
+        terminal = true;
+        setRunning(false);
+        controller.abort();
+        return;
+      }
+      if (event === 'paused') {
+        applyEvent(useExperimentStore.getState(), 'paused', JSON.parse(data));
+        terminal = true;
+        setRunning(false);
+        setPaused(true);
+        controller.abort();
+        return;
+      }
+      if (event === 'end') {
+        terminal = true;
+        setRunning(false);
+        controller.abort();
       }
     };
+
+    const connect = async () => {
+      while (!controller.signal.aborted && !terminal) {
+        try {
+          await consumeSse(
+            url.toString(),
+            controller.signal,
+            () => {
+              connected = true;
+              setRunning(true);
+            },
+            handleMessage,
+          );
+        } catch (err) {
+          if (controller.signal.aborted) return;
+          if (connected) {
+            console.warn('SSE connection interrupted, retrying...', err);
+          } else {
+            setError((err as Error).message);
+          }
+        }
+        if (!controller.signal.aborted && !terminal) {
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+        }
+      }
+    };
+    void connect();
 
     return () => {
-      es.close();
+      controller.abort();
     };
   }, [runId, replay, setRunning, setPaused, setError]);
 }
