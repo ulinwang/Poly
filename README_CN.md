@@ -74,9 +74,10 @@ Python 仿真核心（sim/runner → environment + agent → litellm）
 ### 运行
 
 ```bash
-# 1. Python 依赖（创建 .venv，安装多包根 editable）
-uv sync
-uv pip install -e .
+# 1. 锁定的 Python 依赖（创建 .venv，安装多包根 editable）
+#    若 uv 无法下载固定 Python，可使用已安装的 Python 3.11+：
+#    uv sync --frozen --python python3
+uv sync --frozen
 
 # 2. Node 依赖（在 workspace 根目录安装）
 npm install
@@ -185,6 +186,13 @@ curl -H "Authorization: Bearer $POLY_API_TOKEN" \
 ### 测试
 
 ```bash
+# Python 仿真与研究回归套件（无需 API key / ClickHouse）
+uv sync --frozen
+uv run pytest -q
+
+# sim/ 分支覆盖率；生成 coverage.xml，并执行 65% 门槛
+uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
+
 # 后端 (vitest)
 cd apps/server && npm test && npm run lint
 
@@ -195,10 +203,15 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 ### 持续集成
 
 [GitHub Actions 工作流](.github/workflows/ci.yml)会在每个 Pull Request
-以及每次推送到 `master` 时运行。它使用 `npm ci` 安装锁定的 Node 依赖并缓存
-npm 下载，然后在 Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。
-两个 workspace 使用独立任务运行，便于快速定位失败环节。部署文件或后端源码
-变化时，按路径触发的
+以及每次推送到 `master` 时运行。Python 3.11 任务使用持久化 uv 缓存安装
+`uv.lock` 的精确环境，运行 hermetic pytest 套件，并对 `sim/` 执行分支覆盖率
+门槛。2026-07-29 测得的初始基线为 **66%**，回归门槛为 **65%**。供应商调用、
+ClickHouse、Web 搜索和生成数据均被 mock 或跳过，因此 CI 无需 API key 或
+实时网络。
+
+Server 与 Web 任务使用 `npm ci` 安装锁定的 Node 依赖并缓存 npm 下载，然后在
+Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。三个任务独立运行，
+便于快速定位失败环节。部署文件或后端源码变化时，按路径触发的
 [Compose 冒烟工作流](.github/workflows/compose-smoke.yml)还会构建、启动、
 健康检查并清理生产栈。
 

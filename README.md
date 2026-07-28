@@ -89,11 +89,10 @@ relayed back over SSE to the live observation page
 ### Run it
 
 ```bash
-# 1. Python deps (creates .venv, installs the multi-root packages editable)
-#    If uv tries to download its own Python and fails, use the system python:
-#    uv venv --python python3 && uv pip install -e .
-uv sync
-uv pip install -e .
+# 1. Locked Python deps (creates .venv, installs multi-root packages editable)
+#    If uv cannot download the pinned Python, use an installed Python 3.11+:
+#    uv sync --frozen --python python3
+uv sync --frozen
 
 # 2. Node deps (install from the workspace root)
 npm install
@@ -217,6 +216,13 @@ curl -H "Authorization: Bearer $POLY_API_TOKEN" \
 ### Tests
 
 ```bash
+# Python simulation and research regression suite (no API key/ClickHouse needed)
+uv sync --frozen
+uv run pytest -q
+
+# Branch coverage for sim/; writes coverage.xml and enforces the 65% gate
+uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
+
 # Backend (vitest)
 cd apps/server && npm test && npm run lint
 
@@ -227,10 +233,17 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 ### Continuous integration
 
 The [GitHub Actions workflow](.github/workflows/ci.yml) runs on every pull
-request and every push to `master`. It installs the locked Node dependencies
-with `npm ci`, caches npm downloads, and runs server lint/tests/build plus web
-lint/build on Node.js 20. The two workspaces run as separate jobs so failures
-are easier to identify. A path-filtered
+request and every push to `master`. Its Python 3.11 job installs the exact
+`uv.lock` environment with a persistent uv cache, runs the hermetic pytest
+suite, and enforces branch coverage for `sim/`. The initial baseline measured
+on 2026-07-29 is **66%**, with a **65%** regression gate. Provider calls,
+ClickHouse, web search, and generated datasets are mocked or skipped, so CI
+does not require API keys or live network access.
+
+The Server and Web jobs install the locked Node dependencies with `npm ci`,
+cache npm downloads, and run server lint/tests/build plus web lint/build on
+Node.js 20. The three jobs run independently so failures are easy to identify.
+A path-filtered
 [Compose smoke workflow](.github/workflows/compose-smoke.yml) also builds,
 starts, health-checks, and tears down the production stack when deployment
 files or backend sources change.

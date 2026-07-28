@@ -1,9 +1,11 @@
 """decide() integration with a stubbed tool-mode LLM."""
 from __future__ import annotations
 
+import time
 import unittest
+from unittest.mock import patch
 
-from agent.decision.runtime import decide
+from agent.decision.runtime import MAX_INFO_TURNS, decide
 from agent.decision.types import AgentSnapshot, MarketSnapshot
 from agent.personas.persona import Persona
 
@@ -145,6 +147,102 @@ class DecideToolCallingTest(unittest.TestCase):
         )
         self.assertEqual(d.order_type, "HOLD")
         self.assertIn("rate limited", d.api_error)
+
+    def test_hard_timeout_returns_hold(self):
+        def too_slow(**kwargs):
+            time.sleep(0.05)
+            raise AssertionError("timeout guard did not interrupt the call")
+
+        d = decide(
+            persona=_persona(), question="Q?", description="R", end_date="2026",
+            market=_market(), agent=_agent_state(),
+            api_key="x", base_url="x", model="x",
+            call_fn=too_slow, max_attempts=1, timeout=0.01,
+        )
+        self.assertEqual(d.order_type, "HOLD")
+        self.assertTrue(d.timeout_exceeded)
+        self.assertIn("timeout", d.api_error)
+
+    def test_information_loop_is_bounded_without_live_network(self):
+        from agent.decision.tool_schemas import select_tools
+        from agent.info import SearchResult
+
+        calls = {"search": 0, "continue": 0}
+
+        def belief_or_search(**kwargs):
+            names = {t["function"]["name"] for t in kwargs["tools"]}
+            if names == {"update_belief"}:
+                call = {
+                    "id": "belief",
+                    "name": "update_belief",
+                    "arguments": {
+                        "yes_prob": 0.55,
+                        "confidence": 0.6,
+                        "rationale": "test",
+                    },
+                }
+            else:
+                call = {
+                    "id": "search-0",
+                    "name": "get_information",
+                    "arguments": {"query": "bounded query"},
+                }
+            return {
+                "tool_call": call,
+                "tool_calls": [call],
+                "text": "",
+                "raw": "{}",
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+            }
+
+        def continue_fn(**kwargs):
+            calls["continue"] += 1
+            names = {t["function"]["name"] for t in kwargs["tools"]}
+            if "get_information" in names:
+                call = {
+                    "id": f"search-{calls['continue']}",
+                    "name": "get_information",
+                    "arguments": {"query": "bounded query"},
+                }
+            else:
+                call = {
+                    "id": "trade",
+                    "name": "place_market_order",
+                    "arguments": {
+                        "outcome": "YES",
+                        "side": "BUY",
+                        "size_usd": 10,
+                    },
+                }
+            return {
+                "tool_call": call,
+                "tool_calls": [call],
+                "text": "",
+                "raw": "{}",
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+            }
+
+        def fake_search(*args, **kwargs):
+            calls["search"] += 1
+            return [SearchResult(title="Mock", snippet="Mocked", url="https://example.test")]
+
+        with patch("agent.decision.runtime.search_web", side_effect=fake_search):
+            d = decide(
+                persona=_persona(), question="Q?", description="R",
+                end_date="2026", market=_market(), agent=_agent_state(),
+                api_key="x", base_url="x", model="x",
+                call_fn=belief_or_search,
+                continue_fn=continue_fn,
+                tools=select_tools(info_enabled=True),
+                info_enabled=True,
+                max_attempts=1,
+            )
+
+        self.assertEqual(d.order_type, "MARKET")
+        self.assertEqual(calls["search"], MAX_INFO_TURNS)
+        self.assertEqual(calls["continue"], MAX_INFO_TURNS)
 
 
 class MultiToolPerTurnTest(unittest.TestCase):

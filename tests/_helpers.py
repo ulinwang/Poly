@@ -6,6 +6,7 @@ from `src.agent.persona`.
 """
 from __future__ import annotations
 
+from agent.factory import AgentInit
 from agent.personas.persona import Persona
 
 
@@ -21,4 +22,24 @@ def make_test_personas(n: int) -> list[Persona]:
             profile_text="test trader",
         )
         for _ in range(n)
+    ]
+
+
+def make_test_population(n: int) -> list[AgentInit]:
+    """N deterministic AgentInit rows for tests that construct PolyEnv."""
+    return [
+        AgentInit(
+            wallet_addr=f"0x{i:040x}",
+            persona_type="Test",
+            capital_initial=1000.0,
+            profile_text="test trader",
+            private_signal_mu=0.5,
+            private_signal_sigma=0.1,
+            risk_aversion=0.5,
+            src_tx_count=0,
+            src_maker_ratio=0.0,
+            src_avg_position_usd=0.0,
+            src_asset_diversity=0,
+        )
+        for i in range(n)
     ]

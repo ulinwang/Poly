@@ -22,7 +22,10 @@ import sys
 import threading
 from pathlib import Path
 
-from runner_stream import resume_stream, run_stream
+try:
+    from .runner_stream import resume_stream, run_stream
+except ImportError:  # Direct execution: python sim/runner/runner_cli.py
+    from runner_stream import resume_stream, run_stream
 
 
 def main() -> None:
