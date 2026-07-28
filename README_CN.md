@@ -23,24 +23,23 @@ Poly 是一个面向预测市场（如 Polymarket）的**多智能体仿真平�
 monorepo，Web 应用 / Python 仿真核心 / 离线研究流水线 清晰分层：
 
 ```text
-Poly/                         (外层文件夹)
-├── polymetl/                 ← git 仓库
-│   ├── apps/
-│   │   ├── web/              React 19 + Vite + Tailwind v4 前端
-│   │   └── server/           TypeScript Fastify 后端（API + 托管 SPA）
-│   ├── sim/                  Python 仿真核心
-│   │   ├── agent/            persona、特征、prompt、决策(LLM)、记忆
-│   │   ├── environment/      PolyEnv CLOB 引擎、订单簿、工具、seeder
-│   │   ├── runner/           runner_cli.py + runner_stream.py（由后端 spawn）
-│   │   └── evaluation/       指标 + eval 数据结构（宏观/微观）
-│   ├── research/             离线分析（论文流水线）
-│   │   ├── experiments/      批量运行、分析、作图
-│   │   ├── comparison/  viz/  scripts/
-│   ├── data/                 ETL + 查询层（ClickHouse 可选）—— 共享包
-│   ├── legacy/               已废弃的旧 python webapp（保留参考）
-│   ├── pyproject.toml        Python 依赖(uv)；多包根(sim, research, .)
-│   └── package.json          npm workspaces (apps/web, apps/server)
-└── thesis/                   论文成品（docx / ppt / 参考）—— 在仓库之外
+Poly/                         ← git 仓库
+├── apps/
+│   ├── web/                  React 19 + Vite + Tailwind v4 前端
+│   └── server/               TypeScript Fastify 后端（API + 托管 SPA）
+├── sim/                      Python 仿真核心
+│   ├── agent/                persona、特征、prompt、决策（LLM）、记忆
+│   ├── environment/          PolyEnv CLOB 引擎、订单簿、工具、seeder
+│   ├── runner/               runner_cli.py + runner_stream.py（由后端 spawn）
+│   └── evaluation/           指标 + eval 数据结构（宏观/微观）
+├── research/                 离线分析（论文流水线）
+│   ├── experiments/          批量运行、分析、作图
+│   └── comparison/  viz/  scripts/
+├── data/                     ETL + 查询层（ClickHouse 可选）—— 共享包
+├── legacy/                   已废弃的旧 Python Web 应用（保留参考）
+├── docker-compose.yml        前端、后端与 ClickHouse 服务
+├── pyproject.toml            Python 依赖（uv）；多包根（sim、research、.）
+└── package.json              npm workspaces（apps/web、apps/server）
 ```
 
 运行时数据流：
@@ -79,10 +78,8 @@ Python 仿真核心（sim/runner → environment + agent → litellm）
 uv sync
 uv pip install -e .
 
-# 2. Node 依赖
-cd apps/server && npm install
-cd ../web && npm install
-cd ../..
+# 2. Node 依赖（在 workspace 根目录安装）
+npm install
 
 # 3. 配置
 cp .env.example .env        # 填 LLM key；ClickHouse 可选
@@ -92,9 +89,24 @@ cd apps/server && npm run dev      # API + 仿真，http://localhost:8765
 cd apps/web    && npm run dev      # Vite 开发服务器 http://localhost:5173（/api 代理到 8765）
 # 打开 http://localhost:5173
 
-# 4b. 或生产方式（后端托管打包 SPA）
-cd apps/web && npm run build
-cd ../server && npm run dev        # 打开 http://localhost:8765
+# 4b. 或生产方式（后端托管打包后的 SPA）
+npm run build:web
+npm run build:server
+cd apps/server && npm start        # 打开 http://localhost:8765
+```
+
+### 使用 Docker
+
+```bash
+# 先创建并配置环境变量
+cp .env.example .env
+# 编辑 .env，至少填写一个 LLM key
+
+# 构建并启动全部服务
+docker compose up --build
+
+# 前端（nginx） -> http://localhost:8080
+# 后端 API      -> http://localhost:8765
 ```
 
 也可在「设置」页运行时切换供应商/模型/API key，无需重启。

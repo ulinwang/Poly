@@ -35,24 +35,23 @@ A monorepo with a clean split between the web app, the Python simulation core,
 and the offline research pipeline:
 
 ```text
-Poly/                         (outer folder)
-├── polymetl/                 ← git repo
-│   ├── apps/
-│   │   ├── web/              React 19 + Vite + Tailwind v4 frontend
-│   │   └── server/           TypeScript Fastify backend (API + serves the SPA)
-│   ├── sim/                  Python simulation core
-│   │   ├── agent/            personas, features, prompt, decision (LLM), memory
-│   │   ├── environment/      PolyEnv CLOB engine, order book, tools, seeders
-│   │   ├── runner/           runner_cli.py + runner_stream.py (spawned by server)
-│   │   └── evaluation/       metrics + eval schema (macro/micro)
-│   ├── research/             offline analysis (thesis pipeline)
-│   │   ├── experiments/      batch runner, analysis, plots
-│   │   ├── comparison/  viz/  scripts/
-│   ├── data/                 ETL + query layer (ClickHouse optional) — shared pkg
-│   ├── legacy/               deprecated old python webapp (kept for reference)
-│   ├── pyproject.toml        Python deps (uv); multi-root packages (sim, research, .)
-│   └── package.json          npm workspaces (apps/web, apps/server)
-└── thesis/                   paper artifacts (docx / ppt / refs) — outside the repo
+Poly/                         ← git repo
+├── apps/
+│   ├── web/                  React 19 + Vite + Tailwind v4 frontend
+│   └── server/               TypeScript Fastify backend (API + serves the SPA)
+├── sim/                      Python simulation core
+│   ├── agent/                personas, features, prompt, decision (LLM), memory
+│   ├── environment/          PolyEnv CLOB engine, order book, tools, seeders
+│   ├── runner/               runner_cli.py + runner_stream.py (spawned by server)
+│   └── evaluation/           metrics + eval schema (macro/micro)
+├── research/                 offline analysis (thesis pipeline)
+│   ├── experiments/          batch runner, analysis, plots
+│   └── comparison/  viz/  scripts/
+├── data/                     ETL + query layer (ClickHouse optional) — shared pkg
+├── legacy/                   deprecated old python webapp (kept for reference)
+├── docker-compose.yml        frontend, backend, and ClickHouse services
+├── pyproject.toml            Python deps (uv); multi-root packages (sim, research, .)
+└── package.json              npm workspaces (apps/web, apps/server)
 ```
 
 Data flow at runtime:
@@ -124,7 +123,7 @@ cp .env.example .env
 # Build and start both services
 docker compose up --build
 
-# Frontend (nginx)  -> http://localhost
+# Frontend (nginx)  -> http://localhost:8080
 # Backend API       -> http://localhost:8765
 ```
 
