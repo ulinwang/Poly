@@ -35,6 +35,19 @@ export const config = {
   MAX_EXPERIMENT_AGENTS: positiveIntegerEnv('POLY_MAX_EXPERIMENT_AGENTS', 100),
   MAX_EXPERIMENT_TICKS: positiveIntegerEnv('POLY_MAX_EXPERIMENT_TICKS', 200),
   MAX_ACTIVE_RUNS: positiveIntegerEnv('POLY_MAX_ACTIVE_RUNS', 2),
+  EVENT_LOG_MAX_BYTES: positiveIntegerEnv('POLY_EVENT_LOG_MAX_BYTES', 64 * 1024 * 1024),
+  EVENT_LOG_MAX_PENDING_BYTES: positiveIntegerEnv(
+    'POLY_EVENT_LOG_MAX_PENDING_BYTES',
+    4 * 1024 * 1024,
+  ),
+  EVENT_LOG_RETENTION_DAYS: positiveIntegerEnv('POLY_EVENT_LOG_RETENTION_DAYS', 30),
+  CHECKPOINT_MAX_BYTES: positiveIntegerEnv(
+    'POLY_CHECKPOINT_MAX_BYTES',
+    128 * 1024 * 1024,
+  ),
+  CHECKPOINT_RETENTION_DAYS: positiveIntegerEnv('POLY_CHECKPOINT_RETENTION_DAYS', 30),
+  REPLAY_DEFAULT_LIMIT: positiveIntegerEnv('POLY_REPLAY_DEFAULT_LIMIT', 1_000),
+  REPLAY_MAX_LIMIT: positiveIntegerEnv('POLY_REPLAY_MAX_LIMIT', 5_000),
   GAMMA_API_BASE: 'https://gamma-api.polymarket.com',
   // Absolute path to the repo root, used as the cwd when spawning the Python
   // simulation core. Override with POLY_ROOT for non-standard layouts.

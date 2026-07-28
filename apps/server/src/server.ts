@@ -23,6 +23,7 @@ import { config } from './config.js';
 import { installAuthentication } from './auth.js';
 import type { ExperimentLimits } from './routes/experiments.js';
 import type { SpawnOptions, RunHandle } from './services/runner.js';
+import { pruneRunArtifacts } from './services/artifact-retention.js';
 
 const isDev = process.env.NODE_ENV === 'development';
 const isTest = !!process.env.VITEST || process.env.NODE_ENV === 'test';
@@ -84,6 +85,18 @@ export async function buildServer(options: BuildServerOptions = {}) {
     app.log.warn(
       { repairedExperiments: repaired },
       'marked orphaned running experiments as error',
+    );
+  }
+
+  try {
+    const removed = await pruneRunArtifacts();
+    if (removed.eventLogsRemoved > 0 || removed.checkpointsRemoved > 0) {
+      app.log.info(removed, 'pruned expired experiment artifacts');
+    }
+  } catch (error) {
+    app.log.warn(
+      { errorType: error instanceof Error ? error.name : 'UnknownError' },
+      'failed to prune expired experiment artifacts',
     );
   }
 

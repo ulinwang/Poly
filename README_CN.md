@@ -146,6 +146,16 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
 | `POLY_API_READ_TOKEN` | 可选的只读 API Bearer Token，至少 32 个字符 |
 | `POLY_LOG_LEVEL` | 后端结构化日志级别（默认 `info`） |
+| `POLY_MAX_EXPERIMENT_AGENTS` | 单次实验最大 Agent 数（默认 `100`） |
+| `POLY_MAX_EXPERIMENT_TICKS` | 单次实验最大 Tick 数（默认 `200`） |
+| `POLY_MAX_ACTIVE_RUNS` | 最大并发实验数（默认 `2`） |
+| `POLY_EVENT_LOG_MAX_BYTES` | 单次实验事件日志上限（默认 `67108864`，64 MiB） |
+| `POLY_EVENT_LOG_MAX_PENDING_BYTES` | 单次实验异步写入内存队列上限（默认 `4194304`，4 MiB） |
+| `POLY_EVENT_LOG_RETENTION_DAYS` | 事件日志保留天数（默认 `30`） |
+| `POLY_CHECKPOINT_MAX_BYTES` | 可恢复 checkpoint 大小上限（默认 `134217728`，128 MiB） |
+| `POLY_CHECKPOINT_RETENTION_DAYS` | checkpoint 保留天数（默认 `30`） |
+| `POLY_REPLAY_DEFAULT_LIMIT` | 单页回放事件默认数量（默认 `1000`） |
+| `POLY_REPLAY_MAX_LIMIT` | 单页回放事件最大数量（默认 `5000`） |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | 允许访问私网或 HTTP 自定义 LLM 端点的精确 origin（逗号分隔） |
 | `POLYMETL_CLICKHOUSE_USER` | 本地/非 Compose 用户；Compose 固定为 `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
@@ -156,6 +166,10 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 `POLY_LLM_ENDPOINT_ALLOWLIST=http://host.docker.internal:11434`。
 
 > 切勿提交 `.env`。
+
+事件日志使用有序异步 writer 落盘。存储失败或达到配置上限时，仿真会继续运行，
+实验详情中的 `event_persistence` 会报告 degraded/limited 状态与丢弃事件数。
+服务启动时会按上述保留天数清理过期 `.ndjson` 日志和 `.pkl` checkpoint。
 
 默认部署不会发布 ClickHouse 端口。管理操作优先使用
 `docker compose exec clickhouse clickhouse-client`。若确需外部访问，应使用
@@ -228,6 +242,7 @@ Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。�
 | `/experiments` | GET / POST | 列出 / 创建并启动实验 |
 | `/experiments/:id` | GET | 实验详情 |
 | `/experiments/:id/cancel` | POST | 取消运行 |
+| `/experiments/:id/replay?cursor=0&limit=1000` | GET | 有界历史事件页；按 `next_cursor` 翻页直到 `null` |
 | `/experiments/:id/events` | GET | 实时仿真事件的 SSE 流 |
 | `/settings/api` | GET / PUT | LLM 设置（key 不回传，返回 `api_key_set` 标志） |
 | `/settings/test` | POST | 测试 LLM 连接 |

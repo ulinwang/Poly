@@ -168,6 +168,13 @@ Settings page (where they are encrypted at rest).
 | `POLY_MAX_EXPERIMENT_AGENTS` | maximum agents per experiment (default `100`) |
 | `POLY_MAX_EXPERIMENT_TICKS` | maximum ticks per experiment (default `200`) |
 | `POLY_MAX_ACTIVE_RUNS` | maximum concurrently active experiments (default `2`) |
+| `POLY_EVENT_LOG_MAX_BYTES` | maximum durable event log size per run (default `67108864`, 64 MiB) |
+| `POLY_EVENT_LOG_MAX_PENDING_BYTES` | maximum in-memory async event-write queue per run (default `4194304`, 4 MiB) |
+| `POLY_EVENT_LOG_RETENTION_DAYS` | event-log retention window (default `30`) |
+| `POLY_CHECKPOINT_MAX_BYTES` | maximum resumable checkpoint size (default `134217728`, 128 MiB) |
+| `POLY_CHECKPOINT_RETENTION_DAYS` | checkpoint retention window (default `30`) |
+| `POLY_REPLAY_DEFAULT_LIMIT` | default events returned by one replay page (default `1000`) |
+| `POLY_REPLAY_MAX_LIMIT` | maximum events returned by one replay page (default `5000`) |
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_USER` | local/non-Compose ClickHouse user; Compose fixes this to `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | non-empty ClickHouse password required by Compose |
@@ -176,6 +183,11 @@ Settings page (where they are encrypted at rest).
 Experiment limits are enforced by the server. The web UI reads the effective
 limits from `GET /api/v1/experiments/limits`, so operator overrides stay in sync
 without requiring a separate frontend build.
+
+Event logs are written by an ordered asynchronous writer. If storage fails or a
+configured byte bound is reached, the run continues and `event_persistence` on
+the experiment detail reports the degraded/limited state and dropped-event
+count. Expired `.ndjson` logs and `.pkl` checkpoints are pruned at server start.
 
 Custom LLM endpoints must use HTTPS and resolve to public IP addresses by
 default. To use an intentionally private endpoint such as a local model server,
@@ -262,6 +274,7 @@ files or backend sources change.
 | `/experiments` | GET / POST | List / create-and-start experiments |
 | `/experiments/:id` | GET | Experiment detail |
 | `/experiments/:id/cancel` | POST | Cancel a run |
+| `/experiments/:id/replay?cursor=0&limit=1000` | GET | Bounded event-history page; follow `next_cursor` until `null` |
 | `/experiments/:id/events` | GET | SSE stream of live simulation events |
 | `/settings/api` | GET / PUT | LLM settings (key never returned; `api_key_set` flag) |
 | `/settings/test` | POST | Test the LLM connection |

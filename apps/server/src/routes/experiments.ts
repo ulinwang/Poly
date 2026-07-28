@@ -18,6 +18,9 @@ import {
   pauseRun,
   checkpointPathFor,
   eventLogPathFor,
+  flushEventLog,
+  eventLogState,
+  shutdownRun,
 } from '../services/runner.js';
 import type { ExperimentConfig, ExperimentRow } from '../types/index.js';
 import { getApiSettingsDecrypted } from '../db/settings.js';
@@ -25,6 +28,7 @@ import { getApiKeyDecrypted } from '../db/apikeys.js';
 import fs from 'fs';
 import readline from 'readline';
 import { config } from '../config.js';
+import { sseFrame, writeSseChunk } from '../services/sse.js';
 
 import type { RunHandle, SpawnOptions } from '../services/runner.js';
 
@@ -220,7 +224,7 @@ function createExperimentSchema(limits: ExperimentLimits) {
  */
 async function replayEventLog(
   runId: string,
-  reply: { raw: { write: (chunk: string) => void } },
+  reply: FastifyReply,
 ): Promise<boolean> {
   const logPath = eventLogPathFor(runId);
   if (!fs.existsSync(logPath)) return false;
@@ -231,7 +235,11 @@ async function replayEventLog(
     try {
       const ev = JSON.parse(line) as { kind: string; data: Record<string, unknown> };
       if (ev.kind === '__end__') continue;
-      reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+      if (!(await writeSseChunk(reply.raw, sseFrame(ev.kind, ev.data)))) {
+        rl.close();
+        stream.destroy();
+        break;
+      }
     } catch {
       // ignore malformed lines
     }
@@ -240,18 +248,23 @@ async function replayEventLog(
 }
 
 /**
- * Read a run's full NDJSON event log into memory as an ordered array of
- * `{ kind, data }` events. `__end__` sentinels and malformed lines are skipped.
- * Returns null if no log file exists for the run. Unlike the SSE streaming
- * replay above this materialises everything at once — used by the JSON /replay
- * endpoint that the front-end replay player consumes.
+ * Read one bounded page from a run's NDJSON log. The cursor is the number of
+ * non-sentinel events already consumed. Malformed lines and `__end__` do not
+ * advance it.
  */
-async function readEventLog(
+async function readEventLogPage(
   runId: string,
-): Promise<{ kind: string; data: Record<string, unknown> }[] | null> {
+  cursor: number,
+  limit: number,
+): Promise<{
+  events: { kind: string; data: Record<string, unknown> }[];
+  nextCursor: number | null;
+} | null> {
   const logPath = eventLogPathFor(runId);
   if (!fs.existsSync(logPath)) return null;
   const events: { kind: string; data: Record<string, unknown> }[] = [];
+  let seen = 0;
+  let hasMore = false;
   const stream = fs.createReadStream(logPath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
   for await (const line of rl) {
@@ -259,12 +272,20 @@ async function readEventLog(
     try {
       const ev = JSON.parse(line) as { kind: string; data: Record<string, unknown> };
       if (ev.kind === '__end__') continue;
+      if (seen++ < cursor) continue;
+      if (events.length === limit) {
+        hasMore = true;
+        break;
+      }
       events.push(ev);
     } catch {
       // ignore malformed lines
     }
   }
-  return events;
+  return {
+    events,
+    nextCursor: hasMore ? cursor + events.length : null,
+  };
 }
 
 function rowToExperiment(row: ExperimentRow): Record<string, unknown> {
@@ -295,6 +316,10 @@ export default async function experimentsRoutes(
   const runs = new Map<string, RunHandle>();
   const activeRunCount = () =>
     [...runs.values()].filter((handle) => !handle.finished && !handle.paused).length;
+
+  app.addHook('onClose', async () => {
+    await Promise.all([...runs.values()].map((handle) => shutdownRun(handle)));
+  });
 
   app.get(
     '',
@@ -382,13 +407,24 @@ export default async function experimentsRoutes(
     max_seed: limits.maxSeed,
     min_temperature: limits.minTemperature,
     max_temperature: limits.maxTemperature,
+    event_log_max_bytes: config.EVENT_LOG_MAX_BYTES,
+    event_log_max_pending_bytes: config.EVENT_LOG_MAX_PENDING_BYTES,
+    checkpoint_max_bytes: config.CHECKPOINT_MAX_BYTES,
+    replay_default_limit: Math.min(config.REPLAY_DEFAULT_LIMIT, config.REPLAY_MAX_LIMIT),
+    replay_max_limit: config.REPLAY_MAX_LIMIT,
   }));
 
   app.get('/:expId', async (req, reply) => {
     const { expId } = req.params as { expId: string };
     const row = getExperiment(expId);
     if (row) {
-      return { experiment: rowToExperiment(row) };
+      const handle = runs.get(expId);
+      return {
+        experiment: {
+          ...rowToExperiment(row),
+          event_persistence: handle ? eventLogState(handle) : null,
+        },
+      };
     }
     const handle = runs.get(expId);
     if (handle) {
@@ -405,6 +441,7 @@ export default async function experimentsRoutes(
           elapsed_s: Math.round(Date.now() / 1000 - handle.startedAt),
           result_summary: null,
           seed: handle.seed,
+          event_persistence: eventLogState(handle),
         },
       };
     }
@@ -420,6 +457,20 @@ export default async function experimentsRoutes(
       emitEvent(handle, kind, data);
       if (kind === '__end__') {
         if (handle.paused) {
+          const checkpointError = validateCheckpoint(handle);
+          if (checkpointError) {
+            handle.failed = true;
+            handle.paused = false;
+            handle.checkpointPath = null;
+            app.log.error({ runId, checkpointError }, 'experiment checkpoint rejected');
+            saveExperiment({
+              id: runId,
+              status: 'error',
+              checkpoint_path: null,
+              finished_at: new Date().toISOString(),
+            });
+            return;
+          }
           // Paused mid-run: keep result_summary/metrics untouched, record
           // the checkpoint and flip status to 'paused' for later resume.
           saveExperiment({
@@ -450,6 +501,23 @@ export default async function experimentsRoutes(
         saveExperiment(payload);
       }
     };
+  }
+
+  function validateCheckpointPath(checkpointPath: string | null): string | null {
+    if (!checkpointPath) return 'checkpoint path was not reported';
+    try {
+      const size = fs.statSync(checkpointPath).size;
+      if (size > config.CHECKPOINT_MAX_BYTES) {
+        return `checkpoint exceeds ${config.CHECKPOINT_MAX_BYTES} bytes`;
+      }
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : 'checkpoint is not readable';
+    }
+  }
+
+  function validateCheckpoint(handle: RunHandle): string | null {
+    return validateCheckpointPath(handle.checkpointPath);
   }
 
   // Decrypt keys only immediately before spawning the Python subprocess.
@@ -587,6 +655,11 @@ export default async function experimentsRoutes(
       reply.status(409);
       return { message: 'Experiment is not paused / has no checkpoint' };
     }
+    const checkpointError = validateCheckpointPath(row.checkpoint_path);
+    if (checkpointError) {
+      reply.status(409);
+      return { message: `Checkpoint is not resumable: ${checkpointError}` };
+    }
     const apiSettings =
       row.api_key_id == null ? defaultApiSettings() : namedApiSettings(row.api_key_id);
     if (row.api_key_id != null && !apiSettings) {
@@ -625,18 +698,41 @@ export default async function experimentsRoutes(
     return { run_id: expId, resumed: true };
   });
 
-  // Full event history of a finished run as a single JSON array, for the
-  // front-end replay player. Reads the durable NDJSON log (the same source the
-  // SSE replay streams from), filtering out `__end__` sentinels. Not truncated.
-  // 404 when no log exists (e.g. legacy runs that predate event logging).
-  app.get('/:expId/replay', async (req, reply) => {
+  // Bounded replay page for the front-end player. The numeric cursor counts
+  // previously consumed non-sentinel events.
+  app.get('/:expId/replay', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          cursor: { type: 'integer', minimum: 0, default: 0 },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: config.REPLAY_MAX_LIMIT,
+            default: Math.min(config.REPLAY_DEFAULT_LIMIT, config.REPLAY_MAX_LIMIT),
+          },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { expId } = req.params as { expId: string };
-    const events = await readEventLog(expId);
-    if (events === null) {
+    const { cursor = 0, limit = config.REPLAY_DEFAULT_LIMIT } = req.query as {
+      cursor?: number;
+      limit?: number;
+    };
+    const page = await readEventLogPage(expId, cursor, limit);
+    if (page === null) {
       reply.status(404);
       return { message: 'No recorded event log for this experiment' };
     }
-    return { events, total: events.length };
+    return {
+      events: page.events,
+      total: page.events.length,
+      next_cursor: page.nextCursor,
+      limit,
+    };
   });
 
   app.get('/:expId/events', async (req, reply) => {
@@ -653,9 +749,14 @@ export default async function experimentsRoutes(
         Connection: 'keep-alive',
       });
 
-      // Snapshot the queue length now: everything currently queued is also in
-      // the NDJSON log (or in-memory history fallback), so after replay we
-      // resume live streaming from this index to avoid duplicates.
+      let disconnected = false;
+      req.raw.once('close', () => {
+        disconnected = true;
+      });
+
+      // Flush the async writer before taking the live queue boundary. Events
+      // arriving after the flush remain in the queue and are streamed below.
+      await flushEventLog(handle);
       let idx = handle.queue.length;
       if (wantReplay) {
         const replayed = await replayEventLog(expId, reply);
@@ -664,10 +765,11 @@ export default async function experimentsRoutes(
           // history.
           for (const ev of handle.history) {
             if (ev.kind === '__end__') continue;
-            reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+            if (!(await writeSseChunk(reply.raw, sseFrame(ev.kind, ev.data)))) break;
           }
         }
       }
+      if (disconnected) return reply;
 
       // Throttle live SSE output: within each 100ms window, collapse duplicate
       // high-frequency events of the same kind for the same entity (e.g. one
@@ -676,21 +778,19 @@ export default async function experimentsRoutes(
       const throttleWindowMs = 100;
       const lastSent = new Map<string, number>();
 
-      const timer = setInterval(() => {
+      let sending = false;
+      const timer = setInterval(async () => {
+        if (sending || disconnected) return;
+        sending = true;
         const now = Date.now();
         const toSend: Array<{ kind: string; data: Record<string, unknown> }> = [];
+        let terminal = false;
 
         while (idx < handle.queue.length) {
           const ev = handle.queue[idx++];
           if (ev.kind === '__end__') {
-            // Flush any pending events, then send the terminal marker.
-            for (const pending of toSend) {
-              reply.raw.write(`event: ${pending.kind}\ndata: ${JSON.stringify(pending.data)}\n\n`);
-            }
-            reply.raw.write(`event: end\ndata: {}\n\n`);
-            clearInterval(timer);
-            reply.raw.end();
-            return;
+            terminal = true;
+            break;
           }
 
           // Key used to collapse duplicates: kind + agent_id when present.
@@ -717,19 +817,28 @@ export default async function experimentsRoutes(
         }
 
         for (const ev of toSend) {
-          reply.raw.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+          if (!(await writeSseChunk(reply.raw, sseFrame(ev.kind, ev.data)))) {
+            disconnected = true;
+            break;
+          }
         }
 
-        if (handle.finished && idx >= handle.queue.length) {
-          reply.raw.write(`event: end\ndata: {}\n\n`);
+        if (!disconnected && (terminal || (handle.finished && idx >= handle.queue.length))) {
+          await writeSseChunk(reply.raw, sseFrame('end', {}));
           clearInterval(timer);
           reply.raw.end();
+          sending = false;
           return;
         }
-        reply.raw.write(`event: ping\ndata: {}\n\n`);
+        if (!disconnected) {
+          disconnected = !(await writeSseChunk(reply.raw, sseFrame('ping', {})));
+        }
+        if (disconnected) clearInterval(timer);
+        sending = false;
       }, 100);
 
       req.raw.on('close', () => {
+        disconnected = true;
         clearInterval(timer);
       });
 
@@ -748,8 +857,10 @@ export default async function experimentsRoutes(
         Connection: 'keep-alive',
       });
       await replayEventLog(expId, reply);
-      reply.raw.write(`event: end\ndata: {}\n\n`);
-      reply.raw.end();
+      if (!reply.raw.destroyed && !reply.raw.writableEnded) {
+        await writeSseChunk(reply.raw, sseFrame('end', {}));
+        reply.raw.end();
+      }
       return reply;
     }
     if (row && row.result_summary) {
@@ -760,11 +871,11 @@ export default async function experimentsRoutes(
       });
       try {
         const summary = JSON.parse(row.result_summary);
-        reply.raw.write(`event: settled\ndata: ${JSON.stringify(summary)}\n\n`);
+        await writeSseChunk(reply.raw, sseFrame('settled', summary));
       } catch {
-        reply.raw.write(`event: settled\ndata: {}\n\n`);
+        await writeSseChunk(reply.raw, sseFrame('settled', {}));
       }
-      reply.raw.write(`event: end\ndata: {}\n\n`);
+      await writeSseChunk(reply.raw, sseFrame('end', {}));
       reply.raw.end();
       return reply;
     }

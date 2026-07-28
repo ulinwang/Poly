@@ -1,9 +1,10 @@
 import { spawn } from 'child_process';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
-import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import type { FastifyBaseLogger } from 'fastify';
+import { EventLogWriter } from './event-log.js';
+import type { EventLogSnapshot } from './event-log.js';
 // import type { ExperimentRow } from '../types/index.js'; // available when needed
 
 export interface RunHandle {
@@ -36,6 +37,8 @@ export interface RunHandle {
   logger: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'> | null;
   /** True when the runner failed before producing a normal terminal event. */
   failed: boolean;
+  /** Ordered asynchronous durable event writer for this process invocation. */
+  eventLog: EventLogWriter;
 }
 
 const HISTORY_CAP = 2000;
@@ -49,6 +52,7 @@ export function createRunHandle(
   seed = 0,
   temperature = 0,
 ): RunHandle {
+  const eventLog = new EventLogWriter(runId, eventLogPathFor(runId));
   return {
     runId,
     slug,
@@ -71,6 +75,7 @@ export function createRunHandle(
     child: null,
     logger: null,
     failed: false,
+    eventLog,
   };
 }
 
@@ -94,28 +99,25 @@ export function emitEvent(handle: RunHandle, kind: string, data: Record<string, 
   if (handle.history.length < HISTORY_CAP) {
     handle.history.push({ kind, data });
   }
-  // Persist every event to NDJSON so the full history is durable (not capped,
-  // survives restart). Synchronous append is fine: event volume is modest and
-  // ordering must match the in-memory queue. Failures must not crash the run.
-  try {
-    const logPath = eventLogPathFor(handle.runId);
-    fs.mkdirSync(path.dirname(logPath), { recursive: true });
-    fs.appendFileSync(logPath, JSON.stringify({ kind, data }) + '\n');
-  } catch (err) {
-    handle.logger?.error(
-      {
-        runId: handle.runId,
-        errorType: err instanceof Error ? err.name : 'UnknownError',
-      },
-      'failed to append experiment event log',
-    );
-  }
+  handle.eventLog.append(kind, data);
   if (kind === 'settled') {
     handle.finalMetrics = data;
   } else if (kind === 'tick_finished') {
     handle.tickElapsedTotal += (data.elapsed_s as number) || 0;
     handle.tickCount += 1;
   }
+}
+
+export function eventLogState(handle: RunHandle): EventLogSnapshot {
+  return handle.eventLog.snapshot();
+}
+
+export function flushEventLog(handle: RunHandle): Promise<void> {
+  return handle.eventLog.flush();
+}
+
+export function closeEventLog(handle: RunHandle): Promise<void> {
+  return handle.eventLog.close();
 }
 
 // onEnd helper available for future use if persisting from runner directly
@@ -146,6 +148,7 @@ export function spawnRun(
       : { apiSettings: options as SpawnOptions['apiSettings'] };
   const { apiSettings, resumeCheckpoint, checkpointOut, logger } = opts;
   handle.logger = logger ?? null;
+  handle.eventLog.setLogger(handle.logger);
   handle.failed = false;
 
   const child = spawn(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
@@ -209,6 +212,7 @@ export function spawnRun(
         }
         if (event.kind === '__end__') {
           handle.finished = true;
+          void closeEventLog(handle);
         }
       } catch {
         // ignore malformed lines
@@ -265,6 +269,7 @@ export function spawnRun(
       onEvent('error', { message: err.message });
       handle.finished = true;
       onEvent('__end__', {});
+      void closeEventLog(handle);
     }
   });
 
@@ -295,6 +300,7 @@ export function spawnRun(
       handle.finished = true;
       onEvent('__end__', {});
     }
+    void closeEventLog(handle);
     logger?.info(
       {
         runId: handle.runId,
@@ -309,6 +315,30 @@ export function spawnRun(
       'experiment runner stopped',
     );
   });
+}
+
+/** Stop a live child and deterministically close its durable event log. */
+export async function shutdownRun(handle: RunHandle, graceMs = 3_000): Promise<void> {
+  const child = handle.child;
+  if (child && !handle.finished) {
+    handle.cancel = true;
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(forceTimer);
+        clearTimeout(doneTimer);
+        resolve();
+      };
+      child.once('exit', finish);
+      child.once('error', finish);
+      const forceTimer = setTimeout(() => child.kill('SIGKILL'), graceMs);
+      const doneTimer = setTimeout(finish, graceMs + 1_000);
+      child.kill('SIGTERM');
+    });
+  }
+  await closeEventLog(handle);
 }
 
 /**

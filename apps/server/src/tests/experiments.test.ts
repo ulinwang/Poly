@@ -258,7 +258,7 @@ describe('experiments routes', () => {
     await app.close();
   });
 
-  it('GET /:id/replay returns the recorded events array (skips __end__)', async () => {
+  it('GET /:id/replay returns bounded cursor pages (skips __end__)', async () => {
     const app = await buildServer();
     const runId = 'replaytest' + crypto.randomBytes(4).toString('hex');
     const logPath = eventLogPathFor(runId);
@@ -272,14 +272,26 @@ describe('experiments routes', () => {
     fs.writeFileSync(logPath, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 
     try {
-      const res = await app.inject({ method: 'GET', url: `/api/v1/experiments/${runId}/replay` });
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/experiments/${runId}/replay?cursor=0&limit=2`,
+      });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.total).toBe(3); // __end__ filtered out
+      expect(body.total).toBe(2);
       expect(Array.isArray(body.events)).toBe(true);
       expect(body.events[0].kind).toBe('run_started');
-      expect(body.events[2].data.yes_mid).toBe(0.51);
+      expect(body.next_cursor).toBe(2);
       expect(body.events.some((e: { kind: string }) => e.kind === '__end__')).toBe(false);
+
+      const next = await app.inject({
+        method: 'GET',
+        url: `/api/v1/experiments/${runId}/replay?cursor=${body.next_cursor}&limit=2`,
+      });
+      const nextBody = JSON.parse(next.body);
+      expect(nextBody.events).toHaveLength(1);
+      expect(nextBody.events[0].data.yes_mid).toBe(0.51);
+      expect(nextBody.next_cursor).toBeNull();
     } finally {
       fs.rmSync(logPath, { force: true });
     }
@@ -292,6 +304,18 @@ describe('experiments routes', () => {
       url: `/api/v1/experiments/nolog${crypto.randomBytes(4).toString('hex')}/replay`,
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('GET /:id/replay rejects invalid or oversized page parameters', async () => {
+    const app = await buildServer();
+    for (const query of ['cursor=-1', 'limit=0', 'limit=5001']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/experiments/example/replay?${query}`,
+      });
+      expect(res.statusCode, query).toBe(400);
+    }
+    await app.close();
   });
 
   it('repairOrphanedRuns flips running -> error but leaves paused alone', () => {
