@@ -210,8 +210,8 @@ uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
 # 后端 (vitest)
 cd apps/server && npm test && npm run lint
 
-# 前端 (构建 + lint；hooks/stores 用 vitest)
-cd apps/web && npm run build && npm run lint && npx vitest run
+# 前端（单元测试 + 构建 + lint）
+cd apps/web && npm test && npm run build && npm run lint
 ```
 
 ### 持续集成

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useSettingsStore, useMarketStore, useExperimentStore } from './index';
 import { applyEvent } from '../lib/applyEvent';
 
@@ -50,6 +50,10 @@ describe('Market store', () => {
 
 describe('Experiment store', () => {
   beforeEach(() => {
+    useExperimentStore.getState().resetSimulation();
+  });
+
+  afterEach(() => {
     useExperimentStore.getState().resetSimulation();
   });
 
@@ -160,5 +164,112 @@ describe('Experiment store', () => {
     const s = useExperimentStore.getState();
     expect(s.tickMetrics.length).toBe(0);
     expect(Object.keys(s.agentSnapshots).length).toBe(0);
+  });
+
+  it('produces equivalent critical state for live and replay event application', () => {
+    const events: Array<{ kind: string; data: Record<string, unknown> }> = [
+      { kind: 'run_started', data: { slug: 'equivalence-market' } },
+      { kind: 'env_ready', data: { yes_mid_post_seed: 0.52, n_ticks: 2 } },
+      { kind: 'tick_started', data: { tick: 0 } },
+      {
+        kind: 'agent_decision',
+        data: {
+          agent_id: 7,
+          tick: 0,
+          persona_type: 'alpha',
+          order_type: 'limit',
+          side: 'buy',
+          outcome: 'YES',
+          price: 0.54,
+          size_usd: 25,
+          reasoning: 'signal',
+          api_latency_ms: 80,
+        },
+      },
+      {
+        kind: 'tick_metrics',
+        data: {
+          tick: 0,
+          yes_mid: 0.54,
+          no_mid: 0.46,
+          parity_gap: 0,
+          n_fills: 1,
+          ret: 0.02,
+        },
+      },
+      {
+        kind: 'agent_snapshots',
+        data: {
+          tick: 0,
+          agents: [{
+            tick: 0,
+            agent_id: 7,
+            persona: 'alpha',
+            cash: 975,
+            cash_reserved: 0,
+            pos_yes: 25,
+            pos_no: 0,
+            belief_yes: 0.6,
+            belief_conf: 0.8,
+            pnl: 1.5,
+          }],
+        },
+      },
+      {
+        kind: 'tick_finished',
+        data: { tick: 0, yes_mid: 0.54, n_fills: 1, n_actions: 1, elapsed_s: 0.2 },
+      },
+      {
+        kind: 'settled',
+        data: { yes_mid_final: 0.58, n_fills: 2, n_actions: 2 },
+      },
+    ];
+
+    const applySequence = () => {
+      for (const event of events) {
+        applyEvent(useExperimentStore.getState(), event.kind, event.data);
+      }
+      const state = useExperimentStore.getState();
+      return {
+        events: state.events,
+        decisions: state.decisions.map((decision) => ({
+          agent_id: decision.agent_id,
+          tick: decision.tick,
+          persona_type: decision.persona_type,
+          order_type: decision.order_type,
+          side: decision.side,
+          outcome: decision.outcome,
+          price: decision.price,
+          size_usd: decision.size_usd,
+          reasoning: decision.reasoning,
+          api_latency_ms: decision.api_latency_ms,
+          api_error: decision.api_error,
+        })),
+        metrics: state.metrics,
+        tickMetrics: state.tickMetrics,
+        agentSnapshots: state.agentSnapshots,
+        logMessages: state.tickLog.map((entry) => ({
+          label: entry.label,
+          msg: entry.msg,
+          kind: entry.kind,
+        })),
+      };
+    };
+
+    const liveState = applySequence();
+    useExperimentStore.getState().resetSimulation();
+    const replayState = applySequence();
+
+    expect(replayState).toEqual(liveState);
+    expect(replayState.metrics).toMatchObject({
+      yesMid: 0.58,
+      nFills: 2,
+      nActions: 2,
+      currentTick: 0,
+      totalTicks: 2,
+    });
+    expect(replayState.decisions).toHaveLength(1);
+    expect(replayState.tickMetrics).toHaveLength(1);
+    expect(replayState.agentSnapshots[7]).toHaveLength(1);
   });
 });

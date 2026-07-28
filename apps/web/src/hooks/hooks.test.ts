@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest';
+// @vitest-environment jsdom
+
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { useDebounce } from './index';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // Inline the pure formatter logic (no React hook dependency)
 function fmt(n: number | null | undefined): string {
@@ -36,9 +44,25 @@ describe('formatNumber', () => {
 });
 
 describe('useDebounce', () => {
-  it(' conceptually delays updates', () => {
-    // useDebounce is a React hook; unit testing it requires a test renderer.
-    // This test documents the expected behavior.
-    expect(true).toBe(true);
+  it('delays updates and cancels the superseded timer', () => {
+    vi.useFakeTimers();
+    const { result, rerender, unmount } = renderHook(
+      ({ value, delay }) => useDebounce(value, delay),
+      { initialProps: { value: 'initial', delay: 300 } },
+    );
+
+    expect(result.current).toBe('initial');
+    rerender({ value: 'first', delay: 300 });
+    act(() => vi.advanceTimersByTime(299));
+    expect(result.current).toBe('initial');
+
+    rerender({ value: 'latest', delay: 300 });
+    act(() => vi.advanceTimersByTime(299));
+    expect(result.current).toBe('initial');
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBe('latest');
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
