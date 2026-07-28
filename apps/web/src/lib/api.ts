@@ -149,13 +149,23 @@ export const api = {
       { method: 'POST' },
     ),
 
-  // Full recorded event history of a finished run, for the replay player.
+  // Fetch bounded replay pages and combine them for the local player.
   // Throws (HTTP 404) when the run has no recorded event log.
-  getReplay: (id: string) =>
-    fetchJson<{
-      events: { kind: string; data: Record<string, unknown> }[];
-      total: number;
-    }>(`/api/v1/experiments/${id}/replay`),
+  getReplay: async (id: string) => {
+    const events: { kind: string; data: Record<string, unknown> }[] = [];
+    let cursor: number | null = 0;
+    while (cursor !== null) {
+      const page: {
+        events: { kind: string; data: Record<string, unknown> }[];
+        total: number;
+        next_cursor: number | null;
+        limit: number;
+      } = await fetchJson(`/api/v1/experiments/${id}/replay?cursor=${cursor}`);
+      events.push(...page.events);
+      cursor = page.next_cursor;
+    }
+    return { events, total: events.length };
+  },
 
   // Settings
   // Response carries api_key_set (boolean) and never the plaintext api_key.

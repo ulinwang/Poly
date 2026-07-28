@@ -70,6 +70,7 @@ contain run IDs and exit metadata, never provider stderr, prompts, or keys.
 - `GET /api/v1/experiments/:id`
 - `POST /api/v1/experiments`
 - `POST /api/v1/experiments/:id/cancel`
+- `GET /api/v1/experiments/:id/replay?cursor=0&limit=1000` (bounded page)
 - `GET /api/v1/experiments/:id/events` (SSE)
 - `GET /api/v1/settings/api`
 - `PUT /api/v1/settings/api`
