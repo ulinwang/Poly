@@ -1,5 +1,6 @@
 # Poly
 
+[![CI](https://github.com/ulinwang/Poly/actions/workflows/ci.yml/badge.svg)](https://github.com/ulinwang/Poly/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 *[English → README.md](README.md)*
@@ -126,6 +127,13 @@ cd apps/server && npm test && npm run lint
 # 前端 (构建 + lint；hooks/stores 用 vitest)
 cd apps/web && npm run build && npm run lint && npx vitest run
 ```
+
+### 持续集成
+
+[GitHub Actions 工作流](.github/workflows/ci.yml)会在每个 Pull Request
+以及每次推送到 `master` 时运行。它使用 `npm ci` 安装锁定的 Node 依赖并缓存
+npm 下载，然后在 Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。
+两个 workspace 使用独立任务运行，便于快速定位失败环节。
 
 > `sim/` 下的 Python 包通过多包根 `pyproject` 配置保留历史顶层导入名
 > （`import agent`、`environment`、`experiments`、`data`、`evaluation` …）。
