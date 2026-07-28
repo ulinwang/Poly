@@ -135,7 +135,7 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/markets` | GET | 列出实时市场（支持 `q`、`category`、`limit`、`offset`） |
+| `/markets` | GET | 列出实时市场（支持 `q`、不区分大小写的精确 `category`、`live_only`、`limit`、`offset`） |
 | `/markets/:slug` | GET | 市场详情（按 slug 直查，含 `event_slug`） |
 | `/experiments` | GET / POST | 列出 / 创建并启动实验 |
 | `/experiments/:id` | GET | 实验详情 |

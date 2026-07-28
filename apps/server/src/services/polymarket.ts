@@ -274,15 +274,21 @@ export async function listPolymarketMarkets(
   limit = 30,
   liveOnly = false,
   offset = 0,
+  category = '',
 ): Promise<Market[]> {
   const markets = await fetchGammaMarkets(offset, limit);
   const qlower = q.toLowerCase();
+  const requestedCategory = category.trim().toLowerCase();
+  const categoryLower = requestedCategory === 'all' ? '' : requestedCategory;
   const filtered = markets.filter((m) => {
     const slug = (m.slug || '').toLowerCase();
     const question = (m.question || '').toLowerCase();
     const matches = !qlower || slug.includes(qlower) || question.includes(qlower);
     const live = m.active === true && m.closed !== true;
-    return matches && (!liveOnly || live);
+    const matchesCategory =
+      !categoryLower ||
+      extractCategories(m).some((label) => label.toLowerCase() === categoryLower);
+    return matches && (!liveOnly || live) && matchesCategory;
   });
   return filtered.slice(0, limit).map(normalizeMarket);
 }
