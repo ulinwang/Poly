@@ -1,5 +1,6 @@
 # Poly
 
+[![CI](https://github.com/ulinwang/Poly/actions/workflows/ci.yml/badge.svg)](https://github.com/ulinwang/Poly/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 *[中文文档 → README_CN.md](README_CN.md)*
@@ -159,6 +160,14 @@ cd apps/server && npm test && npm run lint
 # Frontend (build + lint; vitest for hooks/stores)
 cd apps/web && npm run build && npm run lint && npx vitest run
 ```
+
+### Continuous integration
+
+The [GitHub Actions workflow](.github/workflows/ci.yml) runs on every pull
+request and every push to `master`. It installs the locked Node dependencies
+with `npm ci`, caches npm downloads, and runs server lint/tests/build plus web
+lint/build on Node.js 20. The two workspaces run as separate jobs so failures
+are easier to identify.
 
 > The Python `sim/` packages keep their historical top-level import names
 > (`import agent`, `environment`, `experiments`, `data`, `evaluation`, …) via a
