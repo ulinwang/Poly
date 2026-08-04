@@ -27,6 +27,7 @@ from typing import Optional
 from agent.decision import (
     AgentSnapshot, Decision, MarketSnapshot, decide,
 )
+from agent.multi_agent.protocol import InteractionTranscript
 from agent.personas.persona import Persona
 from environment.ctf import split as ctf_split, merge as ctf_merge
 from environment.fees import taker_fee
@@ -149,6 +150,12 @@ class Simulation:
     # post/comment/follow. `default_factory` makes pre-existing checkpoints
     # that predate the forum still unpickle (the attr just defaults empty).
     forum: Forum = field(default_factory=Forum)
+    # Backend-neutral collaboration log. Unlike Forum's mutable live state,
+    # this append-only transcript records both writes and actual deliveries
+    # (reads) and can rebuild the social channel during replay.
+    interaction_transcript: InteractionTranscript = field(
+        default_factory=InteractionTranscript,
+    )
 
     yes_mid_history: list[float] = field(default_factory=list)
     no_mid_history: list[float] = field(default_factory=list)

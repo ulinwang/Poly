@@ -75,6 +75,7 @@ keys are never placed in lifecycle events.
   manually constructed/legacy decisions.
 - Langfuse and other telemetry SDKs are not required by the core runtime.
 
-The next layers build on this contract: deterministic multi-agent scheduling,
-an optional Langfuse observer, versioned prompt resolution, and local/remote
+The deterministic multi-agent scheduler and interaction transcript now build
+on this contract without changing Agent Loop internals. The next layers are an
+optional Langfuse observer, versioned prompt resolution, and local/remote
 evaluation adapters.
