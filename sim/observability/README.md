@@ -18,9 +18,10 @@ The session is tagged `poly` and `agent-simulation`. Observation metadata
 includes `run_id`, `tick`, `agent_id`, `decision_id`, stage/iteration,
 persona, token budget, environment, release, and market identity where
 available. Generation observations carry model, token usage, status, native
-observation duration, and the current prompt identity placeholder
-`local:clob-agent@unmanaged`. VER-19 replaces that placeholder with a managed
-or local fallback prompt version.
+observation duration, and the resolved local/fallback/managed prompt identity.
+Managed Langfuse prompt objects are linked directly to their generation.
+Decision and end-of-run evaluation scores are mirrored onto the matching Agent
+Loop and experiment observations.
 
 ## Enable
 
@@ -55,13 +56,16 @@ is absent, Poly logs a warning and uses a no-op observer.
 ## Data capture and failure behavior
 
 `metadata` exports identifiers, numeric metrics, status, model/tool names,
-budgets, prompt identity, and token usage. It drops prompt text, messages,
+budgets, prompt identity, evaluation scores, and token usage. It drops prompt
+text, prompt variable values, messages,
 tool arguments, search results, reasoning, and generated text.
 
 `full` additionally exports visible prompt/message/tool input and model output
 with bounded string length. Both policies redact credential-like keys,
 authorization/cookies, raw responses, and `reasoning_content`. The decision
 runtime already removes hidden provider reasoning before lifecycle delivery.
+Private in-process integration objects (keys beginning with `_`) are never
+serialized.
 
 All adapter calls are fail-open. Initialization, observation updates, exporter
 outages, and flush failures cannot stop or mutate a simulation. Normal

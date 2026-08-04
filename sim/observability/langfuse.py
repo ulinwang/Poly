@@ -35,6 +35,8 @@ _CONTENT_KEYS = frozenset({
 class _Observation(Protocol):
     def update(self, **kwargs: Any) -> Any: ...
 
+    def score(self, **kwargs: Any) -> Any: ...
+
 
 class _LangfuseClient(Protocol):
     def start_as_current_observation(self, **kwargs: Any) -> AbstractContextManager: ...
@@ -149,6 +151,7 @@ class LangfuseObservability:
         self._generation_observation: _Observation | None = None
         self._tool_cm: AbstractContextManager | None = None
         self._tool_observation: _Observation | None = None
+        self._loop_score_targets: dict[str, _Observation] = {}
         self._start_run(metadata)
 
     def _safe(self, operation: Callable[[], None]) -> None:
@@ -214,6 +217,12 @@ class LangfuseObservability:
                 status_message=str(payload.get("message", "runner error"))[:500],
                 output=clean or None,
             )
+        elif kind == "agent_scores":
+            decision_id = str(payload.get("decision_id", ""))
+            target = self._loop_score_targets.pop(decision_id, None)
+            self._emit_scores(target, payload.get("scores", ()))
+        elif kind == "run_scores":
+            self._emit_scores(self._run_observation, payload.get("scores", ()))
 
         if kind in _TERMINAL_RUNNER_EVENTS:
             self._finish_run(kind=kind, payload=clean)
@@ -322,7 +331,27 @@ class LangfuseObservability:
                 output=clean or None,
                 metadata={**identity, **metadata},
             )
+            if self._loop_observation is not None:
+                self._loop_score_targets[context.decision_id] = self._loop_observation
             self._finish_loop()
+
+    @staticmethod
+    def _emit_scores(observation: _Observation | None, scores: Any) -> None:
+        if observation is None or not hasattr(observation, "score"):
+            return
+        for score in scores or ():
+            if not isinstance(score, Mapping):
+                continue
+            observation.score(
+                name=str(score.get("name", "poly.evaluation")),
+                value=float(score.get("value", 0.0)),
+                data_type="NUMERIC",
+                metadata={
+                    "passed": bool(score.get("passed")),
+                    "hard": bool(score.get("hard")),
+                    "evaluator_version": str(score.get("evaluator_version", "1")),
+                },
+            )
 
     @staticmethod
     def _update(observation: _Observation | None, **kwargs: Any) -> None:
@@ -369,6 +398,7 @@ class LangfuseObservability:
         self._run_observation = None
         self._exit(self._attributes_cm)
         self._attributes_cm = None
+        self._loop_score_targets.clear()
 
     def _force_close_contexts(self) -> None:
         """Best-effort unwind used only after an adapter/SDK failure."""

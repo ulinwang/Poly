@@ -282,6 +282,10 @@ uv run pytest -q
 # Branch coverage for sim/; writes coverage.xml and enforces the 65% gate
 uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
 
+# Deterministic Agent Loop dataset gate (no LLM or Langfuse credentials)
+PYTHONPATH=sim:research:. uv run python -m evaluation.agent_loop.cli \
+  tests/fixtures/agent_loop_eval.jsonl --fail-on-hard
+
 # Backend (vitest)
 cd apps/server && npm test && npm run lint
 
@@ -298,6 +302,11 @@ suite, and enforces branch coverage for `sim/`. The initial baseline measured
 on 2026-07-29 is **66%**, with a **65%** regression gate. Provider calls,
 ClickHouse, web search, and generated datasets are mocked or skipped, so CI
 does not require API keys or live network access.
+
+Agent Loop and Multi-Agent evaluations are emitted as local `agent_scores` and
+`run_scores` events and optionally mirrored to Langfuse. See
+[`sim/evaluation/agent_loop/README.md`](sim/evaluation/agent_loop/README.md) for
+the evaluator contracts, offline JSONL format, and explicit dataset sync.
 
 The Server and Web jobs install the locked Node dependencies with `npm ci`,
 cache npm downloads, and run server lint/tests/build plus web lint/build on

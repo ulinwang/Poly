@@ -49,6 +49,7 @@ from data.query.markets import get_market_meta
 from data.store.config import get_settings
 from environment.env import PolyEnv
 from environment.seeders.from_clob_history import seed as seed_from_clob
+from evaluation.agent_loop import AgentEvaluationSession
 from evaluation.metrics.macro import compute_tick_metrics
 from evaluation.metrics.micro import snapshot_all
 from observability import create_observability
@@ -139,6 +140,45 @@ def _budget_hold_decision(
         api_error="budget: token_budget_exceeded",
         decision_id=decision_id,
     )
+
+
+def _emit_decision_scores(
+    *,
+    evaluation: AgentEvaluationSession,
+    decision: Decision,
+    tick: int,
+    agent_id: int,
+    tick_size: float,
+    token_budget: int,
+    total_tokens: int,
+    on_event: EventCallback,
+) -> None:
+    """Evaluate without risking the simulation's primary execution path."""
+    try:
+        scores = evaluation.score_decision(
+            decision,
+            tick=tick,
+            agent_id=agent_id,
+            tick_size=tick_size,
+            token_budget=token_budget,
+            total_tokens=total_tokens,
+        )
+        on_event("agent_scores", {
+            "run_id": evaluation.run_id,
+            "tick": tick,
+            "agent_id": agent_id,
+            "decision_id": decision.decision_id,
+            "scores": [score.to_record() for score in scores],
+        })
+    except Exception as exc:  # noqa: BLE001 - eval is fail-open
+        log.warning("Agent evaluation failed", exc_info=True)
+        on_event("evaluation_error", {
+            "scope": "decision",
+            "tick": tick,
+            "agent_id": agent_id,
+            "decision_id": decision.decision_id,
+            "message": str(exc),
+        })
 
 
 def _run_stream_impl(
@@ -561,6 +601,10 @@ def _run_tick_loop(
         agent_ids=(agent.agent_id for agent in sim.agents),
         transcript=transcript,
     )
+    evaluation = AgentEvaluationSession(
+        run_id=str(sim.sim_id),
+        interaction_budget=interaction_budget,
+    )
 
     for tick in range(start_tick, n_ticks):
         if cancel is not None and cancel.is_set():
@@ -613,6 +657,10 @@ def _run_tick_loop(
             "decision_order": list(schedule.decision_order),
             "execution_order": "environment_seeded_shuffle",
         })
+        evaluation.record_schedule(
+            tick=tick,
+            decision_order=schedule.decision_order,
+        )
 
         actions: dict = {}
         for aid in schedule.decision_order:
@@ -647,6 +695,16 @@ def _run_tick_loop(
                     "budget": agent.token_budget,
                 })
                 actions[aid] = decision
+                _emit_decision_scores(
+                    evaluation=evaluation,
+                    decision=decision,
+                    tick=tick,
+                    agent_id=aid,
+                    tick_size=float(priors["tick_size"]),
+                    token_budget=int(agent.token_budget),
+                    total_tokens=total_tokens,
+                    on_event=on_event,
+                )
                 on_event("agent_decision", {
                     "tick": tick, "agent_id": aid,
                     "persona_type": agent.persona.persona_type,
@@ -734,6 +792,11 @@ def _run_tick_loop(
                 agent.n_errors += 1
                 continue
 
+            # Injectable/legacy decide implementations may omit the additive
+            # identity field; runner context remains the canonical fallback.
+            if not decision.decision_id:
+                decision = replace(decision, decision_id=loop_context.decision_id)
+
             # --- Track per-agent stats ---
             agent.n_decisions += 1
             agent.total_prompt_tokens += decision.prompt_tokens
@@ -767,6 +830,18 @@ def _run_tick_loop(
                     })
 
             actions[aid] = decision
+            _emit_decision_scores(
+                evaluation=evaluation,
+                decision=decision,
+                tick=tick,
+                agent_id=aid,
+                tick_size=float(priors["tick_size"]),
+                token_budget=int(agent.token_budget),
+                total_tokens=(
+                    agent.total_prompt_tokens + agent.total_completion_tokens
+                ),
+                on_event=on_event,
+            )
             on_event("agent_decision", {
                 "tick": tick, "agent_id": aid,
                 "persona_type": agent.persona.persona_type,
@@ -826,6 +901,24 @@ def _run_tick_loop(
         }
         for a in sim.agents
     }
+    try:
+        run_scores = evaluation.score_run(
+            messages=transcript.messages,
+            expected_agent_ids=[agent.agent_id for agent in sim.agents],
+            final_yes=float(sim.yes_mid),
+            resolved_yes=sim.market_resolved_yes,
+        )
+        on_event("run_scores", {
+            "run_id": str(sim.sim_id),
+            "scores": [score.to_record() for score in run_scores],
+        })
+    except Exception as exc:  # noqa: BLE001 - eval is fail-open
+        log.warning("Run evaluation failed", exc_info=True)
+        on_event("evaluation_error", {
+            "scope": "run",
+            "run_id": str(sim.sim_id),
+            "message": str(exc),
+        })
     on_event("settled", {
         "pnl": {int(k): float(v) for k, v in pnl.items()},
         "n_actions": len(sim.actions_log),

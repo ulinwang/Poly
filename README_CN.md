@@ -249,6 +249,10 @@ uv run pytest -q
 # sim/ 分支覆盖率；生成 coverage.xml，并执行 65% 门槛
 uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
 
+# 确定性 Agent Loop 数据集门禁（无需 LLM 或 Langfuse 凭据）
+PYTHONPATH=sim:research:. uv run python -m evaluation.agent_loop.cli \
+  tests/fixtures/agent_loop_eval.jsonl --fail-on-hard
+
 # 后端 (vitest)
 cd apps/server && npm test && npm run lint
 
@@ -264,6 +268,10 @@ cd apps/web && npm run build && npm run lint && npx vitest run
 门槛。2026-07-29 测得的初始基线为 **66%**，回归门槛为 **65%**。供应商调用、
 ClickHouse、Web 搜索和生成数据均被 mock 或跳过，因此 CI 无需 API key 或
 实时网络。
+
+Agent Loop 与 Multi-Agent 评估会先写入本地 `agent_scores` 和 `run_scores`
+事件，并可选镜像到 Langfuse。评估器契约、离线 JSONL 格式和显式数据集同步
+说明见 [`sim/evaluation/agent_loop/README.md`](sim/evaluation/agent_loop/README.md)。
 
 Server 与 Web 任务使用 `npm ci` 安装锁定的 Node 依赖并缓存 npm 下载，然后在
 Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。三个任务独立运行，

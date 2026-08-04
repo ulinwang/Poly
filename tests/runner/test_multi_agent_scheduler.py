@@ -119,6 +119,15 @@ def test_scheduler_changes_decision_call_order_without_changing_market(monkeypat
     assert reverse_schedule["scheduler"] == "reverse-test"
     assert reverse_schedule["decision_order"] == [2, 1, 0]
     assert reverse_schedule["execution_order"] == "environment_seeded_shuffle"
+    agent_scores = [payload for kind, payload in default_events
+                    if kind == "agent_scores"]
+    run_scores = [payload for kind, payload in default_events
+                  if kind == "run_scores"]
+    assert len(agent_scores) == 3
+    assert all(payload["decision_id"] for payload in agent_scores)
+    assert len(run_scores) == 1
+    assert all(score["passed"] for score in run_scores[0]["scores"]
+               if score["hard"])
 
 
 def test_runner_persists_and_streams_typed_forum_interactions(monkeypatch):

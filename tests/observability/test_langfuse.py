@@ -22,9 +22,13 @@ class FakeObservation:
         self.kwargs = kwargs
         self.parent = parent
         self.updates: list[dict] = []
+        self.scores: list[dict] = []
 
     def update(self, **kwargs):
         self.updates.append(kwargs)
+
+    def score(self, **kwargs):
+        self.scores.append(kwargs)
 
 
 class FakeObservationContext:
@@ -201,6 +205,30 @@ def test_managed_prompt_is_linked_to_generation_but_never_serialized():
     assert generation.kwargs["prompt"] is managed_prompt
     assert "_langfuse_prompt" not in generation.kwargs["input"]
     assert "_langfuse_prompt" not in generation.kwargs["metadata"]
+    telemetry.close()
+
+
+def test_local_agent_and_run_scores_are_mirrored_to_langfuse():
+    client, telemetry = _telemetry()
+    telemetry.on_event(_event("loop_started", payload={"model": "deepseek"}))
+    telemetry.on_event(_event("loop_completed", stage="finish", payload={"status": "ok"}))
+    telemetry.on_runner_event("agent_scores", {
+        "decision_id": "decision-7",
+        "scores": [{
+            "name": "decision.schema_valid", "value": 1.0,
+            "passed": True, "hard": True, "evaluator_version": "1",
+        }],
+    })
+    telemetry.on_runner_event("run_scores", {
+        "scores": [{
+            "name": "multi_agent.sequence_valid", "value": 1.0,
+            "passed": True, "hard": True, "evaluator_version": "1",
+        }],
+    })
+
+    by_name = {observation.name: observation for observation in client.observations}
+    assert by_name["poly.agent-loop"].scores[0]["name"] == "decision.schema_valid"
+    assert by_name["poly.experiment"].scores[0]["name"] == "multi_agent.sequence_valid"
     telemetry.close()
 
 

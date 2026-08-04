@@ -106,6 +106,12 @@ class ForumInteractionAdapter:
     def _record_reads(self, payload: dict) -> tuple[InteractionMessage, ...]:
         tick = int(payload["tick"])
         reader_id = int(payload["reader_id"])
+        # One read tool call may deliver several posts. Preserve that call
+        # boundary so evaluation counts budgeted reads, not delivered rows.
+        read_batch_id = (
+            f"{self.run_id}:tick:{tick}:reader:{reader_id}:"
+            f"read:{self.transcript._next_sequence}"
+        )
         messages: list[InteractionMessage] = []
         for row in payload.get("posts", []):
             post_id = int(row["post_id"])
@@ -130,6 +136,7 @@ class ForumInteractionAdapter:
                 metadata={
                     "post_id": post_id,
                     "reader_id": reader_id,
+                    "read_batch_id": read_batch_id,
                     "followed": followed,
                     "post_tick": int(row.get("tick", tick)),
                 },
