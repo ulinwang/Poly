@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +41,15 @@ class Settings(BaseSettings):
     KIMI_API_KEY: str | None = None
     KIMI_TIMEOUT: float = 60.0
     KIMI_TEMPERATURE: float = 1.0
+
+    # Optional Langfuse Prompt Management. Local versioned templates remain
+    # the guaranteed fallback and the default path performs no network I/O.
+    LANGFUSE_PROMPT_MANAGEMENT_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: str | None = None
+    LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
+    LANGFUSE_PROMPT_LABEL: str = Field(default="production", min_length=1, max_length=64)
+    LANGFUSE_PROMPT_CACHE_TTL_SECONDS: int = Field(default=300, ge=0, le=86_400)
 
     # v4 calibrated-init parameters (see docs/EXPERIMENT_LOG.md). The
     # signal sigma is the noise around the pre-event consensus mu the

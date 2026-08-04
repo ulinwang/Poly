@@ -160,6 +160,9 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek (default) |
 | `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED` | optional managed prompt lookup; local v1 remains the fallback |
+| `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud or self-hosted connection |
+| `POLYMETL_LANGFUSE_PROMPT_LABEL` / `_CACHE_TTL_SECONDS` | managed prompt rollout label and SDK cache TTL |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
 | `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
@@ -178,6 +181,30 @@ Settings page (where they are encrypted at rest).
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_USER` | local/non-Compose ClickHouse user; Compose fixes this to `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | non-empty ClickHouse password required by Compose |
+
+### Optional managed prompts
+
+Poly resolves every system, state, belief-stage, and trade-stage prompt through
+a versioned registry. Repository template v1 is the default and guaranteed
+fallback, so prompt service failures never fail an agent tick. Every Decision
+and generation lifecycle event records source, name, version/label, SHA-256
+content hash, language, and render variables; public runner introspection
+exposes the identity and variable names without credentials or prompt content.
+
+To enable Langfuse Prompt Management:
+
+```bash
+uv sync --extra prompt-management
+```
+
+Then configure the `POLYMETL_LANGFUSE_*` variables shown in `.env.example` and
+set `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true`. The expected text prompt
+names are `poly/clob-system/{en,zh}`, `poly/user-state/{en,zh}`,
+`poly/belief-stage/{en,zh}`, and `poly/trade-stage/{en,zh}`. The selected
+managed prompt object is carried on the in-process generation event so a
+Langfuse tracing adapter can link the prompt version to the generation.
+
+See `sim/agent/prompt/README.md` for rollout and fallback details.
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database (default `polymetl`) |
 
 Experiment limits are enforced by the server. The web UI reads the effective
