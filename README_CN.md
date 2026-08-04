@@ -141,6 +141,10 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek（默认） |
 | `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLYMETL_LANGFUSE_ENABLED` | 可选的 Langfuse Agent Loop 追踪，默认关闭 |
+| `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud 或自托管连接 |
+| `POLYMETL_LANGFUSE_ENVIRONMENT` / `_RELEASE` / `_SAMPLE_RATE` | 追踪环境、发布版本与采样率 |
+| `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata`（安全默认）或 `full` 可见提示词/输出采集 |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
@@ -160,6 +164,26 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_CLICKHOUSE_USER` | 本地/非 Compose 用户；Compose 固定为 `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse 数据库（默认 `polymetl`） |
+
+### 可选 Langfuse 可观测性
+
+先安装可选 SDK，在 `.env` 中填入 Langfuse 凭据，再设置
+`POLYMETL_LANGFUSE_ENABLED=true`：
+
+```bash
+uv sync --extra observability
+```
+
+每次实验会按“experiment → tick → agent loop → generation/tool”记录。
+追踪包含仿真/决策标识、persona 与预算、模型、耗时、token 用量、提示词占位
+版本和错误。遥测始终 fail-open：SDK 或凭据缺失、导出服务故障、flush 超时
+都不会改变实验行为。
+
+推荐保留默认 `metadata` 策略，它不上传提示词、消息、工具参数、搜索结果和
+模型输出内容。`full` 会在敏感字段脱敏后采集可见输入输出；模型隐藏推理和
+原始响应永不导出。使用 Langfuse Cloud 前应先确认数据策略；自托管时把
+`POLYMETL_LANGFUSE_BASE_URL` 改为自己的 HTTPS 地址。完整配置和生命周期
+映射见 `sim/observability/README.md`。
 
 自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
 服务等私网端点，请精确放行其 origin，例如
