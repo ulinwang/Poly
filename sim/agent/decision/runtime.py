@@ -14,6 +14,7 @@ import json
 import signal
 import time
 import urllib.error
+from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from agent.decision.llm import call_deepseek_with_tools, continue_with_tools
@@ -142,8 +143,13 @@ def _generation_call(
         iteration=iteration,
         payload={
             "model": kwargs.get("model", ""),
+            "temperature": kwargs.get("temperature"),
             "tool_choice": kwargs.get("tool_choice", "auto"),
             "tool_names": [_tool_name(tool) for tool in tools],
+            # Local placeholder identity. VER-19 will replace this with the
+            # resolved managed/fallback PromptSpec version.
+            "prompt_name": "local:clob-agent",
+            "prompt_version": "unmanaged",
             "system_prompt": kwargs.get("system_prompt"),
             "user_prompt": kwargs.get("user_prompt"),
             "messages": observable_messages,
@@ -782,6 +788,7 @@ def decide(
     on_forum_action: Optional[ForumActionCallback] = None,
     loop_context: AgentLoopContext | None = None,
     observer: AgentLoopObserver | None = None,
+    loop_metadata: Mapping[str, Any] | None = None,
 ) -> Decision:
     """One tick. Returns a Decision (HOLD on unrecoverable failure).
 
@@ -826,7 +833,12 @@ def decide(
     emitter.emit(
         AgentLoopEventKind.LOOP_STARTED,
         AgentLoopStage.PROMPT,
-        payload={"model": model, "temperature": temperature},
+        payload={
+            "model": model,
+            "temperature": temperature,
+            "persona_type": persona.persona_type,
+            **dict(loop_metadata or {}),
+        },
     )
 
     if tools is None:

@@ -160,6 +160,10 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek (default) |
 | `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLYMETL_LANGFUSE_ENABLED` | optional Langfuse Agent Loop tracing; disabled by default |
+| `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud or self-hosted connection |
+| `POLYMETL_LANGFUSE_ENVIRONMENT` / `_RELEASE` / `_SAMPLE_RATE` | trace deployment identity and sampling |
+| `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata` (safe default) or `full` visible prompt/output capture |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
 | `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
@@ -178,6 +182,29 @@ Settings page (where they are encrypted at rest).
 | `POLY_LLM_ENDPOINT_ALLOWLIST` | comma-separated exact origins allowed for private or HTTP custom LLM endpoints |
 | `POLYMETL_CLICKHOUSE_USER` | local/non-Compose ClickHouse user; Compose fixes this to `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | non-empty ClickHouse password required by Compose |
+
+### Optional Langfuse tracing
+
+Install the optional SDK, add Langfuse credentials to `.env`, then set
+`POLYMETL_LANGFUSE_ENABLED=true`:
+
+```bash
+uv sync --extra observability
+```
+
+Each simulation is recorded as `experiment → tick → agent loop →
+generation/tool`. Traces include simulation/decision identity, persona and
+budget metadata, model, latency, token usage, prompt placeholder identity, and
+errors. Telemetry is fail-open: a missing SDK, missing credentials, exporter
+outage, or flush timeout never changes simulation behavior.
+
+`metadata` is the recommended capture policy and omits prompt, message, tool
+argument, search result, and model-output content. `full` includes visible
+inputs/outputs after secret redaction; hidden provider reasoning and raw
+responses are never exported. Review your data policy before enabling `full`,
+especially when using Langfuse Cloud. For self-hosted Langfuse, change
+`POLYMETL_LANGFUSE_BASE_URL` to your HTTPS endpoint. See
+`sim/observability/README.md` for the full configuration and lifecycle map.
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database (default `polymetl`) |
 
 Experiment limits are enforced by the server. The web UI reads the effective

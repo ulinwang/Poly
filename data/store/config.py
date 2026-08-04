@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import re
+from typing import Literal
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +44,34 @@ class Settings(BaseSettings):
     KIMI_API_KEY: str | None = None
     KIMI_TIMEOUT: float = 60.0
     KIMI_TEMPERATURE: float = 1.0
+
+    # Optional Langfuse observability. Disabled by default so a normal
+    # simulation never imports the SDK or performs telemetry network I/O.
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: str | None = None
+    LANGFUSE_SECRET_KEY: str | None = None
+    LANGFUSE_BASE_URL: str = "https://cloud.langfuse.com"
+    LANGFUSE_ENVIRONMENT: str = "development"
+    LANGFUSE_RELEASE: str | None = None
+    LANGFUSE_SAMPLE_RATE: float = Field(default=1.0, ge=0.0, le=1.0)
+    # metadata: identifiers, status, model and token usage only.
+    # full: also capture visible prompt/tool input and model output after
+    # sensitive-key redaction. Hidden reasoning is never emitted upstream.
+    LANGFUSE_CAPTURE_POLICY: Literal["metadata", "full"] = "metadata"
+    LANGFUSE_FLUSH_TIMEOUT_SECONDS: float = Field(default=5.0, ge=0.0, le=60.0)
+
+    @field_validator("LANGFUSE_ENVIRONMENT")
+    @classmethod
+    def validate_langfuse_environment(cls, value: str) -> str:
+        if (
+            not re.fullmatch(r"[a-z0-9_-]+", value)
+            or value.startswith("langfuse")
+        ):
+            raise ValueError(
+                "LANGFUSE_ENVIRONMENT must use lowercase letters, numbers, "
+                "hyphens or underscores and must not start with 'langfuse'"
+            )
+        return value
 
     # v4 calibrated-init parameters (see docs/EXPERIMENT_LOG.md). The
     # signal sigma is the noise around the pre-event consensus mu the
