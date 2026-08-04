@@ -173,8 +173,11 @@ export interface EvaluationScore {
   run_id: string;
   evaluator_version: string;
   decision_id?: string;
+  step_id?: string;
   tick?: number | null;
   agent_id?: number | null;
+  model: string;
+  prompt_versions: string[];
   details: Record<string, unknown>;
 }
 

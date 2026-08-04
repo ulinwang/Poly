@@ -175,6 +175,7 @@ def _generation_call(
         iteration=iteration,
         payload=observable_payload,
     )
+    generation_started_at = time.perf_counter()
     try:
         result = call_with_retry(
             call_fn,
@@ -190,6 +191,9 @@ def _generation_call(
                 "status": "error",
                 "error_type": type(exc).__name__,
                 "error": str(exc),
+                "latency_ms": int(
+                    (time.perf_counter() - generation_started_at) * 1000
+                ),
             },
         )
         raise
@@ -201,6 +205,9 @@ def _generation_call(
             "status": "ok",
             "prompt_tokens": int(result.get("prompt_tokens", 0)),
             "completion_tokens": int(result.get("completion_tokens", 0)),
+            "latency_ms": int(
+                (time.perf_counter() - generation_started_at) * 1000
+            ),
             "tool_calls": list(_tool_calls(result)),
             "text": result.get("text", ""),
         },
@@ -730,6 +737,34 @@ def _run_trade_stage_loop(
                     "trade_iteration": total_turns - 1,
                 },
             )
+            budget_reason = ""
+            if name == INFO_TOOL_NAME and info_turns >= MAX_INFO_TURNS:
+                budget_reason = "information budget exhausted"
+            elif (
+                name == FORUM_READ_TOOL_NAME
+                and forum_read_turns >= interaction_budget.max_forum_reads
+            ):
+                budget_reason = "forum read budget exhausted"
+            elif (
+                name in FORUM_ACTION_TOOL_NAMES
+                and social_actions >= interaction_budget.max_social_actions
+            ):
+                budget_reason = "social action budget exhausted"
+            if budget_reason:
+                tool_content = f"{name}: {budget_reason}; action skipped."
+                emitter.emit(
+                    AgentLoopEventKind.TOOL_COMPLETED,
+                    AgentLoopStage.TOOL,
+                    iteration=tool_iteration,
+                    payload={
+                        "name": name,
+                        "call_id": str(call.get("id", "")),
+                        "status": "budget_exhausted",
+                    },
+                )
+                tool_iteration += 1
+                messages.append(_tool_result_message(call, tool_content))
+                continue
             if name == INFO_TOOL_NAME:
                 info_turns += 1
             elif name == FORUM_READ_TOOL_NAME:

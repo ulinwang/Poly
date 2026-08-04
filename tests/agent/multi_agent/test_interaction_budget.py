@@ -4,6 +4,7 @@ from agent.decision.runtime import decide
 from agent.decision.tool_schemas import FORUM_TOOL_NAMES, select_tools
 from agent.decision.types import AgentSnapshot, MarketSnapshot
 from agent.multi_agent.protocol import InteractionBudget
+from agent.loop import AgentLoopEventKind
 from agent.personas.persona import Persona
 from environment.forum import Forum
 
@@ -172,3 +173,55 @@ def test_zero_budget_never_offers_forum_tools():
     assert decision.order_type == "MARKET"
     assert len(seen_trade_tools) == 1
     assert not (seen_trade_tools[0] & set(FORUM_TOOL_NAMES))
+
+
+def test_parallel_tool_batch_cannot_overshoot_interaction_budgets():
+    forum = Forum()
+    forum.post(0, "existing evidence", tick=0)
+    interactions: list[str] = []
+    events = []
+
+    class Observer:
+        def on_event(self, event):
+            events.append(event)
+
+    def initial(**kwargs):
+        names = {tool["function"]["name"] for tool in kwargs["tools"]}
+        if names == {"update_belief"}:
+            return _belief()
+        calls = [
+            {"id": "read-1", "name": "read_forum", "arguments": {}},
+            {"id": "read-2", "name": "read_forum", "arguments": {}},
+            {"id": "post-1", "name": "post_to_forum",
+             "arguments": {"content": "first"}},
+            {"id": "post-2", "name": "post_to_forum",
+             "arguments": {"content": "second"}},
+        ]
+        return {
+            "tool_call": calls[0], "tool_calls": calls, "text": "", "raw": "{}",
+            "prompt_tokens": 0, "completion_tokens": 0,
+        }
+
+    decision = decide(
+        persona=_persona(), question="Q?", description="R", end_date="2027",
+        market=_market(), agent=_agent(), api_key="unused", base_url="",
+        model="mock", call_fn=initial, continue_fn=lambda **kwargs: _trade(),
+        tools=select_tools(info_enabled=False, forum_enabled=True),
+        info_enabled=False, forum_enabled=True, forum=forum, agent_id=1, tick=1,
+        on_forum_action=lambda kind, payload: interactions.append(kind),
+        interaction_budget=InteractionBudget(
+            max_forum_reads=1, max_social_actions=1,
+        ),
+        observer=Observer(), max_attempts=1,
+    )
+
+    assert decision.order_type == "MARKET"
+    assert interactions == ["read", "post"]
+    assert len(forum.posts) == 2
+    completions = [
+        event for event in events
+        if event.kind == AgentLoopEventKind.TOOL_COMPLETED
+    ]
+    assert [event.payload["status"] for event in completions] == [
+        "ok", "budget_exhausted", "ok", "budget_exhausted",
+    ]

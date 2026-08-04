@@ -48,11 +48,16 @@ def run_dataset(cases: Iterable[DatasetCase]) -> dict[str, Any]:
         scores = evaluate_case(case)
         expected_pass = set(case.expected.get("pass", ()))
         expected_fail = set(case.expected.get("fail", ()))
+        actual_names = {score.name for score in scores}
         expectation_errors = [
             score.name for score in scores
             if (score.name in expected_pass and not score.passed)
             or (score.name in expected_fail and score.passed)
         ]
+        expectation_errors.extend(
+            f"missing:{name}"
+            for name in sorted((expected_pass | expected_fail) - actual_names)
+        )
         failures = [score.name for score in scores if score.hard and not score.passed]
         if failures or expectation_errors:
             hard_failures.append(case.case_id)
@@ -62,7 +67,7 @@ def run_dataset(cases: Iterable[DatasetCase]) -> dict[str, Any]:
             "expectation_errors": expectation_errors,
         })
     return {
-        "dataset_version": "1",
+        "dataset_version": "2",
         "cases": results,
         "n_cases": len(results),
         "hard_failures": hard_failures,
@@ -88,7 +93,7 @@ def sync_langfuse_dataset(
             id=case.case_id,
             input=dict(case.input),
             expected_output=dict(case.expected),
-            metadata={"poly_dataset_version": "1"},
+            metadata={"poly_dataset_version": "2"},
         )
         count += 1
     return count
@@ -128,5 +133,5 @@ def run_langfuse_experiment(
         task=task,
         evaluators=list(evaluators),
         max_concurrency=1,
-        metadata={"poly_dataset_version": "1"},
+        metadata={"poly_dataset_version": "2"},
     )

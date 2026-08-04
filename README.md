@@ -304,7 +304,9 @@ ClickHouse, web search, and generated datasets are mocked or skipped, so CI
 does not require API keys or live network access.
 
 Agent Loop and Multi-Agent evaluations are emitted as local `agent_scores` and
-`run_scores` events and optionally mirrored to Langfuse. See
+`run_scores` events and optionally mirrored to Langfuse. Decision scores use a
+content-safe lifecycle transcript and carry evaluator/run/decision/step,
+model, and prompt-revision identity for online/offline comparison. See
 [`sim/evaluation/agent_loop/README.md`](sim/evaluation/agent_loop/README.md) for
 the evaluator contracts, offline JSONL format, and explicit dataset sync.
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from evaluation.agent_loop.cli import main
 from evaluation.agent_loop.offline import (
     load_jsonl,
     run_dataset,
@@ -15,6 +16,31 @@ def test_checked_in_dataset_has_no_hard_regressions():
     report = run_dataset(load_jsonl(FIXTURE))
     assert report["passed"]
     assert report["hard_failures"] == []
+
+
+def test_cli_returns_failure_for_hard_regression(tmp_path, monkeypatch):
+    source = FIXTURE.read_text(encoding="utf-8")
+    row = source.replace('"size_usd":0.0', '"size_usd":5.0', 1)
+    path = tmp_path / "regression.jsonl"
+    path.write_text(row, encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv", ["poly-eval", str(path), "--fail-on-hard"],
+    )
+    assert main() == 1
+
+
+def test_missing_expected_evaluator_is_a_regression():
+    case = load_jsonl(FIXTURE)[0]
+    case = type(case)(
+        case_id=case.case_id,
+        input=case.input,
+        expected={"pass": ["decision.removed_evaluator"]},
+    )
+    report = run_dataset([case])
+    assert not report["passed"]
+    assert report["cases"][0]["expectation_errors"] == [
+        "missing:decision.removed_evaluator",
+    ]
 
 
 def test_langfuse_dataset_sync_is_explicit_and_injectable():

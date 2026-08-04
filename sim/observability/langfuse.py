@@ -350,6 +350,11 @@ class LangfuseObservability:
                     "passed": bool(score.get("passed")),
                     "hard": bool(score.get("hard")),
                     "evaluator_version": str(score.get("evaluator_version", "1")),
+                    "run_id": str(score.get("run_id", "")),
+                    "decision_id": str(score.get("decision_id", "")),
+                    "step_id": str(score.get("step_id", "")),
+                    "model": str(score.get("model", "")),
+                    "prompt_versions": list(score.get("prompt_versions") or ()),
                 },
             )
 

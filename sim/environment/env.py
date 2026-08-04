@@ -156,6 +156,12 @@ class Simulation:
     interaction_transcript: InteractionTranscript = field(
         default_factory=InteractionTranscript,
     )
+    # Deterministic evaluation accumulator state. Keeping this beside the
+    # interaction transcript makes pause/resume score aggregation equivalent
+    # to an uninterrupted run without persisting telemetry client objects.
+    evaluation_schedules: list[dict] = field(default_factory=list)
+    evaluation_beliefs: list[tuple[int, float]] = field(default_factory=list)
+    evaluation_prompt_versions: list[str] = field(default_factory=list)
 
     yes_mid_history: list[float] = field(default_factory=list)
     no_mid_history: list[float] = field(default_factory=list)

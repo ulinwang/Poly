@@ -12,9 +12,11 @@ from agent.loop import (
     AgentLoopContext,
     AgentLoopEventKind,
     AgentLoopStage,
+    CompositeAgentLoopObserver,
 )
 from agent.personas.persona import Persona
 from agent.prompt.registry import PromptResolver
+from evaluation.agent_loop import AgentLoopEvaluationObserver, evaluate_decision
 
 
 class RecordingObserver:
@@ -109,6 +111,7 @@ def test_context_and_step_ids_are_stable_and_immutable():
 
 def test_two_stage_decision_emits_ordered_lifecycle():
     observer = RecordingObserver()
+    evaluation_observer = AgentLoopEvaluationObserver()
     context = AgentLoopContext.create(run_id="sim-42", tick=3, agent_id=7)
 
     def fake_llm(**kwargs):
@@ -128,7 +131,7 @@ def test_two_stage_decision_emits_ordered_lifecycle():
         call_fn=fake_llm,
         max_attempts=1,
         loop_context=context,
-        observer=observer,
+        observer=CompositeAgentLoopObserver((observer, evaluation_observer)),
     )
 
     assert decision.decision_id == context.decision_id
@@ -153,12 +156,24 @@ def test_two_stage_decision_emits_ordered_lifecycle():
         AgentLoopStage.BELIEF,
         AgentLoopStage.TRADE,
     ]
+    assert all(event.payload["latency_ms"] >= 0 for event in generations)
     assert all(event.context.loop == context for event in observer.events)
     generation_start = next(
         event for event in observer.events
         if event.kind == AgentLoopEventKind.GENERATION_STARTED
     )
     assert generation_start.payload["prompt_identity"]
+    scores = evaluate_decision(
+        decision,
+        run_id=context.run_id,
+        tick=context.tick,
+        agent_id=context.agent_id,
+        model="mock-model",
+        lifecycle_events=evaluation_observer.pop(context.decision_id),
+    )
+    assert all(score.passed for score in scores if score.hard)
+    assert all(score.step_id == f"{context.decision_id}:evaluate:0"
+               for score in scores)
 
 
 def test_tool_loop_emits_tool_pair_and_generation_iterations(monkeypatch):

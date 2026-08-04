@@ -270,7 +270,9 @@ ClickHouse、Web 搜索和生成数据均被 mock 或跳过，因此 CI 无需 A
 实时网络。
 
 Agent Loop 与 Multi-Agent 评估会先写入本地 `agent_scores` 和 `run_scores`
-事件，并可选镜像到 Langfuse。评估器契约、离线 JSONL 格式和显式数据集同步
+事件，并可选镜像到 Langfuse。Decision 分数使用内容安全的生命周期记录，并
+携带 evaluator/run/decision/step、model 与 prompt revision 标识，可直接比较
+在线/离线结果。评估器契约、离线 JSONL 格式和显式数据集同步
 说明见 [`sim/evaluation/agent_loop/README.md`](sim/evaluation/agent_loop/README.md)。
 
 Server 与 Web 任务使用 `npm ci` 安装锁定的 Node 依赖并缓存 npm 下载，然后在

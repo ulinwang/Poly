@@ -49,7 +49,10 @@ from data.query.markets import get_market_meta
 from data.store.config import get_settings
 from environment.env import PolyEnv
 from environment.seeders.from_clob_history import seed as seed_from_clob
-from evaluation.agent_loop import AgentEvaluationSession
+from evaluation.agent_loop import (
+    AgentEvaluationSession,
+    AgentLoopEvaluationObserver,
+)
 from evaluation.metrics.macro import compute_tick_metrics
 from evaluation.metrics.micro import snapshot_all
 from observability import create_observability
@@ -151,6 +154,7 @@ def _emit_decision_scores(
     tick_size: float,
     token_budget: int,
     total_tokens: int,
+    lifecycle_events: list[dict],
     on_event: EventCallback,
 ) -> None:
     """Evaluate without risking the simulation's primary execution path."""
@@ -162,12 +166,14 @@ def _emit_decision_scores(
             tick_size=tick_size,
             token_budget=token_budget,
             total_tokens=total_tokens,
+            lifecycle_events=lifecycle_events,
         )
         on_event("agent_scores", {
             "run_id": evaluation.run_id,
             "tick": tick,
             "agent_id": agent_id,
             "decision_id": decision.decision_id,
+            "step_id": f"{decision.decision_id}:evaluate:0",
             "scores": [score.to_record() for score in scores],
         })
     except Exception as exc:  # noqa: BLE001 - eval is fail-open
@@ -179,6 +185,13 @@ def _emit_decision_scores(
             "decision_id": decision.decision_id,
             "message": str(exc),
         })
+
+
+def _sync_evaluation_state(sim, evaluation: AgentEvaluationSession) -> None:
+    """Persist only JSON/pickle-safe accumulator data for checkpoint resume."""
+    sim.evaluation_schedules = [dict(item) for item in evaluation.schedules]
+    sim.evaluation_beliefs = list(evaluation.beliefs)
+    sim.evaluation_prompt_versions = sorted(evaluation.prompt_versions)
 
 
 def _run_stream_impl(
@@ -604,7 +617,18 @@ def _run_tick_loop(
     evaluation = AgentEvaluationSession(
         run_id=str(sim.sim_id),
         interaction_budget=interaction_budget,
+        model=str(model or ""),
+        schedules=list(getattr(sim, "evaluation_schedules", ())),
+        beliefs=list(getattr(sim, "evaluation_beliefs", ())),
+        prompt_versions=set(getattr(sim, "evaluation_prompt_versions", ())),
     )
+    evaluation_observer = AgentLoopEvaluationObserver()
+    observed_loop: AgentLoopObserver = evaluation_observer
+    if agent_loop_observer is not None:
+        observed_loop = CompositeAgentLoopObserver((
+            agent_loop_observer,
+            evaluation_observer,
+        ))
 
     for tick in range(start_tick, n_ticks):
         if cancel is not None and cancel.is_set():
@@ -661,6 +685,7 @@ def _run_tick_loop(
             tick=tick,
             decision_order=schedule.decision_order,
         )
+        _sync_evaluation_state(sim, evaluation)
 
         actions: dict = {}
         for aid in schedule.decision_order:
@@ -703,8 +728,10 @@ def _run_tick_loop(
                     tick_size=float(priors["tick_size"]),
                     token_budget=int(agent.token_budget),
                     total_tokens=total_tokens,
+                    lifecycle_events=[],
                     on_event=on_event,
                 )
+                _sync_evaluation_state(sim, evaluation)
                 on_event("agent_decision", {
                     "tick": tick, "agent_id": aid,
                     "persona_type": agent.persona.persona_type,
@@ -775,7 +802,7 @@ def _run_tick_loop(
                         forum_enabled=True,
                         on_forum_action=_on_forum_action,
                         loop_context=loop_context,
-                        observer=agent_loop_observer,
+                        observer=observed_loop,
                         interaction_budget=interaction_budget,
                         loop_metadata={
                             "persona_type": agent.persona.persona_type,
@@ -785,6 +812,7 @@ def _run_tick_loop(
                         },
                     )
             except Exception as exc:        # noqa: BLE001
+                evaluation_observer.pop(loop_context.decision_id)
                 on_event("agent_decision_error", {
                     "tick": tick, "agent_id": aid, "message": str(exc),
                     "decision_id": loop_context.decision_id,
@@ -796,6 +824,7 @@ def _run_tick_loop(
             # identity field; runner context remains the canonical fallback.
             if not decision.decision_id:
                 decision = replace(decision, decision_id=loop_context.decision_id)
+            lifecycle_events = evaluation_observer.pop(loop_context.decision_id)
 
             # --- Track per-agent stats ---
             agent.n_decisions += 1
@@ -840,8 +869,10 @@ def _run_tick_loop(
                 total_tokens=(
                     agent.total_prompt_tokens + agent.total_completion_tokens
                 ),
+                lifecycle_events=lifecycle_events,
                 on_event=on_event,
             )
+            _sync_evaluation_state(sim, evaluation)
             on_event("agent_decision", {
                 "tick": tick, "agent_id": aid,
                 "persona_type": agent.persona.persona_type,

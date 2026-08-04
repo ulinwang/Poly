@@ -4,12 +4,20 @@ Poly evaluates Agent Loop behavior with deterministic, provider-free checks.
 Local runner events are authoritative; Langfuse receives an optional mirror of
 the same numeric scores when tracing is enabled.
 
-Per-decision scores cover parsed schema validity, terminal convergence, action
-validity, token/social budget compliance, belief validity/presence, and prompt
-reproducibility. End-of-run scores cover transcript sequencing, delivery and
+Per-decision scores cover parsed schema validity, terminal convergence,
+lifecycle/tool pairing, action validity, token/social/read budget compliance,
+belief validity/presence, and prompt reproducibility. Every score carries its
+evaluator version, run/decision/evaluation-step identity, model, and compact
+prompt revision keys so online and offline results can be compared directly.
+End-of-run scores cover transcript sequencing, delivery and
 correlation correctness, interaction budgets, scheduler coverage, participant
 coverage, and belief calibration (Brier skill, using the resolved outcome when
 available or the final simulated midpoint otherwise).
+
+Schedules, belief samples, and observed prompt revisions are stored as plain
+checkpoint-safe simulation state. A resumed run therefore aggregates the same
+evaluation window as an uninterrupted run; no Langfuse client or telemetry
+object is serialized.
 
 Run the checked-in offline regression dataset without any LLM credentials:
 
@@ -18,9 +26,11 @@ PYTHONPATH=sim:research:. python -m evaluation.agent_loop.cli \
   tests/fixtures/agent_loop_eval.jsonl --fail-on-hard
 ```
 
-The JSONL input contains fixed parsed Decisions, runtime budgets and expected
-score names. It never invokes an LLM. Add representative failure and edge cases
-before changing prompts, parsing, tools or loop budgets.
+The JSONL input contains fixed provider output, parsed Decisions, content-safe
+generation/tool lifecycle events, runtime budgets, and expected score names.
+Online evaluation records the same lifecycle schema through a read-only
+observer. Neither path invokes an LLM. Add representative failure and edge
+cases before changing prompts, parsing, tools or loop budgets.
 
 To copy cases to a Langfuse dataset, install the optional SDK, configure its
 standard environment credentials, and explicitly add

@@ -217,6 +217,9 @@ def test_local_agent_and_run_scores_are_mirrored_to_langfuse():
         "scores": [{
             "name": "decision.schema_valid", "value": 1.0,
             "passed": True, "hard": True, "evaluator_version": "1",
+            "run_id": "sim-1", "decision_id": "decision-7",
+            "step_id": "decision-7:evaluate:0", "model": "mock-model",
+            "prompt_versions": ["trade@1:abc123"],
         }],
     })
     telemetry.on_runner_event("run_scores", {
@@ -228,6 +231,10 @@ def test_local_agent_and_run_scores_are_mirrored_to_langfuse():
 
     by_name = {observation.name: observation for observation in client.observations}
     assert by_name["poly.agent-loop"].scores[0]["name"] == "decision.schema_valid"
+    metadata = by_name["poly.agent-loop"].scores[0]["metadata"]
+    assert metadata["step_id"] == "decision-7:evaluate:0"
+    assert metadata["model"] == "mock-model"
+    assert metadata["prompt_versions"] == ["trade@1:abc123"]
     assert by_name["poly.experiment"].scores[0]["name"] == "multi_agent.sequence_valid"
     telemetry.close()
 
