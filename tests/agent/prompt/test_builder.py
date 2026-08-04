@@ -6,8 +6,10 @@ import unittest
 from agent.personas.persona import Persona
 from agent.decision.types import AgentSnapshot, MarketSnapshot
 from agent.prompt.builder import (
-    build_clob_system_prompt, build_simple_system_prompt, build_user_prompt,
+    build_clob_system_prompt, build_simple_system_prompt, build_stage_prompt,
+    build_user_prompt,
 )
+from agent.prompt.registry import PromptResolver
 
 
 class ClobSystemPromptTest(unittest.TestCase):
@@ -102,6 +104,34 @@ class SimpleSystemPromptTest(unittest.TestCase):
         out = build_simple_system_prompt(p, "Q?", "Rules.", "2026-12-31")
         self.assertIn("thoughtful trader", out)
         self.assertIn("Q?", out)
+
+
+class StagePromptTest(unittest.TestCase):
+    def test_english_and_chinese_belief_semantics(self):
+        resolver = PromptResolver()
+        en = build_stage_prompt("belief_stage", prompt_resolver=resolver)
+        zh = build_stage_prompt(
+            "belief_stage", prompt_language="zh", prompt_resolver=resolver,
+        )
+        self.assertIn("update_belief", en.content)
+        self.assertIn("Do not choose a trading action", en.content)
+        self.assertIn("update_belief", zh.content)
+        self.assertIn("不要选择任何交易动作", zh.content)
+
+    def test_trade_stage_renders_belief_values(self):
+        result = build_stage_prompt(
+            "trade_stage",
+            variables={
+                "yes_prob": 0.6123,
+                "confidence": 0.73,
+                "rationale": "new evidence",
+            },
+            prompt_resolver=PromptResolver(),
+        )
+        self.assertIn("0.612", result.content)
+        self.assertIn("0.73", result.content)
+        self.assertIn("new evidence", result.content)
+        self.assertEqual("v1", result.identity.version)
 
 
 class UserPromptTest(unittest.TestCase):

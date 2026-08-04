@@ -77,6 +77,16 @@ def _market_snapshot_dict(sim) -> dict:
     }
 
 
+def _public_prompt_metadata(decision: Decision) -> list[dict]:
+    """Expose reproducibility identity without duplicating prompt contents."""
+    public = []
+    for item in decision.prompt_metadata or []:
+        clean = {key: value for key, value in item.items() if key != "variables"}
+        clean["variable_names"] = item.get("variable_names", [])
+        public.append(clean)
+    return public
+
+
 def _budget_hold_decision(
     *,
     total_tokens: int,
@@ -470,6 +480,7 @@ def _run_tick_loop(
                     "completion_tokens": 0,
                     "elapsed_s": 0.0,
                     "decision_id": decision.decision_id,
+                    "prompt_metadata": _public_prompt_metadata(decision),
                 })
                 continue
 
@@ -579,6 +590,7 @@ def _run_tick_loop(
                 "completion_tokens": int(decision.completion_tokens),
                 "elapsed_s": round(time.time() - t0, 2),
                 "decision_id": decision.decision_id,
+                "prompt_metadata": _public_prompt_metadata(decision),
             })
 
         obs, info = env.step(actions)

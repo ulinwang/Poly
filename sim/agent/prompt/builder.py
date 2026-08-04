@@ -8,13 +8,20 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from agent.personas.persona import Persona
 from agent.decision.types import AgentSnapshot, MarketSnapshot
+from agent.prompt.registry import (
+    PromptResolver,
+    PromptWarningCallback,
+    ResolvedPrompt,
+)
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "personas" / "templates"
+_STAGE_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "v1"
 
 
 @lru_cache(maxsize=1)
@@ -23,6 +30,36 @@ def _env() -> Environment:
         loader=FileSystemLoader(str(_TEMPLATE_DIR)),
         autoescape=select_autoescape(disabled_extensions=("txt", "j2")),
         keep_trailing_newline=True,
+    )
+
+
+@lru_cache(maxsize=1)
+def _stage_env() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(_STAGE_TEMPLATE_DIR)),
+        autoescape=select_autoescape(disabled_extensions=("txt", "j2")),
+        keep_trailing_newline=True,
+    )
+
+
+def _resolve(
+    key: str,
+    *,
+    language: str,
+    variables: dict[str, Any],
+    local_content: str,
+    prompt_resolver: PromptResolver | None,
+    on_warning: PromptWarningCallback | None,
+) -> ResolvedPrompt:
+    # Standalone builder calls stay pure/local. The decision runtime passes
+    # its configured resolver explicitly when managed prompts are enabled.
+    resolver = prompt_resolver or PromptResolver()
+    return resolver.resolve(
+        key,
+        language=language,
+        variables=variables,
+        local_content=local_content,
+        on_warning=on_warning,
     )
 
 
@@ -48,7 +85,10 @@ def build_clob_system_prompt(
     persona: Persona, question: str, description: str, end_date: str,
     *, tick_size: float = 0.01, prompt_language: str = "en",
     info_enabled: bool = True, forum_enabled: bool = True,
-) -> str:
+    prompt_resolver: PromptResolver | None = None,
+    on_warning: PromptWarningCallback | None = None,
+    with_metadata: bool = False,
+) -> str | ResolvedPrompt:
     """v7 production prompt — both YES and NO books visible, supports
     LIMIT/MARKET/CANCEL/HOLD/SPLIT/MERGE actions.
 
@@ -66,7 +106,7 @@ def build_clob_system_prompt(
         )
     template_name = "clob_system_zh.j2" if prompt_language == "zh" else "clob_system.j2"
     tmpl = _env().get_template(template_name)
-    return tmpl.render(
+    variables = dict(
         profile=persona.profile_text,
         risk_aversion_line=risk_line,
         question=question,
@@ -76,12 +116,25 @@ def build_clob_system_prompt(
         info_enabled=info_enabled,
         forum_enabled=forum_enabled,
     )
+    local_content = tmpl.render(**variables)
+    resolved = _resolve(
+        "clob_system",
+        language=prompt_language,
+        variables=variables,
+        local_content=local_content,
+        prompt_resolver=prompt_resolver,
+        on_warning=on_warning,
+    )
+    return resolved if with_metadata else resolved.content
 
 
 def build_user_prompt(
     market: MarketSnapshot, agent: AgentSnapshot, *, prompt_language: str = "en",
     forum_enabled: bool = True,
-) -> str:
+    prompt_resolver: PromptResolver | None = None,
+    on_warning: PromptWarningCallback | None = None,
+    with_metadata: bool = False,
+) -> str | ResolvedPrompt:
     """Render `templates/user_state.j2` with the current market +
     agent snapshot.
 
@@ -210,7 +263,7 @@ def build_user_prompt(
 
     template_name = "user_state_zh.j2" if prompt_language == "zh" else "user_state.j2"
     tmpl = _env().get_template(template_name)
-    return tmpl.render(
+    variables = dict(
         signal_block=signal_block,
         yes_bid=_f(market.yes_best_bid), yes_ask=_f(market.yes_best_ask),
         yes_mid=market.yes_mid,
@@ -237,4 +290,39 @@ def build_user_prompt(
         social_my_post_lines=social_my_post_lines,
         social_following=social_following,
         forum_enabled=forum_enabled,
+    )
+    local_content = tmpl.render(**variables)
+    resolved = _resolve(
+        "user_state",
+        language=prompt_language,
+        variables=variables,
+        local_content=local_content,
+        prompt_resolver=prompt_resolver,
+        on_warning=on_warning,
+    )
+    return resolved if with_metadata else resolved.content
+
+
+def build_stage_prompt(
+    stage: str,
+    *,
+    prompt_language: str = "en",
+    variables: dict[str, Any] | None = None,
+    prompt_resolver: PromptResolver | None = None,
+    on_warning: PromptWarningCallback | None = None,
+) -> ResolvedPrompt:
+    """Resolve a versioned belief/trade stage instruction."""
+    if stage not in {"belief_stage", "trade_stage"}:
+        raise ValueError(f"unknown stage prompt: {stage}")
+    language = "zh" if prompt_language == "zh" else "en"
+    render_variables = dict(variables or {})
+    template = _stage_env().get_template(f"{stage}.{language}.j2")
+    local_content = template.render(**render_variables).strip()
+    return _resolve(
+        stage,
+        language=language,
+        variables=render_variables,
+        local_content=local_content,
+        prompt_resolver=prompt_resolver,
+        on_warning=on_warning,
     )

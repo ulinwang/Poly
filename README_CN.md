@@ -141,6 +141,9 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek（默认） |
 | `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED` | 可选的托管提示词查询；本地 v1 始终兜底 |
+| `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud 或自托管连接 |
+| `POLYMETL_LANGFUSE_PROMPT_LABEL` / `_CACHE_TTL_SECONDS` | 托管提示词发布标签与 SDK 缓存 TTL |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
@@ -160,6 +163,28 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_CLICKHOUSE_USER` | 本地/非 Compose 用户；Compose 固定为 `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse 数据库（默认 `polymetl`） |
+
+### 可选托管提示词
+
+系统提示词、状态提示词、belief 阶段和 trade 阶段现在都通过版本化 registry
+解析。仓库内 v1 是默认值和强制兜底，因此提示词服务异常不会让 Agent tick
+失败。每个 Decision 和 generation 生命周期事件都会记录来源、名称、版本/标签、
+SHA-256 内容哈希、语言和渲染变量；公开 runner introspection 只暴露身份与变量名，
+不暴露凭据和提示词正文。
+
+启用 Langfuse Prompt Management：
+
+```bash
+uv sync --extra prompt-management
+```
+
+然后按 `.env.example` 配置 `POLYMETL_LANGFUSE_*`，并设置
+`POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true`。约定的 text prompt 名称为
+`poly/clob-system/{en,zh}`、`poly/user-state/{en,zh}`、
+`poly/belief-stage/{en,zh}` 和 `poly/trade-stage/{en,zh}`。选中的 Langfuse
+prompt 对象会通过进程内 generation 事件传给 tracing adapter，以便关联具体版本。
+
+发布和回退说明见 `sim/agent/prompt/README.md`。
 
 自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
 服务等私网端点，请精确放行其 origin，例如

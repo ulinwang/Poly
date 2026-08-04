@@ -39,6 +39,11 @@ dependencies = [
 	"ddgs>=6.0",
 ]
 
+[project.optional-dependencies]
+prompt-management = [
+	"langfuse>=4,<5",
+]
+
 [dependency-groups]
 dev = [
 	"pytest>=8.3,<10",
@@ -57,6 +62,10 @@ build-backend = "setuptools.build_meta"
 where = ["sim", "research", "."]
 include = ["agent*", "environment*", "evaluation*", "experiments*", "runner*", "viz*", "scripts*", "data*"]
 exclude = ["tests*", "docs*", "output*", "figures*", "tables*", "apps*", "legacy*"]
+
+[tool.setuptools.package-data]
+"agent.prompt" = ["templates/**/*.j2"]
+"agent.personas" = ["templates/*.j2", "templates/*.txt"]
 
 [tool.pytest.ini_options]
 minversion = "8.3"
