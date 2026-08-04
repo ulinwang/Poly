@@ -29,6 +29,17 @@ from agent.decision import Decision, decide
 from agent.factory import init_agents, build_synthetic_population
 from agent.features.market import derive_priors
 from agent.loop import AgentLoopContext, AgentLoopObserver
+from agent.multi_agent.forum_adapter import ForumInteractionAdapter
+from agent.multi_agent.protocol import (
+    DEFAULT_INTERACTION_BUDGET,
+    InteractionBudget,
+    InteractionTranscript,
+)
+from agent.multi_agent.scheduler import (
+    AgentScheduler,
+    SequentialAgentScheduler,
+    validate_schedule,
+)
 from data.query.markets import get_market_meta
 from data.store.config import get_settings
 from environment.env import PolyEnv
@@ -131,6 +142,8 @@ def run_stream(
     base_url: Optional[str] = None,
     model: Optional[str] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
+    agent_scheduler: AgentScheduler | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> None:
     """Execute one simulation, streaming events through `on_event`.
 
@@ -274,6 +287,8 @@ def run_stream(
         cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
         started_at=started_at,
         agent_loop_observer=agent_loop_observer,
+        agent_scheduler=agent_scheduler,
+        interaction_budget=interaction_budget,
     )
 
 
@@ -288,6 +303,8 @@ def resume_stream(
     base_url: Optional[str] = None,
     model: Optional[str] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
+    agent_scheduler: AgentScheduler | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> None:
     """Resume a previously paused run from a checkpoint pickle.
 
@@ -359,6 +376,8 @@ def resume_stream(
         cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
         started_at=started_at,
         agent_loop_observer=agent_loop_observer,
+        agent_scheduler=agent_scheduler,
+        interaction_budget=interaction_budget,
     )
 
 
@@ -385,6 +404,8 @@ def _run_tick_loop(
     checkpoint_out: Optional[str],
     started_at: dt.datetime,
     agent_loop_observer: AgentLoopObserver | None = None,
+    agent_scheduler: AgentScheduler | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> None:
     """Shared tick loop for fresh runs and resumes.
 
@@ -395,6 +416,17 @@ def _run_tick_loop(
     before (emits `cancelled`, no checkpoint).
     """
     sim = env.state
+    scheduler = agent_scheduler or SequentialAgentScheduler()
+    transcript = getattr(sim, "interaction_transcript", None)
+    if transcript is None:
+        # Backwards compatibility for checkpoints created before VER-17.
+        transcript = InteractionTranscript()
+        sim.interaction_transcript = transcript
+    interaction_adapter = ForumInteractionAdapter(
+        run_id=str(sim.sim_id),
+        agent_ids=(agent.agent_id for agent in sim.agents),
+        transcript=transcript,
+    )
 
     for tick in range(start_tick, n_ticks):
         if cancel is not None and cancel.is_set():
@@ -419,11 +451,37 @@ def _run_tick_loop(
             "yes_mid": float(sim.yes_mid),
         })
 
-        # Sequential dispatch — streaming a real-time UI works much
-        # better with predictable per-agent event ordering than the
-        # 16-way thread pool used in the headless runner.
+        # Decision scheduling is explicit and replaceable. The default keeps
+        # the prior sequential observer order. Market execution still uses the
+        # environment's seeded shuffle, preserving matching semantics.
+        try:
+            schedule = validate_schedule(
+                scheduler.schedule(
+                    tick=tick,
+                    agent_ids=tuple(int(agent_id) for agent_id in obs),
+                ),
+                obs,
+                expected_tick=tick,
+            )
+        except Exception as exc:  # noqa: BLE001 - invalid scheduler is fatal
+            on_event("error", {
+                "where": "agent_scheduler",
+                "tick": tick,
+                "scheduler": getattr(
+                    scheduler, "name", type(scheduler).__name__,
+                ),
+                "message": str(exc),
+            })
+            return
+        on_event("agent_schedule", {
+            "tick": tick,
+            "scheduler": schedule.scheduler,
+            "decision_order": list(schedule.decision_order),
+            "execution_order": "environment_seeded_shuffle",
+        })
+
         actions: dict = {}
-        for aid in obs:
+        for aid in schedule.decision_order:
             if cancel is not None and cancel.is_set():
                 on_event("cancelled", {"tick": tick, "agent_id": aid})
                 return
@@ -491,12 +549,15 @@ def _run_tick_loop(
             # the post/comment text is LLM-generated, so logging it here is
             # what preserves auditability of the social content.
             def _on_forum_action(kind, payload, _aid=aid, _tick=tick):
+                messages = interaction_adapter.record(kind, payload)
                 if kind == "post":
                     on_event("forum_post", payload)
                 elif kind == "comment":
                     on_event("forum_comment", payload)
                 elif kind == "follow":
                     on_event("forum_follow", payload)
+                for message in messages:
+                    on_event("multi_agent_interaction", message.to_record())
 
             try:
                 with _LLM_SEMAPHORE:
@@ -522,6 +583,7 @@ def _run_tick_loop(
                         on_forum_action=_on_forum_action,
                         loop_context=loop_context,
                         observer=agent_loop_observer,
+                        interaction_budget=interaction_budget,
                     )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {
@@ -631,5 +693,6 @@ def _run_tick_loop(
             (dt.datetime.utcnow() - started_at).total_seconds(), 1,
         ),
         "agent_stats": agent_stats,
+        "n_interactions": len(transcript.messages),
     })
     on_event("done", {"sim_id": sim.sim_id})
