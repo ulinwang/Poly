@@ -38,6 +38,10 @@ from agent.loop import (
     AgentLoopObserver,
     AgentLoopStage,
 )
+from agent.multi_agent.protocol import (
+    DEFAULT_INTERACTION_BUDGET,
+    InteractionBudget,
+)
 from agent.personas.persona import Persona
 from agent.prompt.builder import (
     build_clob_system_prompt,
@@ -98,21 +102,21 @@ MAX_INFO_TURNS = 2
 # Max read_forum round-trips per tick. A SEPARATE budget from web search so a
 # search-heavy agent does not starve forum reading — without this they share
 # one budget and agents never see the forum, hence never comment/follow.
-MAX_FORUM_READ_TURNS = 2
+MAX_FORUM_READ_TURNS = DEFAULT_INTERACTION_BUDGET.max_forum_reads
 
 # Max number of *record* social actions (post_to_forum / comment_on_post /
 # follow_user) an agent may take per tick. Prevents an agent from spamming
 # the forum or looping forever on social actions. The loop also has a hard
 # overall turn cap (MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1) as a
 # final safety bound.
-K_SOCIAL = 2
+K_SOCIAL = DEFAULT_INTERACTION_BUDGET.max_social_actions
 
 # Callback the runner injects to log the actual search query + results
 # (the `agent_info_query` event). Signature: (query, results) -> None.
 InfoQueryCallback = Callable[[str, list[SearchResult]], None]
 
-# Callback the runner injects to log each applied forum action (so the
-# runner can emit forum_post / forum_comment / forum_follow events).
+# Callback the runner injects to log each Forum interaction. Existing callers
+# still receive post/comment/follow; the runner also handles read deliveries.
 # Signature: (kind, payload) -> None, where kind ∈
 # {"post", "comment", "follow"} and payload is a small dict.
 ForumActionCallback = Callable[[str, dict], None]
@@ -559,6 +563,7 @@ def _run_trade_stage_loop(
     on_forum_action: Optional[ForumActionCallback] = None,
     emitter: AgentLoopEmitter,
     prompt_assets: list[ResolvedPrompt] | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> tuple[dict, dict]:
     """Trade stage with a single bounded multi-turn read/social loop.
 
@@ -586,6 +591,20 @@ def _run_trade_stage_loop(
     """
     forum_enabled = forum is not None and agent_id is not None
     activity: dict = {"posts": [], "reads": [], "follows": []}
+    initial_tools = []
+    for tool in trade_tools:
+        name = _tool_name(tool)
+        if (
+            name == FORUM_READ_TOOL_NAME
+            and interaction_budget.max_forum_reads == 0
+        ):
+            continue
+        if (
+            name in FORUM_ACTION_TOOL_NAMES
+            and interaction_budget.max_social_actions == 0
+        ):
+            continue
+        initial_tools.append(tool)
     # First trade-stage call (read/social tools included via trade_tools).
     result = _generation_call(
         emitter=emitter,
@@ -597,7 +616,7 @@ def _run_trade_stage_loop(
         **base_call_kwargs,
         system_prompt=system_prompt,
         user_prompt=trade_user_prompt,
-        tools=trade_tools,
+        tools=initial_tools,
         tool_choice="auto",
     )
 
@@ -616,7 +635,12 @@ def _run_trade_stage_loop(
     social_actions = 0  # post / comment / follow
     # Hard overall cap so a misbehaving model cannot loop forever even if
     # it alternates between the budgets.
-    hard_cap = MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1
+    hard_cap = (
+        MAX_INFO_TURNS
+        + interaction_budget.max_forum_reads
+        + interaction_budget.max_social_actions
+        + 1
+    )
     total_turns = 0
     tool_iteration = 0
 
@@ -643,14 +667,27 @@ def _run_trade_stage_loop(
             hint = f" (topic: {topic})" if topic else ""
             feed = forum.get_feed_for(agent_id)
             followed = forum.followed_by(agent_id)
-            # Record what was read into social memory (newest posts the agent
-            # saw), flagging followed authors for priority.
+            # Record what was read into social memory and the typed delivery
+            # transcript (newest posts the agent saw, follow-prioritised).
+            delivered_posts: list[dict] = []
             for p in feed:
-                activity["reads"].append({
+                row = {
                     "tick": p.tick, "post_id": p.id,
                     "author_id": p.author_id, "content": p.content,
                     "followed": p.author_id in followed,
-                })
+                }
+                activity["reads"].append(row)
+                delivered_posts.append(row)
+            if on_forum_action is not None:
+                try:
+                    on_forum_action("read", {
+                        "tick": tick,
+                        "reader_id": int(agent_id),
+                        "topic": topic,
+                        "posts": delivered_posts,
+                    })
+                except Exception:  # noqa: BLE001 - audit hooks fail open
+                    pass
             return (
                 f"Your forum feed{hint} (followed authors first):\n"
                 f"{_format_feed(forum, agent_id)}"
@@ -731,8 +768,12 @@ def _run_trade_stage_loop(
         # Web search and forum reading have SEPARATE budgets so a
         # search-heavy agent can still read the forum (and then comment/follow).
         info_exhausted = info_turns >= MAX_INFO_TURNS
-        forum_read_exhausted = forum_read_turns >= MAX_FORUM_READ_TURNS
-        social_exhausted = social_actions >= K_SOCIAL
+        forum_read_exhausted = (
+            forum_read_turns >= interaction_budget.max_forum_reads
+        )
+        social_exhausted = (
+            social_actions >= interaction_budget.max_social_actions
+        )
         # On the very last allowed overall turn, force convergence by
         # dropping ALL non-terminating tools.
         last_overall = total_turns >= hard_cap - 1
@@ -801,6 +842,7 @@ def decide(
     loop_context: AgentLoopContext | None = None,
     observer: AgentLoopObserver | None = None,
     prompt_resolver: PromptResolver | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> Decision:
     """One tick. Returns a Decision (HOLD on unrecoverable failure).
 
@@ -854,7 +896,14 @@ def decide(
     emitter.emit(
         AgentLoopEventKind.LOOP_STARTED,
         AgentLoopStage.PROMPT,
-        payload={"model": model, "temperature": temperature},
+        payload={
+            "model": model,
+            "temperature": temperature,
+            "interaction_budget": {
+                "max_forum_reads": interaction_budget.max_forum_reads,
+                "max_social_actions": interaction_budget.max_social_actions,
+            },
+        },
     )
 
     if tools is None:
@@ -1005,6 +1054,7 @@ def decide(
                                 prompt_assets=[
                                     system_asset, user_asset, trade_stage_asset,
                                 ],
+                                interaction_budget=interaction_budget,
                             )
                         else:
                             # No loop: strip ALL non-terminating tools so the
@@ -1079,6 +1129,7 @@ def decide(
                         on_forum_action=on_forum_action,
                         emitter=emitter,
                         prompt_assets=[system_asset, user_asset],
+                        interaction_budget=interaction_budget,
                     )
                 else:
                     tools_eff = _drop_loop_tools(tools, info=True, forum=True)
