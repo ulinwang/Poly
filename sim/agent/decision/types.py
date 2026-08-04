@@ -93,3 +93,6 @@ class Decision:
     # True when decide() aborted because the hard wall-clock timeout was
     # exceeded (not an API error). The runner maps this to api_error.
     timeout_exceeded: bool = False
+    # Stable identity of the Agent Loop that produced this decision. Empty for
+    # legacy/manual Decision objects that did not run through decide().
+    decision_id: str = ""

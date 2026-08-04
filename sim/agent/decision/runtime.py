@@ -31,6 +31,13 @@ from agent.decision.tool_schemas import (
 )
 from agent.decision.types import AgentSnapshot, Decision, MarketSnapshot
 from agent.info import SearchResult, search_web
+from agent.loop import (
+    AgentLoopContext,
+    AgentLoopEmitter,
+    AgentLoopEventKind,
+    AgentLoopObserver,
+    AgentLoopStage,
+)
 from agent.personas.persona import Persona
 from agent.prompt.builder import build_clob_system_prompt, build_user_prompt
 
@@ -104,6 +111,124 @@ InfoQueryCallback = Callable[[str, list[SearchResult]], None]
 # Signature: (kind, payload) -> None, where kind ∈
 # {"post", "comment", "follow"} and payload is a small dict.
 ForumActionCallback = Callable[[str, dict], None]
+
+
+def _generation_call(
+    *,
+    emitter: AgentLoopEmitter,
+    stage: AgentLoopStage,
+    iteration: int,
+    call_fn,
+    max_attempts: int,
+    **kwargs,
+) -> dict:
+    """Run one provider generation and emit a fail-open lifecycle pair."""
+    tools = kwargs.get("tools") or []
+    messages = kwargs.get("messages")
+    # DeepSeek requires reasoning_content to be echoed into continuation
+    # requests, but lifecycle observers must not receive unrestricted hidden
+    # reasoning by default. Keep the provider wire payload and observer payload
+    # deliberately separate.
+    observable_messages = None
+    if messages is not None:
+        observable_messages = [
+            {key: value for key, value in message.items()
+             if key != "reasoning_content"}
+            for message in messages
+        ]
+    emitter.emit(
+        AgentLoopEventKind.GENERATION_STARTED,
+        stage,
+        iteration=iteration,
+        payload={
+            "model": kwargs.get("model", ""),
+            "tool_choice": kwargs.get("tool_choice", "auto"),
+            "tool_names": [_tool_name(tool) for tool in tools],
+            "system_prompt": kwargs.get("system_prompt"),
+            "user_prompt": kwargs.get("user_prompt"),
+            "messages": observable_messages,
+        },
+    )
+    try:
+        result = call_with_retry(
+            call_fn,
+            max_attempts=max_attempts,
+            **kwargs,
+        )
+    except Exception as exc:
+        emitter.emit(
+            AgentLoopEventKind.GENERATION_COMPLETED,
+            stage,
+            iteration=iteration,
+            payload={
+                "status": "error",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        raise
+    emitter.emit(
+        AgentLoopEventKind.GENERATION_COMPLETED,
+        stage,
+        iteration=iteration,
+        payload={
+            "status": "ok",
+            "prompt_tokens": int(result.get("prompt_tokens", 0)),
+            "completion_tokens": int(result.get("completion_tokens", 0)),
+            "tool_calls": list(_tool_calls(result)),
+            "text": result.get("text", ""),
+        },
+    )
+    return result
+
+
+def _parse_belief_with_events(
+    emitter: AgentLoopEmitter,
+    result: dict,
+    *,
+    iteration: int = 0,
+) -> dict | None:
+    emitter.emit(
+        AgentLoopEventKind.STAGE_STARTED,
+        AgentLoopStage.PARSE,
+        iteration=iteration,
+        payload={"target": "belief"},
+    )
+    belief = _parse_belief_result(result)
+    emitter.emit(
+        AgentLoopEventKind.STAGE_COMPLETED,
+        AgentLoopStage.PARSE,
+        iteration=iteration,
+        payload={"target": "belief", "valid": belief is not None},
+    )
+    return belief
+
+
+def _parse_trade_with_events(
+    emitter: AgentLoopEmitter,
+    result: dict,
+    *,
+    tick_size: float,
+    iteration: int,
+) -> dict:
+    emitter.emit(
+        AgentLoopEventKind.STAGE_STARTED,
+        AgentLoopStage.PARSE,
+        iteration=iteration,
+        payload={"target": "trade"},
+    )
+    parsed = parse_tool_call(result.get("tool_call"), tick_size=tick_size)
+    emitter.emit(
+        AgentLoopEventKind.STAGE_COMPLETED,
+        AgentLoopStage.PARSE,
+        iteration=iteration,
+        payload={
+            "target": "trade",
+            "order_type": parsed.get("order_type", "HOLD"),
+            "parsed": True,
+        },
+    )
+    return parsed
 
 
 def _tool_name(tool: dict) -> str:
@@ -417,6 +542,7 @@ def _run_trade_stage_loop(
     agent_id: Optional[int] = None,
     tick: int = 0,
     on_forum_action: Optional[ForumActionCallback] = None,
+    emitter: AgentLoopEmitter,
 ) -> tuple[dict, dict]:
     """Trade stage with a single bounded multi-turn read/social loop.
 
@@ -445,8 +571,11 @@ def _run_trade_stage_loop(
     forum_enabled = forum is not None and agent_id is not None
     activity: dict = {"posts": [], "reads": [], "follows": []}
     # First trade-stage call (read/social tools included via trade_tools).
-    result = call_with_retry(
-        call_fn,
+    result = _generation_call(
+        emitter=emitter,
+        stage=AgentLoopStage.TRADE,
+        iteration=0,
+        call_fn=call_fn,
         max_attempts=max_attempts,
         **base_call_kwargs,
         system_prompt=system_prompt,
@@ -472,6 +601,7 @@ def _run_trade_stage_loop(
     # it alternates between the budgets.
     hard_cap = MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1
     total_turns = 0
+    tool_iteration = 0
 
     def _tool_content_for(name: str, call: dict) -> str:
         """Run one continuing tool call and return the text fed back to the
@@ -533,14 +663,52 @@ def _run_trade_stage_loop(
             calls, result.get("reasoning_content")))
         for call in calls:
             name = str(call.get("name", ""))
+            emitter.emit(
+                AgentLoopEventKind.TOOL_STARTED,
+                AgentLoopStage.TOOL,
+                iteration=tool_iteration,
+                payload={
+                    "name": name,
+                    "call_id": str(call.get("id", "")),
+                    "arguments": dict(call.get("arguments") or {}),
+                    "trade_iteration": total_turns - 1,
+                },
+            )
             if name == INFO_TOOL_NAME:
                 info_turns += 1
             elif name == FORUM_READ_TOOL_NAME:
                 forum_read_turns += 1
             elif name in FORUM_ACTION_TOOL_NAMES:
                 social_actions += 1
-            messages.append(
-                _tool_result_message(call, _tool_content_for(name, call)))
+            try:
+                tool_content = _tool_content_for(name, call)
+            except Exception as exc:
+                emitter.emit(
+                    AgentLoopEventKind.TOOL_COMPLETED,
+                    AgentLoopStage.TOOL,
+                    iteration=tool_iteration,
+                    payload={
+                        "name": name,
+                        "call_id": str(call.get("id", "")),
+                        "status": "error",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                )
+                raise
+            emitter.emit(
+                AgentLoopEventKind.TOOL_COMPLETED,
+                AgentLoopStage.TOOL,
+                iteration=tool_iteration,
+                payload={
+                    "name": name,
+                    "call_id": str(call.get("id", "")),
+                    "status": "ok",
+                    "output": tool_content,
+                },
+            )
+            tool_iteration += 1
+            messages.append(_tool_result_message(call, tool_content))
 
         # --- decide which tools to offer on the next turn ---
         # Web search and forum reading have SEPARATE budgets so a
@@ -567,8 +735,11 @@ def _run_trade_stage_loop(
                 continue
             next_tools.append(t)
 
-        result = call_with_retry(
-            continue_fn,
+        result = _generation_call(
+            emitter=emitter,
+            stage=AgentLoopStage.TRADE,
+            iteration=total_turns,
+            call_fn=continue_fn,
             max_attempts=max_attempts,
             **base_call_kwargs,
             messages=messages,
@@ -609,6 +780,8 @@ def decide(
     tick: int = 0,
     forum_enabled: bool = True,
     on_forum_action: Optional[ForumActionCallback] = None,
+    loop_context: AgentLoopContext | None = None,
+    observer: AgentLoopObserver | None = None,
 ) -> Decision:
     """One tick. Returns a Decision (HOLD on unrecoverable failure).
 
@@ -635,7 +808,27 @@ def decide(
     applied action so the runner can emit forum_* events. The forum
     *mechanism* is deterministic; the post/comment text is LLM-generated and
     therefore not bit-for-bit reproducible (the events log it instead).
+
+    `loop_context` supplies stable run/tick/agent identity. `observer` receives
+    ordered backend-neutral lifecycle events; observer failures are isolated
+    and never change the returned decision. Both are optional for backwards
+    compatibility.
     """
+    resolved_agent_id = int(
+        agent_id if agent_id is not None else getattr(agent, "agent_id", -1)
+    )
+    context = loop_context or AgentLoopContext.create(
+        run_id="standalone",
+        tick=tick,
+        agent_id=resolved_agent_id,
+    )
+    emitter = AgentLoopEmitter(context, observer)
+    emitter.emit(
+        AgentLoopEventKind.LOOP_STARTED,
+        AgentLoopStage.PROMPT,
+        payload={"model": model, "temperature": temperature},
+    )
+
     if tools is None:
         tools = TOOL_SCHEMAS
     belief_tools, trade_tools = _split_belief_and_trade_tools(tools)
@@ -657,14 +850,32 @@ def decide(
     _forum = forum if use_forum else None
     _forum_agent_id = agent_id if use_forum else None
 
-    system_prompt = build_clob_system_prompt(
-        persona, question, description, end_date, tick_size=tick_size,
-        prompt_language=prompt_language,
-        info_enabled=use_info, forum_enabled=use_forum,
-    )
-    user_prompt = build_user_prompt(
-        market, agent, prompt_language=prompt_language,
-        forum_enabled=use_forum,
+    emitter.emit(AgentLoopEventKind.STAGE_STARTED, AgentLoopStage.PROMPT)
+    try:
+        system_prompt = build_clob_system_prompt(
+            persona, question, description, end_date, tick_size=tick_size,
+            prompt_language=prompt_language,
+            info_enabled=use_info, forum_enabled=use_forum,
+        )
+        user_prompt = build_user_prompt(
+            market, agent, prompt_language=prompt_language,
+            forum_enabled=use_forum,
+        )
+    except Exception as exc:
+        emitter.emit(
+            AgentLoopEventKind.LOOP_FAILED,
+            AgentLoopStage.PROMPT,
+            payload={"error_type": type(exc).__name__, "error": str(exc)},
+        )
+        raise
+    emitter.emit(
+        AgentLoopEventKind.STAGE_COMPLETED,
+        AgentLoopStage.PROMPT,
+        payload={
+            "system_prompt_chars": len(system_prompt),
+            "user_prompt_chars": len(user_prompt),
+            "language": prompt_language,
+        },
     )
 
     started = time.time()
@@ -689,8 +900,11 @@ def decide(
                 base_call_kwargs["thinking"] = thinking
 
             if belief_tools:
-                belief_result = call_with_retry(
-                    call_fn,
+                belief_result = _generation_call(
+                    emitter=emitter,
+                    stage=AgentLoopStage.BELIEF,
+                    iteration=0,
+                    call_fn=call_fn,
                     max_attempts=max_attempts,
                     **base_call_kwargs,
                     system_prompt=system_prompt,
@@ -702,7 +916,9 @@ def decide(
                 )
                 prompt_tokens += belief_result.get("prompt_tokens", 0)
                 completion_tokens += belief_result.get("completion_tokens", 0)
-                belief_update = _parse_belief_result(belief_result)
+                belief_update = _parse_belief_with_events(
+                    emitter, belief_result, iteration=0,
+                )
                 if belief_update is None:
                     raw = _stage_raw(belief_stage=belief_result)
                     parsed["reasoning"] = (
@@ -735,6 +951,7 @@ def decide(
                                 agent_id=_forum_agent_id,
                                 tick=tick,
                                 on_forum_action=on_forum_action,
+                                emitter=emitter,
                             )
                         else:
                             # No loop: strip ALL non-terminating tools so the
@@ -742,8 +959,11 @@ def decide(
                             trade_tools_eff = _drop_loop_tools(
                                 trade_tools, info=True, forum=True,
                             )
-                            trade_result = call_with_retry(
-                                call_fn,
+                            trade_result = _generation_call(
+                                emitter=emitter,
+                                stage=AgentLoopStage.TRADE,
+                                iteration=0,
+                                call_fn=call_fn,
                                 max_attempts=max_attempts,
                                 **base_call_kwargs,
                                 system_prompt=system_prompt,
@@ -757,8 +977,11 @@ def decide(
                             belief_stage=belief_result,
                             trade_stage=trade_result,
                         )
-                        parsed = parse_tool_call(
-                            trade_result.get("tool_call"), tick_size=tick_size,
+                        parsed = _parse_trade_with_events(
+                            emitter,
+                            trade_result,
+                            tick_size=tick_size,
+                            iteration=1,
                         )
                         # Surface the trade-stage reasoning for display: prefer the
                         # thinking-mode chain-of-thought, then any prose in `text`
@@ -798,11 +1021,15 @@ def decide(
                         agent_id=_forum_agent_id,
                         tick=tick,
                         on_forum_action=on_forum_action,
+                        emitter=emitter,
                     )
                 else:
                     tools_eff = _drop_loop_tools(tools, info=True, forum=True)
-                    result = call_with_retry(
-                        call_fn,
+                    result = _generation_call(
+                        emitter=emitter,
+                        stage=AgentLoopStage.TRADE,
+                        iteration=0,
+                        call_fn=call_fn,
                         max_attempts=max_attempts,
                         **base_call_kwargs,
                         system_prompt=system_prompt,
@@ -813,11 +1040,15 @@ def decide(
                 prompt_tokens += result.get("prompt_tokens", 0)
                 completion_tokens += result.get("completion_tokens", 0)
                 raw = result.get("raw", "")
-                parsed = parse_tool_call(result.get("tool_call"), tick_size=tick_size)
+                parsed = _parse_trade_with_events(
+                    emitter, result, tick_size=tick_size, iteration=0,
+                )
                 # Back-compat path for configs that disable the explicit
                 # two-stage belief tool.
                 if parsed["order_type"] != "UPDATE_BELIEF":
-                    belief_update = _parse_belief_result(result)
+                    belief_update = _parse_belief_with_events(
+                        emitter, result, iteration=1,
+                    )
                 else:
                     belief_update = parsed.get("belief_update")
                 if not parsed["reasoning"]:
@@ -837,7 +1068,30 @@ def decide(
         api_error = f"sdk: {type(exc).__name__}: {exc}"
 
     latency_ms = int((time.time() - started) * 1000)
-    return Decision(
+    if api_error:
+        emitter.emit(
+            AgentLoopEventKind.LOOP_FAILED,
+            AgentLoopStage.FINISH,
+            payload={"error": api_error, "handled": True},
+        )
+
+    emitter.emit(
+        AgentLoopEventKind.STAGE_STARTED,
+        AgentLoopStage.EVALUATE,
+    )
+    emitter.emit(
+        AgentLoopEventKind.STAGE_COMPLETED,
+        AgentLoopStage.EVALUATE,
+        payload={
+            "has_api_error": bool(api_error),
+            "has_belief_update": belief_update is not None,
+            "order_type": parsed["order_type"],
+            "timeout_exceeded": timeout_exceeded,
+        },
+    )
+
+    emitter.emit(AgentLoopEventKind.STAGE_STARTED, AgentLoopStage.FINISH)
+    decision = Decision(
         order_type=parsed["order_type"], outcome=parsed["outcome"],
         side=parsed["side"], price=parsed["price"],
         size_usd=parsed["size_usd"], reasoning=parsed["reasoning"],
@@ -847,4 +1101,23 @@ def decide(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         timeout_exceeded=timeout_exceeded,
+        decision_id=context.decision_id,
     )
+    completion_payload = {
+        "status": "degraded" if api_error else "ok",
+        "order_type": decision.order_type,
+        "prompt_tokens": decision.prompt_tokens,
+        "completion_tokens": decision.completion_tokens,
+        "latency_ms": decision.api_latency_ms,
+    }
+    emitter.emit(
+        AgentLoopEventKind.STAGE_COMPLETED,
+        AgentLoopStage.FINISH,
+        payload=completion_payload,
+    )
+    emitter.emit(
+        AgentLoopEventKind.LOOP_COMPLETED,
+        AgentLoopStage.FINISH,
+        payload=completion_payload,
+    )
+    return decision
