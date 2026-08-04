@@ -63,7 +63,17 @@ def test_exhausted_token_budget_skips_future_provider_calls(monkeypatch):
 
     agent = env.state.agents[0]
     assert len(provider_calls) == 1
+    context = provider_calls[0]["loop_context"]
+    assert context.run_id == "budget-regression"
+    assert context.tick == 0
+    assert context.agent_id == 0
+    assert context.decision_id == "budget-regression:tick:0:agent:0"
     assert agent.budget_exceeded is True
     assert agent.total_prompt_tokens + agent.total_completion_tokens == 5
     assert [row[3] for row in env.state.actions_log] == ["HOLD", "HOLD", "HOLD"]
     assert sum(kind == "agent_budget_hold" for kind, _ in events) == 2
+    decision_events = [payload for kind, payload in events
+                       if kind == "agent_decision"]
+    assert [event["decision_id"] for event in decision_events] == [
+        f"budget-regression:tick:{tick}:agent:0" for tick in range(3)
+    ]

@@ -28,6 +28,7 @@ from typing import Callable, Optional
 from agent.decision import Decision, decide
 from agent.factory import init_agents, build_synthetic_population
 from agent.features.market import derive_priors
+from agent.loop import AgentLoopContext, AgentLoopObserver
 from data.query.markets import get_market_meta
 from data.store.config import get_settings
 from environment.env import PolyEnv
@@ -81,6 +82,7 @@ def _budget_hold_decision(
     total_tokens: int,
     token_budget: int,
     decision: Decision | None = None,
+    decision_id: str = "",
 ) -> Decision:
     """Return a zero-cost HOLD after an agent exhausts its token budget.
 
@@ -96,6 +98,7 @@ def _budget_hold_decision(
             size_usd=0.0,
             reasoning=reason,
             api_error="budget: token_budget_exceeded",
+            decision_id=decision_id or decision.decision_id,
         )
     return Decision(
         order_type="HOLD",
@@ -107,6 +110,7 @@ def _budget_hold_decision(
         raw_response="",
         api_latency_ms=0,
         api_error="budget: token_budget_exceeded",
+        decision_id=decision_id,
     )
 
 
@@ -126,6 +130,7 @@ def run_stream(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    agent_loop_observer: AgentLoopObserver | None = None,
 ) -> None:
     """Execute one simulation, streaming events through `on_event`.
 
@@ -136,6 +141,10 @@ def run_stream(
     If `pause` is set at a tick boundary and `checkpoint_out` is given,
     the run writes a checkpoint to that path, emits a `paused` event and
     returns cleanly (no `settled`/`done`). Resume later via `resume_stream`.
+
+    `agent_loop_observer`, when supplied, receives lifecycle events for every
+    provider-backed agent decision. It is not invoked for deterministic
+    budget HOLDs, which remain visible through the normal runner event stream.
     """
     settings = get_settings()
     started_at = dt.datetime.utcnow()
@@ -264,6 +273,7 @@ def run_stream(
         settings=settings, on_event=on_event,
         cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
         started_at=started_at,
+        agent_loop_observer=agent_loop_observer,
     )
 
 
@@ -277,6 +287,7 @@ def resume_stream(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    agent_loop_observer: AgentLoopObserver | None = None,
 ) -> None:
     """Resume a previously paused run from a checkpoint pickle.
 
@@ -347,6 +358,7 @@ def resume_stream(
         settings=settings, on_event=on_event,
         cancel=cancel, pause=pause, checkpoint_out=checkpoint_out,
         started_at=started_at,
+        agent_loop_observer=agent_loop_observer,
     )
 
 
@@ -372,6 +384,7 @@ def _run_tick_loop(
     pause: Optional[threading.Event],
     checkpoint_out: Optional[str],
     started_at: dt.datetime,
+    agent_loop_observer: AgentLoopObserver | None = None,
 ) -> None:
     """Shared tick loop for fresh runs and resumes.
 
@@ -417,6 +430,11 @@ def _run_tick_loop(
             market_snap, agent_snap = obs[aid]
             agent = next(a for a in sim.agents if a.agent_id == aid)
             t0 = time.time()
+            loop_context = AgentLoopContext.create(
+                run_id=str(sim.sim_id),
+                tick=tick,
+                agent_id=int(aid),
+            )
 
             # A budget-exhausted agent must not call the provider again.
             # Emit a deterministic HOLD for the remaining ticks instead.
@@ -427,6 +445,7 @@ def _run_tick_loop(
                 decision = _budget_hold_decision(
                     total_tokens=total_tokens,
                     token_budget=agent.token_budget,
+                    decision_id=loop_context.decision_id,
                 )
                 agent.n_holds += 1
                 on_event("agent_budget_hold", {
@@ -450,6 +469,7 @@ def _run_tick_loop(
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "elapsed_s": 0.0,
+                    "decision_id": decision.decision_id,
                 })
                 continue
 
@@ -500,10 +520,13 @@ def _run_tick_loop(
                         tick=tick,
                         forum_enabled=True,
                         on_forum_action=_on_forum_action,
+                        loop_context=loop_context,
+                        observer=agent_loop_observer,
                     )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {
                     "tick": tick, "agent_id": aid, "message": str(exc),
+                    "decision_id": loop_context.decision_id,
                 })
                 agent.n_errors += 1
                 continue
@@ -532,6 +555,7 @@ def _run_tick_loop(
                         total_tokens=total_tokens,
                         token_budget=agent.token_budget,
                         decision=decision,
+                        decision_id=loop_context.decision_id,
                     )
                     on_event("agent_budget_exceeded", {
                         "tick": tick, "agent_id": aid,
@@ -554,6 +578,7 @@ def _run_tick_loop(
                 "prompt_tokens": int(decision.prompt_tokens),
                 "completion_tokens": int(decision.completion_tokens),
                 "elapsed_s": round(time.time() - t0, 2),
+                "decision_id": decision.decision_id,
             })
 
         obs, info = env.step(actions)
