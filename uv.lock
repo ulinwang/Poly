@@ -2378,6 +2378,9 @@ dependencies = [
 prompt-management = [
     { name = "langfuse" },
 ]
+observability = [
+    { name = "langfuse" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2392,6 +2395,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "langfuse", marker = "extra == 'prompt-management'", specifier = ">=4,<5" },
+    { name = "langfuse", marker = "extra == 'observability'", specifier = ">=4,<5" },
     { name = "litellm", specifier = ">=1.50" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "networkx", specifier = ">=3.2" },
@@ -2411,7 +2415,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27" },
     { name = "web3", specifier = "==6.15.1" },
 ]
-provides-extras = ["prompt-management"]
+provides-extras = ["observability", "prompt-management"]
 
 [package.metadata.requires-dev]
 dev = [

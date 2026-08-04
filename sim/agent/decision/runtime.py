@@ -14,6 +14,7 @@ import json
 import signal
 import time
 import urllib.error
+from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from agent.decision.llm import call_deepseek_with_tools, continue_with_tools
@@ -149,6 +150,7 @@ def _generation_call(
     prompt_assets = list(prompt_assets or [])
     observable_payload = {
         "model": kwargs.get("model", ""),
+        "temperature": kwargs.get("temperature"),
         "tool_choice": kwargs.get("tool_choice", "auto"),
         "tool_names": [_tool_name(tool) for tool in tools],
         "prompt_identity": [
@@ -843,6 +845,7 @@ def decide(
     observer: AgentLoopObserver | None = None,
     prompt_resolver: PromptResolver | None = None,
     interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
+    loop_metadata: Mapping[str, Any] | None = None,
 ) -> Decision:
     """One tick. Returns a Decision (HOLD on unrecoverable failure).
 
@@ -899,10 +902,12 @@ def decide(
         payload={
             "model": model,
             "temperature": temperature,
+            "persona_type": persona.persona_type,
             "interaction_budget": {
                 "max_forum_reads": interaction_budget.max_forum_reads,
                 "max_social_actions": interaction_budget.max_social_actions,
             },
+            **dict(loop_metadata or {}),
         },
     )
 

@@ -144,6 +144,9 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED` | 可选的托管提示词查询；本地 v1 始终兜底 |
 | `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud 或自托管连接 |
 | `POLYMETL_LANGFUSE_PROMPT_LABEL` / `_CACHE_TTL_SECONDS` | 托管提示词发布标签与 SDK 缓存 TTL |
+| `POLYMETL_LANGFUSE_ENABLED` | 可选的 Langfuse Agent Loop 追踪，默认关闭 |
+| `POLYMETL_LANGFUSE_ENVIRONMENT` / `_RELEASE` / `_SAMPLE_RATE` | 追踪环境、发布版本与采样率 |
+| `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata`（安全默认）或 `full` 可见提示词/输出采集 |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
@@ -164,7 +167,7 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse 数据库（默认 `polymetl`） |
 
-### 可选托管提示词
+### 可选 Langfuse LLMOps
 
 系统提示词、状态提示词、belief 阶段和 trade 阶段现在都通过版本化 registry
 解析。仓库内 v1 是默认值和强制兜底，因此提示词服务异常不会让 Agent tick
@@ -172,19 +175,33 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 SHA-256 内容哈希、语言和渲染变量；公开 runner introspection 只暴露身份与变量名，
 不暴露凭据和提示词正文。
 
-启用 Langfuse Prompt Management：
+安装提示词管理与可观测性支持：
 
 ```bash
-uv sync --extra prompt-management
+uv sync --extra prompt-management --extra observability
 ```
 
-然后按 `.env.example` 配置 `POLYMETL_LANGFUSE_*`，并设置
-`POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true`。约定的 text prompt 名称为
+按 `.env.example` 配置共用的 `POLYMETL_LANGFUSE_*` 连接参数。设置
+`POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true` 可启用托管提示词。约定的
+text prompt 名称为
 `poly/clob-system/{en,zh}`、`poly/user-state/{en,zh}`、
 `poly/belief-stage/{en,zh}` 和 `poly/trade-stage/{en,zh}`。选中的 Langfuse
-prompt 对象会通过进程内 generation 事件传给 tracing adapter，以便关联具体版本。
+prompt 对象会在同时启用追踪时直接关联到对应的 Langfuse generation。
 
 发布和回退说明见 `sim/agent/prompt/README.md`。
+
+设置 `POLYMETL_LANGFUSE_ENABLED=true` 后，每次实验会按
+“experiment → tick → agent loop → generation/tool”记录。
+
+追踪包含仿真/决策标识、persona 与预算、模型、耗时、token 用量、提示词占位
+版本和错误。遥测始终 fail-open：SDK 或凭据缺失、导出服务故障、flush 超时
+都不会改变实验行为。
+
+推荐保留默认 `metadata` 策略，它不上传提示词、消息、工具参数、搜索结果和
+模型输出内容。`full` 会在敏感字段脱敏后采集可见输入输出；模型隐藏推理和
+原始响应永不导出。使用 Langfuse Cloud 前应先确认数据策略；自托管时把
+`POLYMETL_LANGFUSE_BASE_URL` 改为自己的 HTTPS 地址。完整配置和生命周期
+映射见 `sim/observability/README.md`。
 
 自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
 服务等私网端点，请精确放行其 origin，例如

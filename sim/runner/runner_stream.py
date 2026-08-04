@@ -21,6 +21,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable, Optional
@@ -28,7 +29,11 @@ from typing import Callable, Optional
 from agent.decision import Decision, decide
 from agent.factory import init_agents, build_synthetic_population
 from agent.features.market import derive_priors
-from agent.loop import AgentLoopContext, AgentLoopObserver
+from agent.loop import (
+    AgentLoopContext,
+    AgentLoopObserver,
+    CompositeAgentLoopObserver,
+)
 from agent.multi_agent.forum_adapter import ForumInteractionAdapter
 from agent.multi_agent.protocol import (
     DEFAULT_INTERACTION_BUDGET,
@@ -46,6 +51,7 @@ from environment.env import PolyEnv
 from environment.seeders.from_clob_history import seed as seed_from_clob
 from evaluation.metrics.macro import compute_tick_metrics
 from evaluation.metrics.micro import snapshot_all
+from observability import create_observability
 
 try:
     from .checkpoint import load_checkpoint, rng_from_state, save_checkpoint
@@ -135,7 +141,7 @@ def _budget_hold_decision(
     )
 
 
-def run_stream(
+def _run_stream_impl(
     *,
     slug: str,
     n_agents: int,
@@ -302,7 +308,7 @@ def run_stream(
     )
 
 
-def resume_stream(
+def _resume_stream_impl(
     *,
     resume_checkpoint: str,
     on_event: EventCallback,
@@ -389,6 +395,124 @@ def resume_stream(
         agent_scheduler=agent_scheduler,
         interaction_budget=interaction_budget,
     )
+
+
+def _observed_agent_loop_observer(
+    supplied: AgentLoopObserver | None,
+    telemetry,
+) -> AgentLoopObserver:
+    if supplied is None:
+        return telemetry.agent_loop_observer
+    return CompositeAgentLoopObserver((supplied, telemetry.agent_loop_observer))
+
+
+def run_stream(
+    *,
+    slug: str,
+    n_agents: int,
+    n_ticks_override: Optional[int],
+    persona_set: str = "archetype",
+    seed: int = 0,
+    temperature: float = 0.0,
+    on_event: EventCallback,
+    cancel: Optional[threading.Event] = None,
+    pause: Optional[threading.Event] = None,
+    checkpoint_out: Optional[str] = None,
+    data_dir: Path = Path("data"),
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
+    agent_loop_observer: AgentLoopObserver | None = None,
+) -> None:
+    """Run a simulation with optional, fail-open observability."""
+    session_id = f"poly:{uuid.uuid4()}"
+    telemetry = create_observability(
+        get_settings(),
+        session_id=session_id,
+        metadata={
+            "mode": "fresh",
+            "market_slug": slug,
+            "n_agents": n_agents,
+            "n_ticks_requested": n_ticks_override,
+            "persona_set": persona_set,
+            "seed": seed,
+        },
+    )
+
+    def observed_event(kind: str, payload: dict) -> None:
+        telemetry.on_runner_event(kind, payload)
+        on_event(kind, payload)
+
+    try:
+        _run_stream_impl(
+            slug=slug,
+            n_agents=n_agents,
+            n_ticks_override=n_ticks_override,
+            persona_set=persona_set,
+            seed=seed,
+            temperature=temperature,
+            on_event=observed_event,
+            cancel=cancel,
+            pause=pause,
+            checkpoint_out=checkpoint_out,
+            data_dir=data_dir,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            agent_loop_observer=_observed_agent_loop_observer(
+                agent_loop_observer, telemetry,
+            ),
+        )
+    except BaseException as exc:
+        telemetry.record_fatal_error(exc)
+        raise
+    finally:
+        telemetry.close()
+
+
+def resume_stream(
+    *,
+    resume_checkpoint: str,
+    on_event: EventCallback,
+    cancel: Optional[threading.Event] = None,
+    pause: Optional[threading.Event] = None,
+    checkpoint_out: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    model: Optional[str] = None,
+    agent_loop_observer: AgentLoopObserver | None = None,
+) -> None:
+    """Resume a simulation with optional, fail-open observability."""
+    session_id = f"poly:{uuid.uuid4()}"
+    telemetry = create_observability(
+        get_settings(),
+        session_id=session_id,
+        metadata={"mode": "resume"},
+    )
+
+    def observed_event(kind: str, payload: dict) -> None:
+        telemetry.on_runner_event(kind, payload)
+        on_event(kind, payload)
+
+    try:
+        _resume_stream_impl(
+            resume_checkpoint=resume_checkpoint,
+            on_event=observed_event,
+            cancel=cancel,
+            pause=pause,
+            checkpoint_out=checkpoint_out,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            agent_loop_observer=_observed_agent_loop_observer(
+                agent_loop_observer, telemetry,
+            ),
+        )
+    except BaseException as exc:
+        telemetry.record_fatal_error(exc)
+        raise
+    finally:
+        telemetry.close()
 
 
 def _run_tick_loop(
@@ -595,6 +719,12 @@ def _run_tick_loop(
                         loop_context=loop_context,
                         observer=agent_loop_observer,
                         interaction_budget=interaction_budget,
+                        loop_metadata={
+                            "persona_type": agent.persona.persona_type,
+                            "token_budget": int(agent.token_budget),
+                            "persona_set": persona_set,
+                            "market_slug": slug,
+                        },
                     )
             except Exception as exc:        # noqa: BLE001
                 on_event("agent_decision_error", {

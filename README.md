@@ -163,6 +163,9 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED` | optional managed prompt lookup; local v1 remains the fallback |
 | `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud or self-hosted connection |
 | `POLYMETL_LANGFUSE_PROMPT_LABEL` / `_CACHE_TTL_SECONDS` | managed prompt rollout label and SDK cache TTL |
+| `POLYMETL_LANGFUSE_ENABLED` | optional Langfuse Agent Loop tracing; disabled by default |
+| `POLYMETL_LANGFUSE_ENVIRONMENT` / `_RELEASE` / `_SAMPLE_RATE` | trace deployment identity and sampling |
+| `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata` (safe default) or `full` visible prompt/output capture |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
 | `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
@@ -182,7 +185,7 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_CLICKHOUSE_USER` | local/non-Compose ClickHouse user; Compose fixes this to `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | non-empty ClickHouse password required by Compose |
 
-### Optional managed prompts
+### Optional Langfuse LLMOps
 
 Poly resolves every system, state, belief-stage, and trade-stage prompt through
 a versioned registry. Repository template v1 is the default and guaranteed
@@ -191,20 +194,37 @@ and generation lifecycle event records source, name, version/label, SHA-256
 content hash, language, and render variables; public runner introspection
 exposes the identity and variable names without credentials or prompt content.
 
-To enable Langfuse Prompt Management:
+To install prompt management and tracing support:
 
 ```bash
-uv sync --extra prompt-management
+uv sync --extra prompt-management --extra observability
 ```
 
-Then configure the `POLYMETL_LANGFUSE_*` variables shown in `.env.example` and
-set `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true`. The expected text prompt
+Configure the shared `POLYMETL_LANGFUSE_*` connection variables shown in
+`.env.example`. Set `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true` for
+managed prompts. The expected text prompt
 names are `poly/clob-system/{en,zh}`, `poly/user-state/{en,zh}`,
 `poly/belief-stage/{en,zh}`, and `poly/trade-stage/{en,zh}`. The selected
-managed prompt object is carried on the in-process generation event so a
-Langfuse tracing adapter can link the prompt version to the generation.
+managed prompt object is linked directly to the matching Langfuse generation
+when tracing is also enabled.
 
 See `sim/agent/prompt/README.md` for rollout and fallback details.
+
+Set `POLYMETL_LANGFUSE_ENABLED=true` to record each simulation as
+`experiment → tick → agent loop → generation/tool`.
+
+Traces include simulation/decision identity, persona and
+budget metadata, model, latency, token usage, prompt placeholder identity, and
+errors. Telemetry is fail-open: a missing SDK, missing credentials, exporter
+outage, or flush timeout never changes simulation behavior.
+
+`metadata` is the recommended capture policy and omits prompt, message, tool
+argument, search result, and model-output content. `full` includes visible
+inputs/outputs after secret redaction; hidden provider reasoning and raw
+responses are never exported. Review your data policy before enabling `full`,
+especially when using Langfuse Cloud. For self-hosted Langfuse, change
+`POLYMETL_LANGFUSE_BASE_URL` to your HTTPS endpoint. See
+`sim/observability/README.md` for the full configuration and lifecycle map.
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse database (default `polymetl`) |
 
 Experiment limits are enforced by the server. The web UI reads the effective
