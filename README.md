@@ -238,8 +238,8 @@ uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
 # Backend (vitest)
 cd apps/server && npm test && npm run lint
 
-# Frontend (build + lint; vitest for hooks/stores)
-cd apps/web && npm run build && npm run lint && npx vitest run
+# Frontend (unit tests + build + lint)
+cd apps/web && npm test && npm run build && npm run lint
 ```
 
 ### Continuous integration
