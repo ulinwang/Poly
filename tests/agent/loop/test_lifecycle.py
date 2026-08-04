@@ -12,8 +12,11 @@ from agent.loop import (
     AgentLoopContext,
     AgentLoopEventKind,
     AgentLoopStage,
+    CompositeAgentLoopObserver,
 )
 from agent.personas.persona import Persona
+from agent.prompt.registry import PromptResolver
+from evaluation.agent_loop import AgentLoopEvaluationObserver, evaluate_decision
 
 
 class RecordingObserver:
@@ -108,6 +111,7 @@ def test_context_and_step_ids_are_stable_and_immutable():
 
 def test_two_stage_decision_emits_ordered_lifecycle():
     observer = RecordingObserver()
+    evaluation_observer = AgentLoopEvaluationObserver()
     context = AgentLoopContext.create(run_id="sim-42", tick=3, agent_id=7)
 
     def fake_llm(**kwargs):
@@ -127,11 +131,18 @@ def test_two_stage_decision_emits_ordered_lifecycle():
         call_fn=fake_llm,
         max_attempts=1,
         loop_context=context,
-        observer=observer,
+        observer=CompositeAgentLoopObserver((observer, evaluation_observer)),
     )
 
     assert decision.decision_id == context.decision_id
     assert decision.order_type == "MARKET"
+    assert [item["name"] for item in decision.prompt_metadata] == [
+        "poly/clob-system/en",
+        "poly/user-state/en",
+        "poly/belief-stage/en",
+        "poly/trade-stage/en",
+    ]
+    assert all(len(item["content_hash"]) == 64 for item in decision.prompt_metadata)
     assert [event.sequence for event in observer.events] == list(
         range(len(observer.events))
     )
@@ -145,7 +156,24 @@ def test_two_stage_decision_emits_ordered_lifecycle():
         AgentLoopStage.BELIEF,
         AgentLoopStage.TRADE,
     ]
+    assert all(event.payload["latency_ms"] >= 0 for event in generations)
     assert all(event.context.loop == context for event in observer.events)
+    generation_start = next(
+        event for event in observer.events
+        if event.kind == AgentLoopEventKind.GENERATION_STARTED
+    )
+    assert generation_start.payload["prompt_identity"]
+    scores = evaluate_decision(
+        decision,
+        run_id=context.run_id,
+        tick=context.tick,
+        agent_id=context.agent_id,
+        model="mock-model",
+        lifecycle_events=evaluation_observer.pop(context.decision_id),
+    )
+    assert all(score.passed for score in scores if score.hard)
+    assert all(score.step_id == f"{context.decision_id}:evaluate:0"
+               for score in scores)
 
 
 def test_tool_loop_emits_tool_pair_and_generation_iterations(monkeypatch):
@@ -261,3 +289,40 @@ def test_observer_failure_does_not_change_decision():
 
     assert decision.order_type == "MARKET"
     assert decision.api_error == ""
+
+
+def test_remote_prompt_failure_warns_and_uses_local_prompt():
+    class BrokenPromptClient:
+        def get_prompt(self, name, **kwargs):  # noqa: ARG002
+            raise RuntimeError("prompt service offline")
+
+    observer = RecordingObserver()
+
+    def fake_llm(**kwargs):
+        names = {tool["function"]["name"] for tool in kwargs["tools"]}
+        return _belief_call() if names == {"update_belief"} else _trade_call()
+
+    decision = decide(
+        persona=_persona(),
+        question="Q?",
+        description="R",
+        end_date="2027",
+        market=_market(),
+        agent=_agent(),
+        api_key="unused",
+        base_url="",
+        model="mock-model",
+        call_fn=fake_llm,
+        max_attempts=1,
+        observer=observer,
+        prompt_resolver=PromptResolver(client=BrokenPromptClient()),
+    )
+
+    assert decision.order_type == "MARKET"
+    assert all(item["source"] == "fallback" for item in decision.prompt_metadata)
+    warnings = [
+        event for event in observer.events
+        if event.kind == AgentLoopEventKind.PROMPT_RESOLUTION_WARNING
+    ]
+    assert len(warnings) == 4
+    assert all(event.payload["fallback"] == "local" for event in warnings)

@@ -14,6 +14,7 @@ import json
 import signal
 import time
 import urllib.error
+from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from agent.decision.llm import call_deepseek_with_tools, continue_with_tools
@@ -38,8 +39,17 @@ from agent.loop import (
     AgentLoopObserver,
     AgentLoopStage,
 )
+from agent.multi_agent.protocol import (
+    DEFAULT_INTERACTION_BUDGET,
+    InteractionBudget,
+)
 from agent.personas.persona import Persona
-from agent.prompt.builder import build_clob_system_prompt, build_user_prompt
+from agent.prompt.builder import (
+    build_clob_system_prompt,
+    build_stage_prompt,
+    build_user_prompt,
+)
+from agent.prompt.registry import PromptResolver, ResolvedPrompt, get_prompt_resolver
 
 
 class _DecisionTimeout(Exception):
@@ -93,21 +103,21 @@ MAX_INFO_TURNS = 2
 # Max read_forum round-trips per tick. A SEPARATE budget from web search so a
 # search-heavy agent does not starve forum reading — without this they share
 # one budget and agents never see the forum, hence never comment/follow.
-MAX_FORUM_READ_TURNS = 2
+MAX_FORUM_READ_TURNS = DEFAULT_INTERACTION_BUDGET.max_forum_reads
 
 # Max number of *record* social actions (post_to_forum / comment_on_post /
 # follow_user) an agent may take per tick. Prevents an agent from spamming
 # the forum or looping forever on social actions. The loop also has a hard
 # overall turn cap (MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1) as a
 # final safety bound.
-K_SOCIAL = 2
+K_SOCIAL = DEFAULT_INTERACTION_BUDGET.max_social_actions
 
 # Callback the runner injects to log the actual search query + results
 # (the `agent_info_query` event). Signature: (query, results) -> None.
 InfoQueryCallback = Callable[[str, list[SearchResult]], None]
 
-# Callback the runner injects to log each applied forum action (so the
-# runner can emit forum_post / forum_comment / forum_follow events).
+# Callback the runner injects to log each Forum interaction. Existing callers
+# still receive post/comment/follow; the runner also handles read deliveries.
 # Signature: (kind, payload) -> None, where kind ∈
 # {"post", "comment", "follow"} and payload is a small dict.
 ForumActionCallback = Callable[[str, dict], None]
@@ -120,6 +130,7 @@ def _generation_call(
     iteration: int,
     call_fn,
     max_attempts: int,
+    prompt_assets: list[ResolvedPrompt] | None = None,
     **kwargs,
 ) -> dict:
     """Run one provider generation and emit a fail-open lifecycle pair."""
@@ -136,19 +147,35 @@ def _generation_call(
              if key != "reasoning_content"}
             for message in messages
         ]
+    prompt_assets = list(prompt_assets or [])
+    observable_payload = {
+        "model": kwargs.get("model", ""),
+        "temperature": kwargs.get("temperature"),
+        "tool_choice": kwargs.get("tool_choice", "auto"),
+        "tool_names": [_tool_name(tool) for tool in tools],
+        "prompt_identity": [
+            asset.identity.to_dict() for asset in prompt_assets
+        ],
+        "system_prompt": kwargs.get("system_prompt"),
+        "user_prompt": kwargs.get("user_prompt"),
+        "messages": observable_messages,
+    }
+    managed_prompt = next(
+        (asset.provider_prompt for asset in reversed(prompt_assets)
+         if asset.provider_prompt is not None),
+        None,
+    )
+    if managed_prompt is not None:
+        # Private in-process link for Langfuse observers. It is never copied
+        # to runner/SSE payloads and contains no credentials.
+        observable_payload["_langfuse_prompt"] = managed_prompt
     emitter.emit(
         AgentLoopEventKind.GENERATION_STARTED,
         stage,
         iteration=iteration,
-        payload={
-            "model": kwargs.get("model", ""),
-            "tool_choice": kwargs.get("tool_choice", "auto"),
-            "tool_names": [_tool_name(tool) for tool in tools],
-            "system_prompt": kwargs.get("system_prompt"),
-            "user_prompt": kwargs.get("user_prompt"),
-            "messages": observable_messages,
-        },
+        payload=observable_payload,
     )
+    generation_started_at = time.perf_counter()
     try:
         result = call_with_retry(
             call_fn,
@@ -164,6 +191,9 @@ def _generation_call(
                 "status": "error",
                 "error_type": type(exc).__name__,
                 "error": str(exc),
+                "latency_ms": int(
+                    (time.perf_counter() - generation_started_at) * 1000
+                ),
             },
         )
         raise
@@ -175,6 +205,9 @@ def _generation_call(
             "status": "ok",
             "prompt_tokens": int(result.get("prompt_tokens", 0)),
             "completion_tokens": int(result.get("completion_tokens", 0)),
+            "latency_ms": int(
+                (time.perf_counter() - generation_started_at) * 1000
+            ),
             "tool_calls": list(_tool_calls(result)),
             "text": result.get("text", ""),
         },
@@ -287,50 +320,45 @@ def _stage_raw(**stages: dict | None) -> str:
     )
 
 
-def _append_belief_stage_prompt(user_prompt: str, prompt_language: str = "en") -> str:
-    if prompt_language == "zh":
-        return (
-            f"{user_prompt}\n\n"
-            "决策阶段 1/2：请先更新你当前对 P(YES) 的信念。"
-            "调用 `update_belief`，给出 posterior、confidence 和简短 rationale。"
-            "本阶段不要选择任何交易动作。"
-        )
-    return (
-        f"{user_prompt}\n\n"
-        "Decision stage 1 of 2: first update your current belief about "
-        "P(YES). Call `update_belief` with your posterior, confidence, "
-        "and short rationale. Do not choose a trading action in this stage."
+def _append_belief_stage_prompt(
+    user_prompt: str,
+    *,
+    prompt_language: str,
+    prompt_resolver: PromptResolver,
+    on_warning,
+) -> tuple[str, ResolvedPrompt]:
+    stage_prompt = build_stage_prompt(
+        "belief_stage",
+        prompt_language=prompt_language,
+        prompt_resolver=prompt_resolver,
+        on_warning=on_warning,
     )
+    return f"{user_prompt}\n\n{stage_prompt.content}", stage_prompt
 
 
 def _append_trade_stage_prompt(
-    user_prompt: str, belief_update: dict, prompt_language: str = "en",
-) -> str:
+    user_prompt: str,
+    belief_update: dict,
+    *,
+    prompt_language: str,
+    prompt_resolver: PromptResolver,
+    on_warning,
+) -> tuple[str, ResolvedPrompt]:
     yes_prob = float(belief_update["yes_prob"])
     confidence = float(belief_update["confidence"])
     rationale = str(belief_update.get("rationale", ""))
-    if prompt_language == "zh":
-        return (
-            f"{user_prompt}\n\n"
-            "本 tick 的决策阶段 1/2 已完成：\n"
-            f"  P(YES) = {yes_prob:.3f}\n"
-            f"  Confidence = {confidence:.2f}\n"
-            f"  Rationale = \"{rationale}\"\n\n"
-            "决策阶段 2/2：基于这个信念，判断现在是否执行一个交易相关动作。"
-            "你可以调用且只调用一个可用交易工具，也可以不调用工具表示 HOLD。"
-            "请根据你的 persona、持仓、当前盘口和风险自主判断。"
-        )
-    return (
-        f"{user_prompt}\n\n"
-        "Decision stage 1 of 2 already completed this tick:\n"
-        f"  P(YES) = {yes_prob:.3f}\n"
-        f"  Confidence = {confidence:.2f}\n"
-        f"  Rationale = \"{rationale}\"\n\n"
-        "Decision stage 2 of 2: using that belief, decide whether to "
-        "take one trading-related action now. You may call exactly one "
-        "available trade tool, or call no tool to HOLD. Choose freely "
-        "based on your persona, portfolio, current book, and risk."
+    stage_prompt = build_stage_prompt(
+        "trade_stage",
+        prompt_language=prompt_language,
+        variables={
+            "yes_prob": yes_prob,
+            "confidence": confidence,
+            "rationale": rationale,
+        },
+        prompt_resolver=prompt_resolver,
+        on_warning=on_warning,
     )
+    return f"{user_prompt}\n\n{stage_prompt.content}", stage_prompt
 
 
 def _format_search_results(results: list[SearchResult]) -> str:
@@ -543,6 +571,8 @@ def _run_trade_stage_loop(
     tick: int = 0,
     on_forum_action: Optional[ForumActionCallback] = None,
     emitter: AgentLoopEmitter,
+    prompt_assets: list[ResolvedPrompt] | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
 ) -> tuple[dict, dict]:
     """Trade stage with a single bounded multi-turn read/social loop.
 
@@ -570,6 +600,20 @@ def _run_trade_stage_loop(
     """
     forum_enabled = forum is not None and agent_id is not None
     activity: dict = {"posts": [], "reads": [], "follows": []}
+    initial_tools = []
+    for tool in trade_tools:
+        name = _tool_name(tool)
+        if (
+            name == FORUM_READ_TOOL_NAME
+            and interaction_budget.max_forum_reads == 0
+        ):
+            continue
+        if (
+            name in FORUM_ACTION_TOOL_NAMES
+            and interaction_budget.max_social_actions == 0
+        ):
+            continue
+        initial_tools.append(tool)
     # First trade-stage call (read/social tools included via trade_tools).
     result = _generation_call(
         emitter=emitter,
@@ -577,10 +621,11 @@ def _run_trade_stage_loop(
         iteration=0,
         call_fn=call_fn,
         max_attempts=max_attempts,
+        prompt_assets=prompt_assets,
         **base_call_kwargs,
         system_prompt=system_prompt,
         user_prompt=trade_user_prompt,
-        tools=trade_tools,
+        tools=initial_tools,
         tool_choice="auto",
     )
 
@@ -599,7 +644,12 @@ def _run_trade_stage_loop(
     social_actions = 0  # post / comment / follow
     # Hard overall cap so a misbehaving model cannot loop forever even if
     # it alternates between the budgets.
-    hard_cap = MAX_INFO_TURNS + MAX_FORUM_READ_TURNS + K_SOCIAL + 1
+    hard_cap = (
+        MAX_INFO_TURNS
+        + interaction_budget.max_forum_reads
+        + interaction_budget.max_social_actions
+        + 1
+    )
     total_turns = 0
     tool_iteration = 0
 
@@ -626,14 +676,27 @@ def _run_trade_stage_loop(
             hint = f" (topic: {topic})" if topic else ""
             feed = forum.get_feed_for(agent_id)
             followed = forum.followed_by(agent_id)
-            # Record what was read into social memory (newest posts the agent
-            # saw), flagging followed authors for priority.
+            # Record what was read into social memory and the typed delivery
+            # transcript (newest posts the agent saw, follow-prioritised).
+            delivered_posts: list[dict] = []
             for p in feed:
-                activity["reads"].append({
+                row = {
                     "tick": p.tick, "post_id": p.id,
                     "author_id": p.author_id, "content": p.content,
                     "followed": p.author_id in followed,
-                })
+                }
+                activity["reads"].append(row)
+                delivered_posts.append(row)
+            if on_forum_action is not None:
+                try:
+                    on_forum_action("read", {
+                        "tick": tick,
+                        "reader_id": int(agent_id),
+                        "topic": topic,
+                        "posts": delivered_posts,
+                    })
+                except Exception:  # noqa: BLE001 - audit hooks fail open
+                    pass
             return (
                 f"Your forum feed{hint} (followed authors first):\n"
                 f"{_format_feed(forum, agent_id)}"
@@ -674,6 +737,34 @@ def _run_trade_stage_loop(
                     "trade_iteration": total_turns - 1,
                 },
             )
+            budget_reason = ""
+            if name == INFO_TOOL_NAME and info_turns >= MAX_INFO_TURNS:
+                budget_reason = "information budget exhausted"
+            elif (
+                name == FORUM_READ_TOOL_NAME
+                and forum_read_turns >= interaction_budget.max_forum_reads
+            ):
+                budget_reason = "forum read budget exhausted"
+            elif (
+                name in FORUM_ACTION_TOOL_NAMES
+                and social_actions >= interaction_budget.max_social_actions
+            ):
+                budget_reason = "social action budget exhausted"
+            if budget_reason:
+                tool_content = f"{name}: {budget_reason}; action skipped."
+                emitter.emit(
+                    AgentLoopEventKind.TOOL_COMPLETED,
+                    AgentLoopStage.TOOL,
+                    iteration=tool_iteration,
+                    payload={
+                        "name": name,
+                        "call_id": str(call.get("id", "")),
+                        "status": "budget_exhausted",
+                    },
+                )
+                tool_iteration += 1
+                messages.append(_tool_result_message(call, tool_content))
+                continue
             if name == INFO_TOOL_NAME:
                 info_turns += 1
             elif name == FORUM_READ_TOOL_NAME:
@@ -714,8 +805,12 @@ def _run_trade_stage_loop(
         # Web search and forum reading have SEPARATE budgets so a
         # search-heavy agent can still read the forum (and then comment/follow).
         info_exhausted = info_turns >= MAX_INFO_TURNS
-        forum_read_exhausted = forum_read_turns >= MAX_FORUM_READ_TURNS
-        social_exhausted = social_actions >= K_SOCIAL
+        forum_read_exhausted = (
+            forum_read_turns >= interaction_budget.max_forum_reads
+        )
+        social_exhausted = (
+            social_actions >= interaction_budget.max_social_actions
+        )
         # On the very last allowed overall turn, force convergence by
         # dropping ALL non-terminating tools.
         last_overall = total_turns >= hard_cap - 1
@@ -741,6 +836,7 @@ def _run_trade_stage_loop(
             iteration=total_turns,
             call_fn=continue_fn,
             max_attempts=max_attempts,
+            prompt_assets=prompt_assets,
             **base_call_kwargs,
             messages=messages,
             tools=next_tools,
@@ -782,6 +878,9 @@ def decide(
     on_forum_action: Optional[ForumActionCallback] = None,
     loop_context: AgentLoopContext | None = None,
     observer: AgentLoopObserver | None = None,
+    prompt_resolver: PromptResolver | None = None,
+    interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
+    loop_metadata: Mapping[str, Any] | None = None,
 ) -> Decision:
     """One tick. Returns a Decision (HOLD on unrecoverable failure).
 
@@ -823,10 +922,28 @@ def decide(
         agent_id=resolved_agent_id,
     )
     emitter = AgentLoopEmitter(context, observer)
+    resolved_prompt_resolver = prompt_resolver or get_prompt_resolver()
+
+    def _on_prompt_warning(payload: dict[str, Any]) -> None:
+        emitter.emit(
+            AgentLoopEventKind.PROMPT_RESOLUTION_WARNING,
+            AgentLoopStage.PROMPT,
+            payload=payload,
+        )
+
     emitter.emit(
         AgentLoopEventKind.LOOP_STARTED,
         AgentLoopStage.PROMPT,
-        payload={"model": model, "temperature": temperature},
+        payload={
+            "model": model,
+            "temperature": temperature,
+            "persona_type": persona.persona_type,
+            "interaction_budget": {
+                "max_forum_reads": interaction_budget.max_forum_reads,
+                "max_social_actions": interaction_budget.max_social_actions,
+            },
+            **dict(loop_metadata or {}),
+        },
     )
 
     if tools is None:
@@ -852,15 +969,26 @@ def decide(
 
     emitter.emit(AgentLoopEventKind.STAGE_STARTED, AgentLoopStage.PROMPT)
     try:
-        system_prompt = build_clob_system_prompt(
+        system_asset = build_clob_system_prompt(
             persona, question, description, end_date, tick_size=tick_size,
             prompt_language=prompt_language,
             info_enabled=use_info, forum_enabled=use_forum,
+            prompt_resolver=resolved_prompt_resolver,
+            on_warning=_on_prompt_warning,
+            with_metadata=True,
         )
-        user_prompt = build_user_prompt(
+        user_asset = build_user_prompt(
             market, agent, prompt_language=prompt_language,
             forum_enabled=use_forum,
+            prompt_resolver=resolved_prompt_resolver,
+            on_warning=_on_prompt_warning,
+            with_metadata=True,
         )
+        assert isinstance(system_asset, ResolvedPrompt)
+        assert isinstance(user_asset, ResolvedPrompt)
+        system_prompt = system_asset.content
+        user_prompt = user_asset.content
+        decision_prompt_assets = [system_asset, user_asset]
     except Exception as exc:
         emitter.emit(
             AgentLoopEventKind.LOOP_FAILED,
@@ -900,17 +1028,23 @@ def decide(
                 base_call_kwargs["thinking"] = thinking
 
             if belief_tools:
+                belief_user_prompt, belief_stage_asset = _append_belief_stage_prompt(
+                    user_prompt,
+                    prompt_language=prompt_language,
+                    prompt_resolver=resolved_prompt_resolver,
+                    on_warning=_on_prompt_warning,
+                )
+                decision_prompt_assets.append(belief_stage_asset)
                 belief_result = _generation_call(
                     emitter=emitter,
                     stage=AgentLoopStage.BELIEF,
                     iteration=0,
                     call_fn=call_fn,
                     max_attempts=max_attempts,
+                    prompt_assets=[system_asset, user_asset, belief_stage_asset],
                     **base_call_kwargs,
                     system_prompt=system_prompt,
-                    user_prompt=_append_belief_stage_prompt(
-                        user_prompt, prompt_language,
-                    ),
+                    user_prompt=belief_user_prompt,
                     tools=belief_tools,
                     tool_choice=_forced_tool_choice("update_belief"),
                 )
@@ -928,9 +1062,14 @@ def decide(
                     api_error = "parse: missing update_belief in belief stage"
                 else:
                     if trade_tools:
-                        trade_user_prompt = _append_trade_stage_prompt(
-                            user_prompt, belief_update, prompt_language,
+                        trade_user_prompt, trade_stage_asset = _append_trade_stage_prompt(
+                            user_prompt,
+                            belief_update,
+                            prompt_language=prompt_language,
+                            prompt_resolver=resolved_prompt_resolver,
+                            on_warning=_on_prompt_warning,
                         )
+                        decision_prompt_assets.append(trade_stage_asset)
                         if use_loop:
                             trade_result, forum_activity = _run_trade_stage_loop(
                                 call_fn=call_fn,
@@ -952,6 +1091,10 @@ def decide(
                                 tick=tick,
                                 on_forum_action=on_forum_action,
                                 emitter=emitter,
+                                prompt_assets=[
+                                    system_asset, user_asset, trade_stage_asset,
+                                ],
+                                interaction_budget=interaction_budget,
                             )
                         else:
                             # No loop: strip ALL non-terminating tools so the
@@ -965,6 +1108,9 @@ def decide(
                                 iteration=0,
                                 call_fn=call_fn,
                                 max_attempts=max_attempts,
+                                prompt_assets=[
+                                    system_asset, user_asset, trade_stage_asset,
+                                ],
                                 **base_call_kwargs,
                                 system_prompt=system_prompt,
                                 user_prompt=trade_user_prompt,
@@ -1022,6 +1168,8 @@ def decide(
                         tick=tick,
                         on_forum_action=on_forum_action,
                         emitter=emitter,
+                        prompt_assets=[system_asset, user_asset],
+                        interaction_budget=interaction_budget,
                     )
                 else:
                     tools_eff = _drop_loop_tools(tools, info=True, forum=True)
@@ -1031,6 +1179,7 @@ def decide(
                         iteration=0,
                         call_fn=call_fn,
                         max_attempts=max_attempts,
+                        prompt_assets=[system_asset, user_asset],
                         **base_call_kwargs,
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
@@ -1102,6 +1251,9 @@ def decide(
         completion_tokens=completion_tokens,
         timeout_exceeded=timeout_exceeded,
         decision_id=context.decision_id,
+        prompt_metadata=[
+            asset.identity.to_dict() for asset in decision_prompt_assets
+        ],
     )
     completion_payload = {
         "status": "degraded" if api_error else "ok",
