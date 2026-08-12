@@ -28,6 +28,7 @@ class AgentLoopEventKind(str, Enum):
     GENERATION_COMPLETED = "generation_completed"
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"
+    PROMPT_RESOLUTION_WARNING = "prompt_resolution_warning"
     LOOP_FAILED = "loop_failed"
     LOOP_COMPLETED = "loop_completed"
 

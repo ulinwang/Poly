@@ -794,7 +794,16 @@ export default async function experimentsRoutes(
           }
 
           // Key used to collapse duplicates: kind + agent_id when present.
-          const entityKey = (ev.data.agent_id ?? ev.data.agentId ?? ev.data.id ?? '').toString();
+          // Interaction messages are individually replayable records; key them
+          // by message_id so several same-kind deliveries in one 100ms window
+          // are not collapsed into one live SSE event.
+          const entityKey = (
+            ev.data.message_id
+            ?? ev.data.agent_id
+            ?? ev.data.agentId
+            ?? ev.data.id
+            ?? ''
+          ).toString();
           const throttleKey = entityKey ? `${ev.kind}:${entityKey}` : ev.kind;
           const last = lastSent.get(throttleKey) ?? 0;
 

@@ -141,6 +141,12 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_DEEPSEEK_API_KEY` / `_BASE_URL` / `_MODEL` | DeepSeek（默认） |
 | `POLYMETL_KIMI_API_KEY` / `_BASE_URL` / `_MODEL` | Kimi (Moonshot) |
 | `POLYMETL_OPENAI_API_KEY` | OpenAI |
+| `POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED` | 可选的托管提示词查询；本地 v1 始终兜底 |
+| `POLYMETL_LANGFUSE_PUBLIC_KEY` / `_SECRET_KEY` / `_BASE_URL` | Langfuse Cloud 或自托管连接 |
+| `POLYMETL_LANGFUSE_PROMPT_LABEL` / `_CACHE_TTL_SECONDS` | 托管提示词发布标签与 SDK 缓存 TTL |
+| `POLYMETL_LANGFUSE_ENABLED` | 可选的 Langfuse Agent Loop 追踪，默认关闭 |
+| `POLYMETL_LANGFUSE_ENVIRONMENT` / `_RELEASE` / `_SAMPLE_RATE` | 追踪环境、发布版本与采样率 |
+| `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata`（安全默认）或 `full` 可见提示词/输出采集 |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
 | `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
@@ -160,6 +166,42 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_CLICKHOUSE_USER` | 本地/非 Compose 用户；Compose 固定为 `poly` |
 | `POLYMETL_CLICKHOUSE_PASSWORD` | Compose 必填的非空 ClickHouse 密码 |
 | `POLYMETL_CLICKHOUSE_DATABASE` | ClickHouse 数据库（默认 `polymetl`） |
+
+### 可选 Langfuse LLMOps
+
+系统提示词、状态提示词、belief 阶段和 trade 阶段现在都通过版本化 registry
+解析。仓库内 v1 是默认值和强制兜底，因此提示词服务异常不会让 Agent tick
+失败。每个 Decision 和 generation 生命周期事件都会记录来源、名称、版本/标签、
+SHA-256 内容哈希、语言和渲染变量；公开 runner introspection 只暴露身份与变量名，
+不暴露凭据和提示词正文。
+
+安装提示词管理与可观测性支持：
+
+```bash
+uv sync --extra prompt-management --extra observability
+```
+
+按 `.env.example` 配置共用的 `POLYMETL_LANGFUSE_*` 连接参数。设置
+`POLYMETL_LANGFUSE_PROMPT_MANAGEMENT_ENABLED=true` 可启用托管提示词。约定的
+text prompt 名称为
+`poly/clob-system/{en,zh}`、`poly/user-state/{en,zh}`、
+`poly/belief-stage/{en,zh}` 和 `poly/trade-stage/{en,zh}`。选中的 Langfuse
+prompt 对象会在同时启用追踪时直接关联到对应的 Langfuse generation。
+
+发布和回退说明见 `sim/agent/prompt/README.md`。
+
+设置 `POLYMETL_LANGFUSE_ENABLED=true` 后，每次实验会按
+“experiment → tick → agent loop → generation/tool”记录。
+
+追踪包含仿真/决策标识、persona 与预算、模型、耗时、token 用量、提示词占位
+版本和错误。遥测始终 fail-open：SDK 或凭据缺失、导出服务故障、flush 超时
+都不会改变实验行为。
+
+推荐保留默认 `metadata` 策略，它不上传提示词、消息、工具参数、搜索结果和
+模型输出内容。`full` 会在敏感字段脱敏后采集可见输入输出；模型隐藏推理和
+原始响应永不导出。使用 Langfuse Cloud 前应先确认数据策略；自托管时把
+`POLYMETL_LANGFUSE_BASE_URL` 改为自己的 HTTPS 地址。完整配置和生命周期
+映射见 `sim/observability/README.md`。
 
 自定义 LLM 端点默认必须使用 HTTPS，且只能解析到公网 IP。若需连接本地模型
 服务等私网端点，请精确放行其 origin，例如
@@ -207,6 +249,10 @@ uv run pytest -q
 # sim/ 分支覆盖率；生成 coverage.xml，并执行 65% 门槛
 uv run pytest -q --cov=sim --cov-report=term-missing --cov-report=xml
 
+# 确定性 Agent Loop 数据集门禁（无需 LLM 或 Langfuse 凭据）
+PYTHONPATH=sim:research:. uv run python -m evaluation.agent_loop.cli \
+  tests/fixtures/agent_loop_eval.jsonl --fail-on-hard
+
 # 后端 (vitest)
 cd apps/server && npm test && npm run lint
 
@@ -222,6 +268,12 @@ cd apps/web && npm test && npm run build && npm run lint
 门槛。2026-07-29 测得的初始基线为 **66%**，回归门槛为 **65%**。供应商调用、
 ClickHouse、Web 搜索和生成数据均被 mock 或跳过，因此 CI 无需 API key 或
 实时网络。
+
+Agent Loop 与 Multi-Agent 评估会先写入本地 `agent_scores` 和 `run_scores`
+事件，并可选镜像到 Langfuse。Decision 分数使用内容安全的生命周期记录，并
+携带 evaluator/run/decision/step、model 与 prompt revision 标识，可直接比较
+在线/离线结果。评估器契约、离线 JSONL 格式和显式数据集同步
+说明见 [`sim/evaluation/agent_loop/README.md`](sim/evaluation/agent_loop/README.md)。
 
 Server 与 Web 任务使用 `npm ci` 安装锁定的 Node 依赖并缓存 npm 下载，然后在
 Node.js 20 上执行后端 lint、测试、构建以及前端 lint、构建。三个任务独立运行，

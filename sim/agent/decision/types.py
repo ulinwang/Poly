@@ -96,3 +96,7 @@ class Decision:
     # Stable identity of the Agent Loop that produced this decision. Empty for
     # legacy/manual Decision objects that did not run through decide().
     decision_id: str = ""
+    # Immutable prompt identity dictionaries used by this decision. Includes
+    # local/managed source, version/label, content hash, language and render
+    # variables so local prompts can be reproduced exactly.
+    prompt_metadata: list[dict] | None = None

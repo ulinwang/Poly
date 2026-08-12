@@ -130,6 +130,14 @@ export function applyEvent(
       });
       break;
 
+    case 'evaluation_error':
+      store.addTickLog({
+        id: Date.now() + Math.random(), time: nowStr(), label: 'eval_err',
+        msg: `Evaluation ${data.scope ?? 'unknown'}: ${data.message ?? 'failed'}`,
+        kind: 'error',
+      });
+      break;
+
     case 'tick_finished': {
       const yesMid = (data.yes_mid as number) ?? 0.5;
       store.setMetrics({

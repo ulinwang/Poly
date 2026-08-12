@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agent.decision import Decision
+from agent.multi_agent.forum_adapter import ForumInteractionAdapter
 from environment.env import PolyEnv
 from runner.checkpoint import load_checkpoint, rng_from_state, save_checkpoint
 from tests._helpers import make_test_population
@@ -101,6 +102,23 @@ def test_checkpoint_round_trip_resumes_with_identical_rng_and_state(tmp_path):
 
     paused = _make_env(seed=17)
     _run_ticks(paused, 0, 2)
+    paused.state.evaluation_schedules = [
+        {"tick": 0, "decision_order": [0, 1, 2]},
+        {"tick": 1, "decision_order": [0, 1, 2]},
+    ]
+    paused.state.evaluation_beliefs = [(0, 0.55), (1, 0.45)]
+    paused.state.evaluation_prompt_versions = ["trade@1:abc123"]
+    post = paused.state.forum.post(0, "checkpointed evidence", tick=1)
+    ForumInteractionAdapter(
+        run_id=paused.state.sim_id,
+        agent_ids=(agent.agent_id for agent in paused.state.agents),
+        transcript=paused.state.interaction_transcript,
+    ).record("post", {
+        "tick": 1,
+        "author_id": 0,
+        "post_id": post.id,
+        "content": post.content,
+    })
     checkpoint_path = tmp_path / "run.chk"
     save_checkpoint(
         checkpoint_path,
@@ -118,6 +136,13 @@ def test_checkpoint_round_trip_resumes_with_identical_rng_and_state(tmp_path):
     )
 
     payload = load_checkpoint(checkpoint_path)
+    assert payload["sim"].interaction_transcript.to_records() == (
+        paused.state.interaction_transcript.to_records()
+    )
+    assert payload["sim"].interaction_transcript._next_sequence == 1
+    assert payload["sim"].evaluation_schedules == paused.state.evaluation_schedules
+    assert payload["sim"].evaluation_beliefs == paused.state.evaluation_beliefs
+    assert payload["sim"].evaluation_prompt_versions == ["trade@1:abc123"]
     resumed = PolyEnv(
         market_meta=payload["market_meta"],
         population=payload["sim"].agents,
