@@ -9,6 +9,38 @@ function authorization(token: string) {
 }
 
 describe('API authentication', () => {
+  it('keeps the local-first default unauthenticated', async () => {
+    const app = await buildServer();
+
+    const config = await app.inject({ method: 'GET', url: '/api/v1/auth/config' });
+    const experiments = await app.inject({ method: 'GET', url: '/api/v1/experiments' });
+
+    expect(config.statusCode).toBe(200);
+    expect(JSON.parse(config.body)).toEqual({ required: false, mode: 'disabled' });
+    expect(experiments.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it.each([
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:8765',
+    'http://127.0.0.1:8765',
+  ])('allows the supported local origin %s', async (origin) => {
+    const app = await buildServer();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/config',
+      headers: { origin },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe(origin);
+    await app.close();
+  });
+
   it('keeps explicitly classified public routes anonymous', async () => {
     const app = await buildServer({
       authRequired: true,

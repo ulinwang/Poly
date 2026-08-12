@@ -55,6 +55,11 @@ const zh: Dict = {
 
   // ── Market browser ─────────────────────────────────────────────────
   'market.all': '全部',
+  'market.liveFeed': '实时预测市场',
+  'market.heroTitle': '把市场信号变成 Agent 实验',
+  'market.heroSubtitle': '浏览实时预测市场，选择一个命题并启动可复现的多智能体仿真。',
+  'market.available': '可用事件',
+  'market.discover': '发现市场',
   'market.refreshMarkets': '刷新市场数据',
   'market.countMarkets': '{count} 个市场',
   'market.noneFound': '未找到市场',
@@ -334,6 +339,11 @@ const en: Dict = {
 
   // ── Market browser ─────────────────────────────────────────────────
   'market.all': 'All',
+  'market.liveFeed': 'Live prediction markets',
+  'market.heroTitle': 'Turn market signals into agent experiments',
+  'market.heroSubtitle': 'Explore live prediction markets, choose a question, and launch a reproducible multi-agent simulation.',
+  'market.available': 'Available events',
+  'market.discover': 'Discover markets',
   'market.refreshMarkets': 'Refresh market data',
   'market.countMarkets': '{count} markets',
   'market.noneFound': 'No markets found',

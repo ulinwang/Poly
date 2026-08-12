@@ -25,7 +25,6 @@ import type { ExperimentLimits } from './routes/experiments.js';
 import type { SpawnOptions, RunHandle } from './services/runner.js';
 import { pruneRunArtifacts } from './services/artifact-retention.js';
 
-const isDev = process.env.NODE_ENV === 'development';
 const isTest = !!process.env.VITEST || process.env.NODE_ENV === 'test';
 
 export const LOG_REDACT_PATHS = [
@@ -58,7 +57,14 @@ const allowedOrigins = (process.env.POLY_CORS_ORIGINS ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 if (allowedOrigins.length === 0) {
-  allowedOrigins.push('http://localhost:8080', 'http://localhost:5173');
+  allowedOrigins.push(
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:8765',
+    'http://127.0.0.1:8765',
+  );
 }
 
 export async function buildServer(options: BuildServerOptions = {}) {
@@ -66,7 +72,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
     logger: isTest
       ? false
       : {
-          level: isDev ? 'debug' : config.LOG_LEVEL,
+          level: process.env.NODE_ENV === 'development' ? 'debug' : config.LOG_LEVEL,
           redact: {
             paths: [...LOG_REDACT_PATHS],
             censor: '[REDACTED]',
@@ -121,7 +127,10 @@ export async function buildServer(options: BuildServerOptions = {}) {
 
   const operatorToken = options.operatorToken ?? config.API_TOKEN;
   await installAuthentication(app, {
-    required: options.authRequired ?? (isTest ? false : !isDev || !!operatorToken.trim()),
+    // Poly is a local-first application. Authentication is enabled only when
+    // the operator explicitly opts in; merely setting NODE_ENV=production (as
+    // the local Docker image does) must not turn the UI into a login flow.
+    required: options.authRequired ?? (isTest ? false : config.AUTH_REQUIRED),
     operatorToken,
     readerToken: options.readerToken ?? config.API_READ_TOKEN,
   });

@@ -103,8 +103,7 @@ cd apps/server && npm start        # 打开 http://localhost:8765
 cp .env.example .env
 # 编辑 .env，至少填写一个 LLM key
 
-# 生成生产环境必需的密钥，并保存到 .env
-export POLY_API_TOKEN="$(openssl rand -hex 32)"
+# 生成数据加密所需的密钥，并保存到 .env
 export POLY_SECRET="$(openssl rand -hex 32)"
 export POLYMETL_CLICKHOUSE_PASSWORD="$(openssl rand -hex 32)"
 docker compose up --build --wait
@@ -115,7 +114,7 @@ docker compose up --build --wait
 
 也可在「设置」页运行时切换供应商/模型/API key，无需重启。
 
-生产 Compose 只发布 nginx 的 **8080** 端口。后端和 ClickHouse 位于私有
+本地 Compose 仅把 nginx 绑定到 **127.0.0.1:8080**。后端和 ClickHouse 位于私有
 Compose 网络，`/api` 由 nginx 转发。后端以非 root 的 `node` 用户运行，
 SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 
@@ -149,7 +148,8 @@ SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。
 | `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata`（安全默认）或 `full` 可见提示词/输出采集 |
 | `POLY_SECRET` | 加密存储 API key 的主密钥（生产环境务必设置） |
 | `POLY_ROOT` | spawn Python 仿真时使用的仓库根路径覆盖 |
-| `POLY_API_TOKEN` | Operator Bearer Token；生产环境必填，至少 32 个字符 |
+| `POLY_AUTH_REQUIRED` | 为共享/远程部署显式启用 Bearer 认证（默认 `false`） |
+| `POLY_API_TOKEN` | Operator Bearer Token；仅在 `POLY_AUTH_REQUIRED=true` 时必填，至少 32 个字符 |
 | `POLY_API_READ_TOKEN` | 可选的只读 API Bearer Token，至少 32 个字符 |
 | `POLY_LOG_LEVEL` | 后端结构化日志级别（默认 `info`） |
 | `POLY_MAX_EXPERIMENT_AGENTS` | 单次实验最大 Agent 数（默认 `100`） |
@@ -217,11 +217,14 @@ prompt 对象会在同时启用追踪时直接关联到对应的 Langfuse genera
 `docker compose exec clickhouse clickhouse-client`。若确需外部访问，应使用
 显式的本地 Compose override，并保留非默认用户名和密码。
 
-### API 认证
+### 可选 API 认证
 
-生产模式在未配置 `POLY_API_TOKEN` 时会拒绝启动。可使用
-`openssl rand -hex 32` 生成高熵 token。Web 界面会提示输入，token 仅保存在
-当前标签页的 `sessionStorage` 中；API 与 SSE 请求通过
+本地开发和默认 Compose 均不启用认证，页面会直接打开，不再要求填写后端
+Token。Compose 只绑定 `127.0.0.1`，不会把未认证的本地工作区暴露到局域网。
+
+若部署到共享或远程环境，请设置 `POLY_AUTH_REQUIRED=true`，并用
+`openssl rand -hex 32` 生成高熵 `POLY_API_TOKEN`。此时 Web 界面才会提示输入，
+token 仅保存在当前标签页的 `sessionStorage` 中；API 与 SSE 请求通过
 `Authorization: Bearer <token>` 发送，服务端不会接受 URL 查询参数中的凭据。
 
 市场/事件浏览和静态供应商目录保持公开只读。设置、密钥、实验及历史/SSE、
@@ -229,8 +232,7 @@ prompt 对象会在同时启用追踪时直接关联到对应的 Langfuse genera
 `POLY_API_READ_TOKEN` 只能访问受保护的 GET/HEAD 路由，修改请求返回 HTTP 403。
 Nginx 会原样转发 `Authorization` 请求头。
 
-开发模式（在 `apps/server` 中运行 `npm run dev`）默认不启用认证；设置
-`POLY_API_TOKEN` 即可在本地启用。直接调用 API：
+启用认证后，直接调用 API：
 
 ```bash
 curl -H "Authorization: Bearer $POLY_API_TOKEN" \

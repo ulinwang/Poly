@@ -4,7 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:80"
+      # Local-first default: do not expose an unauthenticated workspace to the LAN.
+      - "127.0.0.1:8080:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -30,7 +31,8 @@ services:
       PORT: "8765"
       HOST: 0.0.0.0
       NODE_ENV: production
-      POLY_API_TOKEN: ${POLY_API_TOKEN:?Set POLY_API_TOKEN to a 32+ character secret}
+      POLY_AUTH_REQUIRED: ${POLY_AUTH_REQUIRED:-false}
+      POLY_API_TOKEN: ${POLY_API_TOKEN:-}
       POLY_API_READ_TOKEN: ${POLY_API_READ_TOKEN:-}
       POLY_SECRET: ${POLY_SECRET:?Set POLY_SECRET for stored API-key encryption}
       POLY_LOG_LEVEL: ${POLY_LOG_LEVEL:-info}

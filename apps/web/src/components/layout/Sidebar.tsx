@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import {
   LayoutGrid, FlaskConical, Bot, BarChart3, Settings,
-  PanelLeftClose, PanelLeftOpen, Moon, Sun, Languages,
+  PanelLeftClose, PanelLeftOpen, Moon, Sun, Languages, Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useExperimentStore, useSettingsStore } from '../../stores';
@@ -41,23 +41,26 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
 
   return (
     <aside
-      className={`${collapsed ? 'w-16' : 'w-56'} h-full flex flex-col flex-shrink-0
-        bg-white dark:bg-surface-800 border-r border-surface-200 dark:border-surface-700
-        transition-[width] duration-200`}
+      className={`${collapsed ? 'w-[72px]' : 'w-64'} h-full flex flex-col flex-shrink-0
+        border-r border-white/70 bg-white/82 shadow-[8px_0_30px_rgba(15,118,110,0.04)] backdrop-blur-xl
+        transition-[width] duration-200 dark:border-white/5 dark:bg-[#0d1c19]/90 dark:shadow-none`}
     >
-      {/* Collapse toggle */}
-      <div className={`flex items-center h-14 px-3 ${collapsed ? 'justify-center' : 'justify-end'}`}>
-        <button
-          onClick={toggleSidebar}
-          title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
-          className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors"
-        >
-          {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-        </button>
+      <div className={`flex h-[76px] items-center border-b border-surface-100 px-4 dark:border-white/5 ${collapsed ? 'justify-center' : 'gap-3'}`}>
+        <a href="#/markets" className="flex min-w-0 items-center gap-3" onClick={onNavigate}>
+          <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary-400 via-primary-500 to-primary-700 shadow-[0_8px_22px_rgba(13,148,136,0.28)]">
+            <Zap className="h-5 w-5 text-white" fill="currentColor" />
+          </span>
+          {!collapsed && (
+            <span className="min-w-0">
+              <span className="block text-lg font-extrabold tracking-[-0.03em] text-surface-900 dark:text-white">{t('app.name')}</span>
+              <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600 dark:text-primary-400">Agent market lab</span>
+            </span>
+          )}
+        </a>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 space-y-1">
+      <nav className="flex-1 space-y-1.5 px-3 py-5">
         {NAV.map((item) => {
           const active = location.pathname.startsWith(item.match);
           const Icon = item.icon;
@@ -70,10 +73,10 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               onClick={onNavigate}
               title={collapsed ? label : undefined}
               className={`group relative flex items-center ${collapsed ? 'justify-center' : 'gap-3'}
-                px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                min-h-11 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 active
-                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 shadow-sm border-l-2 border-primary-500'
-                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/60 hover:text-surface-900 dark:hover:text-surface-200 border-l-2 border-transparent'
+                  ? 'bg-primary-600 text-white shadow-[0_8px_20px_rgba(13,148,136,0.2)] dark:bg-primary-600 dark:text-white'
+                  : 'text-surface-500 hover:bg-white hover:text-surface-900 hover:shadow-sm dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white'
               }`}
             >
               <span className="relative flex-shrink-0">
@@ -100,7 +103,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
       </nav>
 
       {/* Bottom: language switcher + dark mode toggle */}
-      <div className="px-2 pb-3 border-t border-surface-200 dark:border-surface-700 pt-2 space-y-1">
+      <div className="space-y-1 border-t border-surface-100 px-3 py-3 dark:border-white/5">
         <button
           onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}
           title={t('lang.label')}
@@ -120,6 +123,14 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
         >
           {darkMode ? <Sun className="w-5 h-5 flex-shrink-0" /> : <Moon className="w-5 h-5 flex-shrink-0" />}
           {!collapsed && <span>{darkMode ? t('theme.light') : t('theme.dark')}</span>}
+        </button>
+        <button
+          onClick={toggleSidebar}
+          title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+          className={`hidden w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium text-surface-500 transition-all hover:bg-surface-100 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white lg:flex ${collapsed ? 'justify-center' : 'gap-3'}`}
+        >
+          {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          {!collapsed && <span>{t('nav.collapseSidebar')}</span>}
         </button>
       </div>
     </aside>

@@ -10,7 +10,7 @@ command -v curl >/dev/null 2>&1 || {
   exit 1
 }
 
-export POLY_API_TOKEN="${POLY_API_TOKEN:-compose-smoke-operator-token-0123456789abcdef}"
+export POLY_AUTH_REQUIRED="${POLY_AUTH_REQUIRED:-false}"
 export POLY_SECRET="${POLY_SECRET:-compose-smoke-encryption-secret-0123456789abcdef}"
 export POLYMETL_CLICKHOUSE_PASSWORD="${POLYMETL_CLICKHOUSE_PASSWORD:-compose-smoke-clickhouse-password}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-poly-smoke}"

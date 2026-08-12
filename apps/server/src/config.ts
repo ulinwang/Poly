@@ -24,11 +24,21 @@ function logLevelEnv(): string {
   return value;
 }
 
+function booleanEnv(name: string, fallback = false): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(value)) return true;
+  if (['0', 'false', 'no', 'off'].includes(value)) return false;
+  throw new Error(`${name} must be a boolean`);
+}
+
 export const config = {
   PORT: parseInt(process.env.PORT || '8765', 10),
   HOST: process.env.HOST || '127.0.0.1',
   DATA_DIR: process.env.DATA_DIR || './data',
   NODE_ENV: process.env.NODE_ENV || 'production',
+  AUTH_REQUIRED: booleanEnv('POLY_AUTH_REQUIRED'),
   API_TOKEN: process.env.POLY_API_TOKEN || '',
   API_READ_TOKEN: process.env.POLY_API_READ_TOKEN || '',
   LOG_LEVEL: logLevelEnv(),

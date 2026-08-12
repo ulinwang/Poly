@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
-  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers,
+  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers, Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -134,9 +134,38 @@ export default function MarketBrowser() {
   const tabs = ['All', ...categories];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <section className="relative overflow-hidden rounded-[28px] border border-white/80 bg-gradient-to-br from-[#073e38] via-[#0b655b] to-[#139688] px-6 py-7 text-white shadow-[0_22px_60px_rgba(13,82,75,0.18)] sm:px-8 sm:py-9 dark:border-white/5">
+        <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full border-[38px] border-white/5" aria-hidden="true" />
+        <div className="absolute -bottom-28 right-28 h-56 w-56 rounded-full bg-cyan-300/10 blur-2xl" aria-hidden="true" />
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-2xl">
+            <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-primary-50 backdrop-blur-sm">
+              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-200 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-primary-200" /></span>
+              {t('market.liveFeed')}
+            </span>
+            <h2 className="text-3xl font-extrabold tracking-[-0.035em] sm:text-4xl">{t('market.heroTitle')}</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-primary-50/75 sm:text-base">{t('market.heroSubtitle')}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-100/70">{t('market.available')}</p>
+              <p className="mt-0.5 text-2xl font-bold tabular-nums">{events.length}</p>
+            </div>
+            <button
+              onClick={() => setRefreshTick((n) => n + 1)}
+              disabled={loading}
+              title={t('market.refreshMarkets')}
+              className="grid h-[58px] w-[58px] place-items-center rounded-2xl border border-white/15 bg-white text-primary-700 shadow-lg transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Search bar (mobile — desktop search lives in the top nav) */}
-      <div className="lg:hidden relative">
+      <div className="relative sm:hidden">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
         <input
           type="text"
@@ -148,7 +177,7 @@ export default function MarketBrowser() {
       </div>
 
       {/* Category tabs (horizontal, Polymarket style) */}
-      <div className="flex gap-1 overflow-x-auto pb-1 border-b border-surface-200 dark:border-surface-700">
+      <div className="flex gap-2 overflow-x-auto rounded-2xl border border-white/80 bg-white/65 p-2 shadow-sm backdrop-blur-sm dark:border-white/5 dark:bg-white/5">
         {tabs.map((cat) => {
           const Icon = cat === 'All' ? undefined : (CATEGORY_ICONS[cat.toLowerCase()] ?? Tag);
           const active = category === cat;
@@ -156,10 +185,10 @@ export default function MarketBrowser() {
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold whitespace-nowrap transition-all ${
                 active
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-300'
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'text-surface-500 hover:bg-white hover:text-surface-800 dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white'
               }`}
             >
               {Icon && <Icon className="w-3.5 h-3.5" />}
@@ -170,20 +199,13 @@ export default function MarketBrowser() {
       </div>
 
       {/* Section title */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold tracking-tight text-surface-900 dark:text-white">
-          {category === 'All' ? t('market.all') : category}
-        </h2>
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-primary-600 dark:text-primary-400"><Sparkles className="h-3.5 w-3.5" />{t('market.discover')}</div>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-surface-900 dark:text-white">{category === 'All' ? t('market.all') : category}</h2>
+        </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-surface-400">{t('market.countEvents', { count: filtered.length })}</span>
-          <button
-            onClick={() => setRefreshTick((n) => n + 1)}
-            disabled={loading}
-            title={t('market.refreshMarkets')}
-            className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-800 disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <span className="rounded-full border border-surface-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-surface-500 dark:border-white/10 dark:bg-white/5 dark:text-surface-400">{t('market.countEvents', { count: filtered.length })}</span>
         </div>
       </div>
 

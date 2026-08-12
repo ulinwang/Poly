@@ -119,8 +119,7 @@ cd apps/server && npm start        # open http://localhost:8765
 cp .env.example .env
 # edit .env and set at least one LLM key
 
-# Generate the required production secrets once and store them in .env
-export POLY_API_TOKEN="$(openssl rand -hex 32)"
+# Generate the required data-encryption secrets once and store them in .env
 export POLY_SECRET="$(openssl rand -hex 32)"
 export POLYMETL_CLICKHOUSE_PASSWORD="$(openssl rand -hex 32)"
 docker compose up --build --wait
@@ -132,7 +131,7 @@ docker compose up --build --wait
 You can also set the provider, model, and API key at runtime in the **Settings**
 page — no restart needed.
 
-The production Compose stack publishes only nginx on port **8080**. The backend
+The local Compose stack binds nginx to **127.0.0.1:8080** only. The backend
 and ClickHouse stay on private Compose networks; nginx proxies `/api` to the
 backend. The backend runs as the non-root `node` user and stores SQLite,
 checkpoints, and event logs in the `backend-data` named volume.
@@ -168,7 +167,8 @@ Settings page (where they are encrypted at rest).
 | `POLYMETL_LANGFUSE_CAPTURE_POLICY` | `metadata` (safe default) or `full` visible prompt/output capture |
 | `POLY_SECRET` | master key for encrypting stored API keys (set in production) |
 | `POLY_ROOT` | override repo root used when spawning the Python sim |
-| `POLY_API_TOKEN` | operator bearer token; required in production, minimum 32 characters |
+| `POLY_AUTH_REQUIRED` | explicitly enable Bearer authentication for shared/remote deployments (default `false`) |
+| `POLY_API_TOKEN` | operator bearer token; required only when `POLY_AUTH_REQUIRED=true`, minimum 32 characters |
 | `POLY_API_READ_TOKEN` | optional read-only bearer token for API clients, minimum 32 characters |
 | `POLY_LOG_LEVEL` | structured backend log level (default `info`) |
 | `POLY_MAX_EXPERIMENT_AGENTS` | maximum agents per experiment (default `100`) |
@@ -248,13 +248,17 @@ administration, prefer `docker compose exec clickhouse clickhouse-client`.
 External publishing requires an explicit local Compose override and must retain
 the non-default user and password.
 
-### API authentication
+### Optional API authentication
 
-Production mode fails closed unless `POLY_API_TOKEN` is configured. Generate a
-high-entropy token with `openssl rand -hex 32`. The web UI prompts for it and
-keeps it only in the current tab's `sessionStorage`; API and SSE requests send
-it as `Authorization: Bearer <token>`. Tokens are never accepted in query
-strings.
+Local development and the default Compose setup are unauthenticated. Compose
+binds the frontend to `127.0.0.1`, so the local workspace is not exposed to the
+LAN and the web UI opens directly without a backend-token prompt.
+
+For a shared or remote deployment, set `POLY_AUTH_REQUIRED=true` and configure a
+high-entropy `POLY_API_TOKEN` generated with `openssl rand -hex 32`. The web UI
+then prompts for it and keeps it only in the current tab's `sessionStorage`;
+API and SSE requests send it as `Authorization: Bearer <token>`. Tokens are
+never accepted in query strings.
 
 Market/event browsing and the static provider catalog remain public read-only
 routes. Settings, keys, experiments and their history/SSE streams, provider
@@ -262,8 +266,7 @@ model discovery, agent introspection, and analysis require authentication. An
 optional `POLY_API_READ_TOKEN` can access protected GET/HEAD routes but receives
 HTTP 403 for mutations. Nginx forwards the `Authorization` header unchanged.
 
-Development mode (`npm run dev` in `apps/server`) remains unauthenticated by
-default; set `POLY_API_TOKEN` to opt in locally. Direct API clients use:
+Direct API clients for an authentication-enabled deployment use:
 
 ```bash
 curl -H "Authorization: Bearer $POLY_API_TOKEN" \
