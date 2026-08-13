@@ -80,6 +80,8 @@ const zh: Dict = {
   'market.staleData': '当前显示缓存数据',
   'market.upstreamUnavailable': '暂时无法连接 Polymarket，请检查网络或代理设置。',
   'market.retry': '重新加载',
+  'market.clearFilters': '清除筛选',
+  'market.filterByCategory': '按标签筛选市场',
 
   // ── Market detail ──────────────────────────────────────────────────
   'detail.back': '返回市场列表',
@@ -378,6 +380,8 @@ const en: Dict = {
   'market.staleData': 'Showing cached market data',
   'market.upstreamUnavailable': 'Polymarket is temporarily unreachable. Check your network or proxy settings.',
   'market.retry': 'Try again',
+  'market.clearFilters': 'Clear filters',
+  'market.filterByCategory': 'Filter markets by category',
 
   // ── Market detail ──────────────────────────────────────────────────
   'detail.back': 'Back to markets',

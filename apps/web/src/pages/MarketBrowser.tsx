@@ -1,14 +1,19 @@
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   TrendingUp, Landmark, Trophy, Bitcoin, Gamepad2, Brain, Music,
-  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers, Sparkles,
+  Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers, Sparkles, X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useShallow } from 'zustand/react/shallow';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
 import { useI18n } from '../lib/i18n';
+import {
+  ALL_MARKETS_CATEGORY,
+  deriveCategoryOptions,
+  filterEventsByCategory,
+  normalizeCategory,
+} from '../lib/marketFilters';
 import type { EventSummary } from '../types';
 
 // Icon hints for well-known category labels (falls back to a generic tag icon).
@@ -25,23 +30,8 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   trending: TrendingUp,
 };
 
-const MAX_TABS = 11;
 const PAGE_SIZE = 30;
-
-// Derive category tabs from the loaded events, ranked by how many events carry
-// each tag. Guarantees every tab actually has content when clicked.
-function deriveCategories(events: EventSummary[]): string[] {
-  const counts = new Map<string, number>();
-  for (const ev of events) {
-    for (const c of ev.categories ?? []) {
-      counts.set(c, (counts.get(c) ?? 0) + 1);
-    }
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_TABS)
-    .map(([label]) => label);
-}
+const MAX_CATEGORY_TABS = 11;
 
 export default function MarketBrowser() {
   const { t } = useI18n();
@@ -132,29 +122,45 @@ export default function MarketBrowser() {
     return () => observer.disconnect();
   }, [loadMore]);
 
-  const categories = useMemo(() => deriveCategories(events), [events]);
+  const allCategories = useMemo(
+    () => deriveCategoryOptions(events, Number.POSITIVE_INFINITY),
+    [events],
+  );
+  const categories = allCategories.slice(0, MAX_CATEGORY_TABS);
+  const filtered = useMemo(
+    () => filterEventsByCategory(events, category),
+    [events, category],
+  );
+  const selectedCategoryKey = normalizeCategory(category);
+  const hasActiveFilters = category !== ALL_MARKETS_CATEGORY || searchQuery.trim().length > 0;
 
-  const filtered = useMemo(() => (
-    category === 'All'
-      ? events
-      : events.filter((ev) => (ev.categories ?? []).includes(category))
-  ), [events, category]);
+  // A search refresh can remove the previously selected category from the
+  // available result set. Never leave a hidden, impossible-to-clear filter.
+  useEffect(() => {
+    if (loading || category === ALL_MARKETS_CATEGORY) return;
+    if (!allCategories.some((option) => option.key === selectedCategoryKey)) {
+      setCategory(ALL_MARKETS_CATEGORY);
+    }
+  }, [allCategories, category, loading, selectedCategoryKey, setCategory]);
 
-  const tabs = ['All', ...categories];
+  const clearFilters = () => {
+    setCategory(ALL_MARKETS_CATEGORY);
+    setSearchQuery('');
+  };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <section className="relative overflow-hidden rounded-[28px] border border-white/80 bg-gradient-to-br from-[#073e38] via-[#0b655b] to-[#139688] px-6 py-7 text-white shadow-[0_22px_60px_rgba(13,82,75,0.18)] sm:px-8 sm:py-9 dark:border-white/5">
+    <div className="mx-auto max-w-7xl space-y-5">
+      <section className="relative overflow-hidden rounded-[26px] border border-white/80 bg-gradient-to-br from-[#073e38] via-[#0b655b] to-[#139688] px-5 py-6 text-white shadow-[0_18px_48px_rgba(13,82,75,0.16)] sm:px-7 sm:py-7 dark:border-white/5">
         <div className="absolute -right-12 -top-20 h-64 w-64 rounded-full border-[38px] border-white/5" aria-hidden="true" />
         <div className="absolute -bottom-28 right-28 h-56 w-56 rounded-full bg-cyan-300/10 blur-2xl" aria-hidden="true" />
-        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-2xl">
-            <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-primary-50 backdrop-blur-sm">
+            <span className="mb-2.5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-primary-50 backdrop-blur-sm">
               <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-200 opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-primary-200" /></span>
               {t('market.liveFeed')}
             </span>
-            <h2 className="text-3xl font-extrabold tracking-[-0.035em] sm:text-4xl">{t('market.heroTitle')}</h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-primary-50/75 sm:text-base">{t('market.heroSubtitle')}</p>
+            <h2 className="text-2xl font-extrabold tracking-[-0.035em] sm:text-3xl">{t('market.heroTitle')}</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-primary-50/75">{t('market.heroSubtitle')}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
@@ -165,7 +171,7 @@ export default function MarketBrowser() {
               onClick={() => setRefreshTick((n) => n + 1)}
               disabled={loading}
               title={t('market.refreshMarkets')}
-              className="grid h-[58px] w-[58px] place-items-center rounded-2xl border border-white/15 bg-white text-primary-700 shadow-lg transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+              className="grid h-[54px] w-[54px] place-items-center rounded-2xl border border-white/15 bg-white text-primary-700 shadow-lg transition-transform hover:-translate-y-0.5 disabled:opacity-50"
             >
               <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -173,39 +179,67 @@ export default function MarketBrowser() {
         </div>
       </section>
 
-      {/* Search bar (mobile — desktop search lives in the top nav) */}
-      <div className="relative sm:hidden">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={t('nav.searchMarkets')}
-          className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-sm text-surface-900 dark:text-surface-100 placeholder:text-surface-400 focus:ring-2 focus:ring-primary-500 focus:outline-none"
-        />
-      </div>
+      <section className="rounded-[22px] border border-white/80 bg-white/70 p-3 shadow-sm backdrop-blur-sm dark:border-white/5 dark:bg-white/5 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">{t('nav.searchMarkets')}</span>
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t('nav.searchMarkets')}
+              className="h-11 w-full rounded-xl border border-surface-200 bg-white pl-10 pr-10 text-sm text-surface-900 outline-none transition focus:border-primary-400 focus:ring-4 focus:ring-primary-500/10 dark:border-white/10 dark:bg-surface-900/70 dark:text-surface-100"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-700 dark:hover:bg-white/10 dark:hover:text-white"
+                aria-label={t('market.clearFilters')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </label>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-surface-500 transition hover:bg-surface-100 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <X className="h-4 w-4" />
+              {t('market.clearFilters')}
+            </button>
+          )}
+        </div>
 
-      {/* Category tabs (horizontal, Polymarket style) */}
-      <div className="flex gap-2 overflow-x-auto rounded-2xl border border-white/80 bg-white/65 p-2 shadow-sm backdrop-blur-sm dark:border-white/5 dark:bg-white/5">
-        {tabs.map((cat) => {
-          const Icon = cat === 'All' ? undefined : (CATEGORY_ICONS[cat.toLowerCase()] ?? Tag);
-          const active = category === cat;
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-hide" aria-label={t('market.filterByCategory')}>
+          {[{ key: normalizeCategory(ALL_MARKETS_CATEGORY), label: ALL_MARKETS_CATEGORY, count: events.length }, ...categories].map((option) => {
+          const Icon = option.label === ALL_MARKETS_CATEGORY ? undefined : (CATEGORY_ICONS[option.key] ?? Tag);
+          const active = selectedCategoryKey === option.key;
           return (
             <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold whitespace-nowrap transition-all ${
+              key={option.key}
+              type="button"
+              onClick={() => setCategory(option.label)}
+              aria-pressed={active}
+              className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold whitespace-nowrap transition-all ${
                 active
                   ? 'bg-primary-600 text-white shadow-sm'
-                  : 'text-surface-500 hover:bg-white hover:text-surface-800 dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white'
+                  : 'border border-surface-200/80 bg-white/80 text-surface-600 hover:border-primary-200 hover:text-primary-700 dark:border-white/10 dark:bg-white/5 dark:text-surface-300 dark:hover:text-white'
               }`}
             >
               {Icon && <Icon className="w-3.5 h-3.5" />}
-              {cat === 'All' ? t('market.all') : cat}
+              {option.label === ALL_MARKETS_CATEGORY ? t('market.all') : option.label}
+              <span className={`rounded-md px-1.5 py-0.5 text-[10px] tabular-nums ${active ? 'bg-white/15 text-white' : 'bg-surface-100 text-surface-400 dark:bg-white/10 dark:text-surface-400'}`}>
+                {option.count}
+              </span>
             </button>
           );
         })}
-      </div>
+        </div>
+      </section>
 
       {feedStatus !== 'live' && (
         <div className={`flex flex-col gap-3 rounded-2xl border px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${
@@ -234,7 +268,7 @@ export default function MarketBrowser() {
       <div className="flex items-end justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-primary-600 dark:text-primary-400"><Sparkles className="h-3.5 w-3.5" />{t('market.discover')}</div>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-surface-900 dark:text-white">{category === 'All' ? t('market.all') : category}</h2>
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-surface-900 dark:text-white">{category === ALL_MARKETS_CATEGORY ? t('market.all') : category}</h2>
         </div>
         <div className="flex items-center gap-3">
           <span className="rounded-full border border-surface-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-surface-500 dark:border-white/10 dark:bg-white/5 dark:text-surface-400">{t('market.countEvents', { count: filtered.length })}</span>
@@ -265,7 +299,7 @@ export default function MarketBrowser() {
           <p className="text-sm">{t('market.adjustSearch')}</p>
         </div>
       ) : (
-        <VirtualEventGrid events={filtered} />
+        <EventGrid events={filtered} />
       )}
 
       {/* Infinite-scroll sentinel + load-more indicator. The category tabs are a
@@ -288,69 +322,14 @@ export default function MarketBrowser() {
   );
 }
 
-// Responsive virtualized grid: only renders the rows that are actually in the
-// viewport. Column count is derived from the container width so the layout
-// stays in sync with the Tailwind breakpoints below.
-function VirtualEventGrid({ events }: { events: EventSummary[] }) {
-  const parentRef = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setWidth(entry.contentRect.width);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Match the Tailwind breakpoints used below: md=768px, xl=1280px.
-  const cols = width >= 1280 ? 3 : width >= 768 ? 2 : 1;
-  const rows = Math.ceil(events.length / cols);
-
-  const virtualizer = useVirtualizer({
-    count: rows,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 260,
-    overscan: 3,
-  });
-
+function EventGrid({ events }: { events: EventSummary[] }) {
   return (
-    <div
-      ref={parentRef}
-      className="h-[calc(100vh-240px)] overflow-y-auto scrollbar-hide"
-    >
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const start = virtualRow.index * cols;
-          const rowEvents = events.slice(start, start + cols);
-          return (
-            <div
-              key={virtualRow.key}
-              data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                {rowEvents.map((ev) => (
-                  ev.is_single
-                    ? <SingleEventCard key={ev.event_slug} event={ev} />
-                    : <EventCard key={ev.event_slug} event={ev} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {events.map((event) => (
+        event.is_single
+          ? <SingleEventCard key={event.event_slug} event={event} />
+          : <EventCard key={event.event_slug} event={event} />
+      ))}
     </div>
   );
 }
@@ -422,6 +401,30 @@ function Thumbnail({
   );
 }
 
+function CategoryBadges({ categories }: { categories: string[] }) {
+  const unique = new Map<string, string>();
+  for (const rawLabel of categories) {
+    const label = rawLabel.trim();
+    const key = normalizeCategory(label);
+    if (key && !unique.has(key)) unique.set(key, label);
+  }
+  const visible = [...unique.entries()].slice(0, 2);
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex min-w-0 items-center gap-1.5">
+      {visible.map(([key, label]) => (
+        <span
+          key={key}
+          className="max-w-32 truncate rounded-md bg-surface-100 px-2 py-0.5 text-[10px] font-medium text-surface-500 dark:bg-white/5 dark:text-surface-400"
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Single binary event: rendered as an ordinary Yes/No market card. The single
 // outcome carries the live YES quote; "No" is its complement. Clicking opens
 // the sub-market detail page.
@@ -450,6 +453,7 @@ const SingleEventCard = memo(function SingleEventCard({ event }: { event: EventS
               {formatVol(event.volume)} {t('market.vol')}
             </span>
           </div>
+          <CategoryBadges categories={event.categories} />
         </div>
       </div>
 
@@ -508,6 +512,7 @@ const EventCard = memo(function EventCard({ event }: { event: EventSummary }) {
               {formatVol(event.volume)} {t('market.vol')}
             </span>
           </div>
+          <CategoryBadges categories={event.categories} />
         </div>
       </div>
 
