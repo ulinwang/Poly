@@ -92,4 +92,18 @@ for (const [col, typ] of expectedCols) {
   }
 }
 
+const expectedSettingsCols = [
+  ['request_timeout_seconds', 'REAL DEFAULT 120'],
+  ['max_retries', 'INTEGER DEFAULT 3'],
+];
+const existingSettingsCols = db
+  .prepare("PRAGMA table_info(api_settings)")
+  .all() as Array<{ name: string }>;
+const settingsColNames = new Set(existingSettingsCols.map((column) => column.name));
+for (const [column, type] of expectedSettingsCols) {
+  if (!settingsColNames.has(column)) {
+    db.exec(`ALTER TABLE api_settings ADD COLUMN ${column} ${type}`);
+  }
+}
+
 export { db };

@@ -863,6 +863,7 @@ def decide(
     temperature: float = 0.0,
     timeout: float = 120.0,
     max_attempts: int = 3,
+    max_tokens: Optional[int] = None,
     call_fn=call_deepseek_with_tools,
     continue_fn=continue_with_tools,
     tools: list[dict] | None = None,
@@ -1024,6 +1025,8 @@ def decide(
                 base_url=base_url, api_key=api_key, model=model,
                 temperature=temperature, timeout=timeout,
             )
+            if max_tokens is not None:
+                base_call_kwargs["max_tokens"] = max_tokens
             if thinking is not None:
                 base_call_kwargs["thinking"] = thinking
 

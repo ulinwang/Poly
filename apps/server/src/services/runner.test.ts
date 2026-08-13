@@ -230,6 +230,22 @@ describe('spawnRun', () => {
     expect(cfg.model).toBe('m');
   });
 
+  it('passes request timeout and retry settings into the runner config', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), {
+      apiSettings: {
+        api_key: 'k',
+        request_timeout_seconds: 45,
+        max_retries: 5,
+        max_tokens: 4096,
+      },
+    });
+    const cfg = JSON.parse(mockChild.stdin.write.mock.calls[0][0] as string);
+    expect(cfg.request_timeout_seconds).toBe(45);
+    expect(cfg.max_retries).toBe(5);
+    expect(cfg.max_tokens).toBe(4096);
+  });
+
   it('marks handle paused and records checkpoint on a paused event', () => {
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
     spawnRun(handle, vi.fn(), { checkpointOut: '/tmp/out.pkl' });

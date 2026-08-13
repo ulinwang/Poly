@@ -136,7 +136,7 @@ export interface Experiment {
 
 export interface ApiSettings {
   id?: number;
-  provider: 'openai' | 'anthropic' | 'deepseek' | 'kimi' | 'custom';
+  provider: string;
   model: string;
   /**
    * Plaintext API key. Optional: present on incoming requests and on the
@@ -148,6 +148,8 @@ export interface ApiSettings {
   base_url?: string;
   temperature: number;
   max_tokens: number;
+  request_timeout_seconds: number;
+  max_retries: number;
 }
 
 /**

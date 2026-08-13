@@ -112,6 +112,10 @@ npm run build:server
 cd apps/server && npm start        # open http://localhost:8765
 ```
 
+If Polymarket is not directly reachable on your network, start the Node 24+
+backend with `NODE_USE_ENV_PROXY=1` and set `HTTPS_PROXY` / `HTTP_PROXY` to
+your local proxy. Compose forwards these optional variables to the backend.
+
 ### Run with Docker
 
 ```bash

@@ -1,6 +1,9 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
-import { Key, KeyRound, Palette, Plus, RefreshCw, Save, TestTube, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Activity, CheckCircle2, Key, KeyRound, Palette, Plus, RefreshCw,
+  Save, Server, SlidersHorizontal, TestTube, Trash2,
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
@@ -9,8 +12,11 @@ import type { ApiKey, ProviderInfo } from '../types';
 export default function Settings() {
   const { t } = useI18n();
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-xl font-bold text-surface-900 dark:text-white">{t('settings.title')}</h1>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-600">Workspace</p>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-surface-900 dark:text-white">{t('settings.title')}</h1>
+      </div>
 
       <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
         <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label={t('settings.tab.api')} />
@@ -62,12 +68,23 @@ function APISettings() {
   const [liveModels, setLiveModels] = useState<string[] | null>(null);
   const [modelsSource, setModelsSource] = useState<string | null>(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
+  const [refreshingProviders, setRefreshingProviders] = useState(false);
+  const [providersError, setProvidersError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.listProviders()
-      .then((res) => setProviders(res.providers))
-      .catch(() => { /* ignore; dropdown just stays empty */ });
+  const loadProviders = useCallback(async () => {
+    setRefreshingProviders(true);
+    setProvidersError(null);
+    try {
+      const res = await api.listProviders();
+      setProviders(res.providers);
+    } catch (error) {
+      setProvidersError((error as Error).message);
+    } finally {
+      setRefreshingProviders(false);
+    }
   }, []);
+
+  useEffect(() => { void loadProviders(); }, [loadProviders]);
 
   // Load stored settings (without plaintext key) so we can show whether a key
   // is configured. The api_key input stays empty / user-controlled.
@@ -82,6 +99,8 @@ function APISettings() {
           base_url: s.base_url,
           temperature: s.temperature,
           max_tokens: s.max_tokens,
+          request_timeout_seconds: s.request_timeout_seconds,
+          max_retries: s.max_retries,
           api_key_set: s.api_key_set,
         });
       })
@@ -95,11 +114,15 @@ function APISettings() {
   // Live models (if fetched) take precedence over the static catalog list.
   const models = liveModels ?? provider?.models ?? [];
 
-  const handleRefreshModels = async () => {
+  const handleRefreshModels = useCallback(async () => {
     setRefreshingModels(true);
     setModelsSource(null);
     try {
-      const res = await api.listProviderModels(apiSettings.provider);
+      const res = await api.discoverProviderModels({
+        provider: apiSettings.provider,
+        base_url: apiSettings.base_url || undefined,
+        api_key: apiSettings.api_key?.trim() || undefined,
+      });
       setLiveModels(res.models);
       setModelsSource(
         res.source === 'live'
@@ -111,7 +134,15 @@ function APISettings() {
     } finally {
       setRefreshingModels(false);
     }
-  };
+  }, [apiSettings.provider, apiSettings.base_url, apiSettings.api_key, t]);
+
+  // Debounced live discovery: selecting a provider or changing the key/base
+  // URL refreshes its models without forcing the user to save first.
+  useEffect(() => {
+    if (!apiSettings.provider) return;
+    const timer = window.setTimeout(() => { void handleRefreshModels(); }, 450);
+    return () => window.clearTimeout(timer);
+  }, [apiSettings.provider, apiSettings.base_url, apiSettings.api_key, handleRefreshModels]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -150,154 +181,60 @@ function APISettings() {
   };
 
   return (
-    <div className="card p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
-          {t('settings.api.heading')}
-        </h2>
-        <p className="text-sm text-surface-400 mt-1">
-          {t('settings.api.subtitle')}
-        </p>
-      </div>
-
-      {/* Provider */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          {t('settings.api.provider')}
-        </label>
-        <select
-          value={apiSettings.provider}
-          onChange={(e) => {
-            const p = providers.find((p) => p.id === e.target.value);
-            // Reset live-model state back to the catalog for the new provider.
-            setLiveModels(null);
-            setModelsSource(null);
-            updateApiSettings({
-              provider: e.target.value as import('../types').ApiSettings['provider'],
-              model: p?.models[0] || '',
-              // Auto-fill the OpenAI-compatible base URL; blank for custom /
-              // litellm-native providers so the user/litellm supplies it.
-              base_url: p?.base_url || '',
-            });
-          }}
-          className="input"
-        >
-          {providers.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Model */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-            {t('settings.api.model')}
-          </label>
-          {/* Fetch the live model list from the provider's /models endpoint. */}
-          <button
-            type="button"
-            onClick={handleRefreshModels}
-            disabled={refreshingModels}
-            className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />
-            {refreshingModels ? t('settings.api.refreshingModels') : t('settings.api.refreshModels')}
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-cyan-50 p-6 dark:border-primary-900/60 dark:from-primary-950/50 dark:via-surface-900 dark:to-cyan-950/30">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-primary-700 dark:text-primary-300"><Activity className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-[0.14em]">{t('settings.api.liveDiscovery')}</span></div>
+            <h2 className="text-xl font-bold text-surface-900 dark:text-white">{t('settings.api.heading')}</h2>
+            <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">{t('settings.api.liveDiscoveryHint')}</p>
+          </div>
+          <button type="button" onClick={() => void loadProviders()} disabled={refreshingProviders} className="btn-secondary flex items-center justify-center gap-2">
+            <RefreshCw className={`h-4 w-4 ${refreshingProviders ? 'animate-spin' : ''}`} />
+            {t('settings.api.refreshProviders')}
           </button>
         </div>
-        {/* Editable combobox: suggestions from the provider catalog (or the live
-            /models list once refreshed), but any model id can be typed (the
-            endpoint forwards it as-is), so newer models still work. */}
-        <input
-          type="text"
-          list="model-options"
-          value={apiSettings.model}
-          onChange={(e) => updateApiSettings({ model: e.target.value })}
-          placeholder={t('settings.api.modelPlaceholder')}
-          className="input"
-        />
-        <datalist id="model-options">
-          {models.map((m) => <option key={m} value={m} />)}
-        </datalist>
-        {modelsSource && (
-          <p className="text-xs text-surface-400">{modelsSource}</p>
-        )}
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-5">
+        <section className="card space-y-5 p-6 lg:col-span-3">
+          <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"><Server className="h-5 w-5" /></span><div><h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.api.connection')}</h3><p className="text-xs text-surface-400">{t('settings.api.subtitle')}</p></div></div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.provider')}</label>
+              <select value={apiSettings.provider} onChange={(e) => { const next = providers.find((item) => item.id === e.target.value); setLiveModels(null); setModelsSource(null); updateApiSettings({ provider: e.target.value, model: next?.models[0] || '', base_url: next?.base_url || '' }); }} className="input">
+                {providers.length === 0 && <option value={apiSettings.provider}>{apiSettings.provider}</option>}
+                {providers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              {providersError && <p className="text-xs text-danger">{providersError}</p>}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.model')}</label><button type="button" onClick={() => void handleRefreshModels()} disabled={refreshingModels} className="flex items-center gap-1 text-xs font-semibold text-primary-600 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingModels ? 'animate-spin' : ''}`} />{refreshingModels ? t('settings.api.refreshingModels') : t('settings.api.refreshModels')}</button></div>
+              <input type="text" list="model-options" value={apiSettings.model} onChange={(e) => updateApiSettings({ model: e.target.value })} placeholder={t('settings.api.modelPlaceholder')} className="input" />
+              <datalist id="model-options">{models.map((model) => <option key={model} value={model} />)}</datalist>
+              {modelsSource && <p className="text-xs text-surface-400">{modelsSource}</p>}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.apiKey')}</label><span className={`inline-flex items-center gap-1 text-xs ${apiSettings.api_key_set ? 'text-success' : 'text-surface-400'}`}>{apiSettings.api_key_set && <CheckCircle2 className="h-3.5 w-3.5" />}{apiSettings.api_key_set ? t('settings.api.keySet') : t('settings.api.keyUnset')}</span></div>
+            <input type="password" value={apiSettings.api_key || ''} onChange={(e) => updateApiSettings({ api_key: e.target.value })} placeholder={apiSettings.api_key_set ? t('settings.api.keyPlaceholderSet') : 'sk-...'} className="input" />
+            <p className="text-xs text-surface-400">{t('settings.api.keyHint')}</p>
+          </div>
+          {(provider?.base_url || provider?.requires_base_url || apiSettings.base_url) && <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.baseUrl')}</label><input type="url" value={apiSettings.base_url || ''} onChange={(e) => updateApiSettings({ base_url: e.target.value })} placeholder={provider?.base_url || 'https://api.example.com/v1'} className="input" /></div>}
+        </section>
+
+        <section className="card space-y-5 p-6 lg:col-span-2">
+          <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300"><SlidersHorizontal className="h-5 w-5" /></span><h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.api.generation')}</h3></div>
+          <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.temperature', { value: apiSettings.temperature })}</label><input type="range" min="0" max="2" step="0.1" value={apiSettings.temperature} onChange={(e) => updateApiSettings({ temperature: Number(e.target.value) })} className="w-full" /><div className="flex justify-between text-xs text-surface-400"><span>{t('settings.api.deterministic')}</span><span>{t('settings.api.creative')}</span></div></div>
+          <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.maxTokens', { value: apiSettings.max_tokens })}</label><input type="range" min="256" max="32768" step="256" value={apiSettings.max_tokens} onChange={(e) => updateApiSettings({ max_tokens: Number(e.target.value) })} className="w-full" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.timeout')}</label><input type="number" min="5" max="600" value={apiSettings.request_timeout_seconds} onChange={(e) => updateApiSettings({ request_timeout_seconds: Number(e.target.value) })} className="input" /><p className="text-xs text-surface-400">{t('settings.api.timeoutHint')}</p></div>
+            <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.retries')}</label><input type="number" min="1" max="10" value={apiSettings.max_retries} onChange={(e) => updateApiSettings({ max_retries: Number(e.target.value) })} className="input" /><p className="text-xs text-surface-400">{t('settings.api.retriesHint')}</p></div>
+          </div>
+        </section>
       </div>
 
-      {/* API Key */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          {t('settings.api.apiKey')}
-        </label>
-        <div className="text-xs">
-          {apiSettings.api_key_set ? (
-            <span className="text-success">{t('settings.api.keySet')}</span>
-          ) : (
-            <span className="text-surface-400">{t('settings.api.keyUnset')}</span>
-          )}
-        </div>
-        <input
-          type="password"
-          value={apiSettings.api_key || ''}
-          onChange={(e) => updateApiSettings({ api_key: e.target.value })}
-          placeholder={apiSettings.api_key_set ? t('settings.api.keyPlaceholderSet') : 'sk-...'}
-          className="input"
-        />
-        <p className="text-xs text-surface-400">
-          {t('settings.api.keyHint')}
-        </p>
-      </div>
-
-      {/* Base URL (for custom) */}
-      {provider?.requires_base_url && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-            {t('settings.api.baseUrl')}
-          </label>
-          <input
-            type="text"
-            value={apiSettings.base_url || ''}
-            onChange={(e) => updateApiSettings({ base_url: e.target.value })}
-            placeholder="https://api.openai.com/v1"
-            className="input"
-          />
-        </div>
-      )}
-
-      {/* Temperature */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          {t('settings.api.temperature', { value: apiSettings.temperature })}
-        </label>
-        <input
-          type="range"
-          min="0" max="2" step="0.1"
-          value={apiSettings.temperature}
-          onChange={(e) => updateApiSettings({ temperature: Number(e.target.value) })}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-surface-400">
-          <span>{t('settings.api.deterministic')}</span>
-          <span>{t('settings.api.creative')}</span>
-        </div>
-      </div>
-
-      {/* Max Tokens */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-surface-700 dark:text-surface-300">
-          {t('settings.api.maxTokens', { value: apiSettings.max_tokens })}
-        </label>
-        <input
-          type="range"
-          min="256" max="8192" step="256"
-          value={apiSettings.max_tokens}
-          onChange={(e) => updateApiSettings({ max_tokens: Number(e.target.value) })}
-          className="w-full"
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-3 pt-4 border-t border-surface-200 dark:border-surface-700">
+      <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
         <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
           <Save className="w-4 h-4" />
           {saving ? t('settings.api.saving') : t('settings.api.save')}
@@ -307,7 +244,7 @@ function APISettings() {
           {t('settings.api.testConnection')}
         </button>
         {testResult && (
-          <span className={`text-sm ${testOk === false ? 'text-danger' : testOk === true ? 'text-success' : 'text-surface-400'}`}>
+          <span className={`text-sm sm:ml-auto ${testOk === false ? 'text-danger' : testOk === true ? 'text-success' : 'text-surface-400'}`}>
             {testResult}
           </span>
         )}

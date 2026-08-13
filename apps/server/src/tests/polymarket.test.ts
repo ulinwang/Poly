@@ -7,6 +7,7 @@ import {
   getPolymarketEventMarkets,
   getPolymarketMarket,
   listPolymarketEvents,
+  listPolymarketEventsFeed,
   listPolymarketMarkets,
   type GammaMarket,
 } from '../services/polymarket.js';
@@ -22,6 +23,11 @@ describe('Gamma API failure handling', () => {
 
     await expect(listPolymarketMarkets('', 1, false, 91_001)).resolves.toEqual([]);
     await expect(listPolymarketEvents('', 1, 91_001)).resolves.toEqual([]);
+    await expect(listPolymarketEventsFeed('', 1, 91_003)).resolves.toMatchObject({
+      data: [],
+      source: 'unavailable',
+      message: 'upstream unavailable',
+    });
     await expect(getPolymarketMarket('missing-with-upstream-down')).resolves.toBeNull();
     await expect(getPolymarketEventMarkets('missing-event-with-upstream-down')).resolves.toEqual([]);
   });

@@ -53,6 +53,8 @@ export const api = {
       offset?: number;
       limit?: number;
       hasMore?: boolean;
+      source?: 'live' | 'stale' | 'unavailable';
+      message?: string;
     }>(url.pathname + url.search);
   },
 
@@ -69,6 +71,8 @@ export const api = {
       offset?: number;
       limit?: number;
       hasMore?: boolean;
+      source?: 'live' | 'stale' | 'unavailable';
+      message?: string;
     }>(url.pathname + url.search);
   },
 
@@ -211,7 +215,7 @@ export const api = {
 
   // Providers
   listProviders: () =>
-    fetchJson<{ providers: import('../types').ProviderInfo[] }>('/api/v1/providers'),
+    fetchJson<{ providers: import('../types').ProviderInfo[]; refreshed_at?: string }>('/api/v1/providers'),
 
   // Fetch a provider's available models live via its /models endpoint.
   // Falls back to the static catalog (source: 'catalog') when no key is set,
@@ -220,6 +224,17 @@ export const api = {
     fetchJson<{ models: string[]; source: 'live' | 'catalog'; message?: string }>(
       `/api/v1/providers/${encodeURIComponent(providerId)}/models`,
     ),
+
+  discoverProviderModels: (input: { provider: string; base_url?: string; api_key?: string }) =>
+    fetchJson<{
+      models: string[];
+      source: 'live' | 'catalog';
+      message?: string;
+      refreshed_at?: string;
+    }>('/api/v1/providers/models/discover', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   // Agent introspection — the LLM tool schemas and prompt templates the
   // simulated agents see, sourced from the Python introspection script.

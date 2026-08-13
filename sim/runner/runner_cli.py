@@ -93,7 +93,10 @@ def main() -> None:
                 pause=pause_event,
                 checkpoint_out=checkpoint_out,
             )
-            for key in ("api_key", "base_url", "model"):
+            for key in (
+                "api_key", "base_url", "model",
+                "request_timeout_seconds", "max_retries", "max_tokens",
+            ):
                 if key in config and config[key] is not None:
                     kwargs[key] = config[key]
             resume_stream(**kwargs)
@@ -112,7 +115,10 @@ def main() -> None:
                 data_dir=Path(config["data_dir"]),
             )
             # Pass through optional LLM overrides from frontend settings
-            for key in ("api_key", "base_url", "model"):
+            for key in (
+                "api_key", "base_url", "model",
+                "request_timeout_seconds", "max_retries", "max_tokens",
+            ):
                 if key in config and config[key] is not None:
                     kwargs[key] = config[key]
             run_stream(**kwargs)

@@ -16,6 +16,8 @@ export default async function settingsRoutes(app: FastifyInstance) {
         base_url: undefined,
         temperature: 0.7,
         max_tokens: 2048,
+        request_timeout_seconds: 120,
+        max_retries: 3,
         api_key_set: false,
       };
       return { settings: defaults };
@@ -24,8 +26,29 @@ export default async function settingsRoutes(app: FastifyInstance) {
     return { settings: row };
   });
 
-  app.put('/api', async (req) => {
+  app.put('/api', async (req, reply) => {
     const body = req.body as ApiSettings;
+    const requestTimeoutSeconds = body.request_timeout_seconds ?? 120;
+    const maxRetries = body.max_retries ?? 3;
+    if (!body.provider?.trim() || !body.model?.trim()) {
+      return reply.status(400).send({ message: 'Provider and model are required' });
+    }
+    if (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2) {
+      return reply.status(400).send({ message: 'Temperature must be between 0 and 2' });
+    }
+    if (!Number.isSafeInteger(body.max_tokens) || body.max_tokens < 1 || body.max_tokens > 131_072) {
+      return reply.status(400).send({ message: 'Max tokens must be between 1 and 131072' });
+    }
+    if (
+      !Number.isFinite(requestTimeoutSeconds) ||
+      requestTimeoutSeconds < 5 ||
+      requestTimeoutSeconds > 600
+    ) {
+      return reply.status(400).send({ message: 'Request timeout must be between 5 and 600 seconds' });
+    }
+    if (!Number.isSafeInteger(maxRetries) || maxRetries < 1 || maxRetries > 10) {
+      return reply.status(400).send({ message: 'Maximum attempts must be between 1 and 10' });
+    }
     const payload: Omit<ApiSettings, 'id'> & { id?: number } = {
       provider: body.provider,
       model: body.model,
@@ -35,6 +58,8 @@ export default async function settingsRoutes(app: FastifyInstance) {
       base_url: body.base_url,
       temperature: body.temperature,
       max_tokens: body.max_tokens,
+      request_timeout_seconds: requestTimeoutSeconds,
+      max_retries: maxRetries,
     };
     saveApiSettings(payload);
     // Respond with the safe view (no plaintext key).

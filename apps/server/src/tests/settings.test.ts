@@ -50,9 +50,29 @@ describe('settings routes', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.settings.provider).toBe('openai');
+    expect(body.settings.request_timeout_seconds).toBe(120);
+    expect(body.settings.max_retries).toBe(3);
     // Response must not include the plaintext key, only a boolean flag.
     expect(body.settings.api_key).toBeUndefined();
     expect(body.settings.api_key_set).toBe(true);
+  });
+
+  it('rejects out-of-range runtime controls', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/settings/api',
+      payload: {
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        temperature: 0.7,
+        max_tokens: 2048,
+        request_timeout_seconds: 0,
+        max_retries: 99,
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).message).toContain('timeout');
   });
 
   it('PUT without api_key preserves the previously stored key', async () => {
@@ -472,6 +492,30 @@ describe('settings routes', () => {
     expect(body.source).toBe('live');
     expect(body.models).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro']);
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST /providers/models/discover uses unsaved connection values', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: [{ id: 'new-live-model' }] }),
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/providers/models/discover',
+      payload: {
+        provider: 'custom',
+        base_url: 'https://example.com/v1',
+        api_key: 'sk-unsaved',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({
+      source: 'live',
+      models: ['new-live-model'],
+    });
   });
 
   it('GET /providers/:id/models falls back to catalog when /models fails', async () => {

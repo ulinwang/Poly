@@ -123,7 +123,14 @@ export function closeEventLog(handle: RunHandle): Promise<void> {
 // onEnd helper available for future use if persisting from runner directly
 
 export interface SpawnOptions {
-  apiSettings?: { api_key?: string; base_url?: string; model?: string };
+  apiSettings?: {
+    api_key?: string;
+    base_url?: string;
+    model?: string;
+    request_timeout_seconds?: number;
+    max_retries?: number;
+    max_tokens?: number;
+  };
   /** When set, resume from this checkpoint instead of starting fresh. */
   resumeCheckpoint?: string;
   /** Where the Python side writes its checkpoint when paused. */
@@ -135,7 +142,14 @@ export interface SpawnOptions {
 export function spawnRun(
   handle: RunHandle,
   onEvent: (kind: string, data: Record<string, unknown>) => void,
-  options?: SpawnOptions | { api_key?: string; base_url?: string; model?: string },
+  options?: SpawnOptions | {
+    api_key?: string;
+    base_url?: string;
+    model?: string;
+    request_timeout_seconds?: number;
+    max_retries?: number;
+    max_tokens?: number;
+  },
 ): void {
   // Back-compat: callers may still pass a bare apiSettings object.
   const opts: SpawnOptions =
@@ -183,6 +197,11 @@ export function spawnRun(
   if (apiSettings?.api_key) payload.api_key = apiSettings.api_key;
   if (apiSettings?.base_url) payload.base_url = apiSettings.base_url;
   if (apiSettings?.model) payload.model = apiSettings.model;
+  if (apiSettings?.request_timeout_seconds !== undefined) {
+    payload.request_timeout_seconds = apiSettings.request_timeout_seconds;
+  }
+  if (apiSettings?.max_retries !== undefined) payload.max_retries = apiSettings.max_retries;
+  if (apiSettings?.max_tokens !== undefined) payload.max_tokens = apiSettings.max_tokens;
 
   child.stdin.write(JSON.stringify(payload));
   child.stdin.end();

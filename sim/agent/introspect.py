@@ -25,10 +25,36 @@ ClickHouse, the network, or any run state.
 from __future__ import annotations
 
 import json
+import importlib.util
 import sys
 from pathlib import Path
 
-from agent.decision.tool_schemas import TOOL_SCHEMAS
+# The server executes this file directly from the repository root. In that
+# mode Python adds ``sim/agent`` (not ``sim``) to sys.path, so the top-level
+# ``agent`` package is otherwise invisible. Keep direct execution working in
+# the same way as ``python -m agent.introspect``.
+_SIM_ROOT = Path(__file__).resolve().parents[1]
+if str(_SIM_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SIM_ROOT))
+
+def _load_tool_schemas() -> list[dict]:
+    """Load the pure-data schema module without importing agent.__init__.
+
+    Importing ``agent.decision.tool_schemas`` normally executes both package
+    initializers, which pull in the optional live LLM stack. Introspection only
+    needs the schema constants and must keep working before those dependencies
+    are installed.
+    """
+    module_path = Path(__file__).resolve().parent / "decision" / "tool_schemas.py"
+    spec = importlib.util.spec_from_file_location("poly_agent_tool_schemas", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load tool schemas from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.TOOL_SCHEMAS
+
+
+TOOL_SCHEMAS = _load_tool_schemas()
 
 _TEMPLATE_DIR = (
     Path(__file__).resolve().parent / "personas" / "templates"

@@ -50,6 +50,8 @@ export default function MarketBrowser() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [feedStatus, setFeedStatus] = useState<'live' | 'stale' | 'unavailable'>('live');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const events = useMarketStore(useShallow((s) => s.events));
   const setEvents = useMarketStore((s) => s.setEvents);
   const appendEvents = useMarketStore((s) => s.appendEvents);
@@ -73,23 +75,30 @@ export default function MarketBrowser() {
     hasMoreRef.current = true;
     loadingRef.current = true;
     offsetRef.current = 0;
+    setLoadError(null);
     api.listEvents({ q: searchQuery, limit: PAGE_SIZE, offset: 0 })
       .then((res) => {
         if (cancelled) return;
+        setFeedStatus(res.source ?? 'live');
+        setLoadError(res.source === 'unavailable' ? (res.message || t('market.upstreamUnavailable')) : null);
         setEvents(res.events);
         offsetRef.current = PAGE_SIZE;
         const more = res.hasMore ?? res.events.length >= PAGE_SIZE;
         setHasMore(more);
         hasMoreRef.current = more;
       })
-      .catch((err) => console.error('Failed to load events:', err))
+      .catch((err) => {
+        if (cancelled) return;
+        setFeedStatus('unavailable');
+        setLoadError((err as Error).message);
+      })
       .finally(() => {
         if (cancelled) return;
         setLoading(false);
         loadingRef.current = false;
       });
     return () => { cancelled = true; };
-  }, [searchQuery, setEvents, refreshTick]);
+  }, [searchQuery, setEvents, refreshTick, t]);
 
   // Subsequent pages: append.
   const loadMore = useCallback(() => {
@@ -198,6 +207,29 @@ export default function MarketBrowser() {
         })}
       </div>
 
+      {feedStatus !== 'live' && (
+        <div className={`flex flex-col gap-3 rounded-2xl border px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${
+          feedStatus === 'stale'
+            ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'
+            : 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200'
+        }`}>
+          <div>
+            <p className="text-sm font-semibold">
+              {feedStatus === 'stale' ? t('market.staleData') : t('market.loadFailed')}
+            </p>
+            <p className="mt-1 text-xs opacity-75">{loadError || t('market.upstreamUnavailable')}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRefreshTick((value) => value + 1)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-current/20 bg-white/70 px-3 py-2 text-sm font-semibold dark:bg-black/10"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {t('market.retry')}
+          </button>
+        </div>
+      )}
+
       {/* Section title */}
       <div className="flex items-end justify-between">
         <div>
@@ -226,7 +258,7 @@ export default function MarketBrowser() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && feedStatus === 'unavailable' ? null : filtered.length === 0 ? (
         <div className="text-center py-20 text-surface-400">
           <Search className="w-12 h-12 mx-auto mb-4 text-surface-300 dark:text-surface-600" />
           <p className="text-lg mb-1 font-medium">{t('market.noneFound')}</p>

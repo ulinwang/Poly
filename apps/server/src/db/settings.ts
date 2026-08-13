@@ -13,6 +13,8 @@ interface ApiSettingsRow {
   base_url: string | null;
   temperature: number;
   max_tokens: number;
+  request_timeout_seconds: number;
+  max_retries: number;
 }
 
 function getLatestRow(): ApiSettingsRow | undefined {
@@ -35,6 +37,8 @@ export function getApiSettings(): ApiSettings | undefined {
     base_url: row.base_url ?? undefined,
     temperature: row.temperature,
     max_tokens: row.max_tokens,
+    request_timeout_seconds: row.request_timeout_seconds,
+    max_retries: row.max_retries,
     api_key_set: !!row.api_key,
   };
 }
@@ -62,6 +66,8 @@ export function getApiSettingsDecrypted(): ApiSettings | undefined {
     base_url: row.base_url ?? undefined,
     temperature: row.temperature,
     max_tokens: row.max_tokens,
+    request_timeout_seconds: row.request_timeout_seconds,
+    max_retries: row.max_retries,
     api_key_set: !!row.api_key,
   };
 }
@@ -93,8 +99,14 @@ export function saveApiSettings(settings: Omit<ApiSettings, 'id'> & { id?: numbe
   }
 
   const stmt = db.prepare(`
-    INSERT INTO api_settings (provider, model, api_key, base_url, temperature, max_tokens)
-    VALUES (@provider, @model, @api_key, @base_url, @temperature, @max_tokens)
+    INSERT INTO api_settings (
+      provider, model, api_key, base_url, temperature, max_tokens,
+      request_timeout_seconds, max_retries
+    )
+    VALUES (
+      @provider, @model, @api_key, @base_url, @temperature, @max_tokens,
+      @request_timeout_seconds, @max_retries
+    )
   `);
   const info = stmt.run({
     provider: settings.provider,
@@ -103,6 +115,8 @@ export function saveApiSettings(settings: Omit<ApiSettings, 'id'> & { id?: numbe
     base_url: settings.base_url ?? null,
     temperature: settings.temperature,
     max_tokens: settings.max_tokens,
+    request_timeout_seconds: settings.request_timeout_seconds,
+    max_retries: settings.max_retries,
   });
   return Number(info.lastInsertRowid);
 }

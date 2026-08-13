@@ -524,7 +524,14 @@ export default async function experimentsRoutes(
   function defaultApiSettings() {
     const settings = getApiSettingsDecrypted();
     return settings
-      ? { api_key: settings.api_key, base_url: settings.base_url, model: settings.model }
+      ? {
+          api_key: settings.api_key,
+          base_url: settings.base_url,
+          model: settings.model,
+          request_timeout_seconds: settings.request_timeout_seconds,
+          max_retries: settings.max_retries,
+          max_tokens: settings.max_tokens,
+        }
       : undefined;
   }
 

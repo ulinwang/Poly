@@ -44,7 +44,14 @@ export interface GammaMarket {
 type Cached = { data: GammaMarket[]; ts: number };
 type CachedEvent = { data: GammaEvent[]; ts: number };
 
+export interface PolymarketFeedResult<T> {
+  data: T;
+  source: 'live' | 'stale' | 'unavailable';
+  message?: string;
+}
+
 const CACHE_TTL_MS = 30_000;
+const GAMMA_TIMEOUT_MS = 10_000;
 // Cache keyed by (offset,limit) so each page is cached independently.
 const cache = new Map<string, Cached>();
 // Separate cache for event-by-slug lookups (different payload shape).
@@ -137,8 +144,8 @@ async function fetchGammaEvents(offset = 0, limit = 30): Promise<GammaEvent[]> {
   try {
     const url =
       `https://gamma-api.polymarket.com/events?limit=${limit}&offset=${offset}` +
-      '&closed=false&order=volume24hr&ascending=false';
-    const resp = await fetch(url);
+      '&active=true&closed=false&order=volume24hr&ascending=false';
+    const resp = await fetch(url, { signal: AbortSignal.timeout(GAMMA_TIMEOUT_MS) });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = (await resp.json()) as GammaEvent[];
     eventListCache.set(key, { data: json, ts: now });
@@ -146,6 +153,34 @@ async function fetchGammaEvents(offset = 0, limit = 30): Promise<GammaEvent[]> {
   } catch {
     if (hit) return hit.data;
     return [];
+  }
+}
+
+async function fetchGammaEventsWithStatus(
+  offset = 0,
+  limit = 30,
+): Promise<PolymarketFeedResult<GammaEvent[]>> {
+  const now = Date.now();
+  const key = `${offset}:${limit}`;
+  const hit = eventListCache.get(key);
+  if (hit && now - hit.ts < CACHE_TTL_MS) {
+    return { data: hit.data, source: 'live' };
+  }
+  try {
+    const url =
+      `https://gamma-api.polymarket.com/events?limit=${limit}&offset=${offset}` +
+      '&active=true&closed=false&order=volume24hr&ascending=false';
+    const resp = await fetch(url, { signal: AbortSignal.timeout(GAMMA_TIMEOUT_MS) });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = (await resp.json()) as GammaEvent[];
+    eventListCache.set(key, { data: json, ts: now });
+    return { data: json, source: 'live' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown upstream error';
+    if (hit) {
+      return { data: hit.data, source: 'stale', message };
+    }
+    return { data: [], source: 'unavailable', message };
   }
 }
 
@@ -403,6 +438,20 @@ export async function listPolymarketEvents(
     ? events.filter((ev) => (ev.title || '').toLowerCase().includes(qlower))
     : events;
   return filtered.map(eventToSummary);
+}
+
+/** Browse feed plus upstream freshness metadata for honest UI error states. */
+export async function listPolymarketEventsFeed(
+  q = '',
+  limit = 30,
+  offset = 0,
+): Promise<PolymarketFeedResult<EventSummary[]>> {
+  const result = await fetchGammaEventsWithStatus(offset, limit);
+  const qlower = q.trim().toLowerCase();
+  const filtered = qlower
+    ? result.data.filter((ev) => (ev.title || '').toLowerCase().includes(qlower))
+    : result.data;
+  return { ...result, data: filtered.map(eventToSummary) };
 }
 
 // Return the sibling sub-markets that belong to the same event, normalized as

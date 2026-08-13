@@ -122,6 +122,7 @@ def call_deepseek_with_tools(
     timeout: float = 60.0,
     tool_choice: str | dict = "auto",
     thinking: Optional[bool] = None,
+    max_tokens: Optional[int] = None,
 ) -> dict:
     """Send one chat-completion request with OpenAI function tools.
 
@@ -153,6 +154,8 @@ def call_deepseek_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
     # thinking enabled for non-forced calls, disabled when tool_choice is
     # forced (DeepSeek constraint). Dropped for providers that don't support it.
     kwargs["extra_body"] = _thinking_extra_body(tool_choice, thinking)
@@ -169,6 +172,7 @@ def continue_with_tools(
     timeout: float = 60.0,
     tool_choice: str | dict = "auto",
     thinking: Optional[bool] = None,
+    max_tokens: Optional[int] = None,
 ) -> dict:
     """Continue an in-progress tool-calling conversation.
 
@@ -194,6 +198,8 @@ def continue_with_tools(
     }
     if base_url:
         kwargs["api_base"] = base_url
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
     kwargs["extra_body"] = _thinking_extra_body(tool_choice, thinking)
     return _complete_with_tools(kwargs)
 

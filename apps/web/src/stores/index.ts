@@ -219,6 +219,8 @@ const defaultApiSettings: ApiSettings = {
   api_key_set: false,
   temperature: 0.7,
   max_tokens: 2048,
+  request_timeout_seconds: 120,
+  max_retries: 3,
 };
 
 // Lightweight localStorage persistence for UI preferences (no extra deps).

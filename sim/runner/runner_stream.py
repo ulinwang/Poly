@@ -210,6 +210,9 @@ def _run_stream_impl(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    request_timeout_seconds: float = 120.0,
+    max_retries: int = 3,
+    max_tokens: Optional[int] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
     agent_scheduler: AgentScheduler | None = None,
     interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
@@ -358,6 +361,9 @@ def _run_stream_impl(
         agent_loop_observer=agent_loop_observer,
         agent_scheduler=agent_scheduler,
         interaction_budget=interaction_budget,
+        request_timeout_seconds=request_timeout_seconds,
+        max_retries=max_retries,
+        max_tokens=max_tokens,
     )
 
 
@@ -371,6 +377,9 @@ def _resume_stream_impl(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    request_timeout_seconds: float = 120.0,
+    max_retries: int = 3,
+    max_tokens: Optional[int] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
     agent_scheduler: AgentScheduler | None = None,
     interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
@@ -447,6 +456,9 @@ def _resume_stream_impl(
         agent_loop_observer=agent_loop_observer,
         agent_scheduler=agent_scheduler,
         interaction_budget=interaction_budget,
+        request_timeout_seconds=request_timeout_seconds,
+        max_retries=max_retries,
+        max_tokens=max_tokens,
     )
 
 
@@ -475,6 +487,9 @@ def run_stream(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    request_timeout_seconds: float = 120.0,
+    max_retries: int = 3,
+    max_tokens: Optional[int] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
 ) -> None:
     """Run a simulation with optional, fail-open observability."""
@@ -512,6 +527,9 @@ def run_stream(
             api_key=api_key,
             base_url=base_url,
             model=model,
+            request_timeout_seconds=request_timeout_seconds,
+            max_retries=max_retries,
+            max_tokens=max_tokens,
             agent_loop_observer=_observed_agent_loop_observer(
                 agent_loop_observer, telemetry,
             ),
@@ -533,6 +551,9 @@ def resume_stream(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     model: Optional[str] = None,
+    request_timeout_seconds: float = 120.0,
+    max_retries: int = 3,
+    max_tokens: Optional[int] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
 ) -> None:
     """Resume a simulation with optional, fail-open observability."""
@@ -557,6 +578,9 @@ def resume_stream(
             api_key=api_key,
             base_url=base_url,
             model=model,
+            request_timeout_seconds=request_timeout_seconds,
+            max_retries=max_retries,
+            max_tokens=max_tokens,
             agent_loop_observer=_observed_agent_loop_observer(
                 agent_loop_observer, telemetry,
             ),
@@ -593,6 +617,9 @@ def _run_tick_loop(
     agent_loop_observer: AgentLoopObserver | None = None,
     agent_scheduler: AgentScheduler | None = None,
     interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
+    request_timeout_seconds: float = 120.0,
+    max_retries: int = 3,
+    max_tokens: Optional[int] = None,
 ) -> None:
     """Shared tick loop for fresh runs and resumes.
 
@@ -792,8 +819,9 @@ def _run_tick_loop(
                         model=model,
                         tick_size=priors["tick_size"],
                         temperature=temperature,
-                        timeout=settings.DEEPSEEK_TIMEOUT,
-                        max_attempts=3,
+                        timeout=request_timeout_seconds,
+                        max_attempts=max_retries,
+                        max_tokens=max_tokens,
                         info_enabled=True,
                         on_info_query=_on_info_query,
                         forum=sim.forum,

@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Node build (server + SPA)
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS node-builder
+FROM node:24-alpine AS node-builder
 
 # better-sqlite3 needs node-gyp (Python) + a C++ toolchain to compile on musl.
 RUN apk add --no-cache python3 make g++
@@ -31,7 +31,7 @@ RUN cd apps/server && npm prune --production
 # -----------------------------------------------------------------------------
 # Stage 2: Python venv for the simulation core
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS python-builder
+FROM node:24-alpine AS python-builder
 
 # Minimal set for uv + any Python packages that still need compilation on musl.
 RUN apk add --no-cache curl python3 python3-dev gcc g++ musl-dev
@@ -58,7 +58,7 @@ RUN uv sync --frozen --no-dev
 # -----------------------------------------------------------------------------
 # Stage 3: Runtime image
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 # The simulation core needs a Python interpreter at runtime.
 RUN apk add --no-cache python3

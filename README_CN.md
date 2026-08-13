@@ -114,6 +114,10 @@ docker compose up --build --wait
 
 也可在「设置」页运行时切换供应商/模型/API key，无需重启。
 
+如果当前网络无法直连 Polymarket，可在 Node 24+ 后端启动时设置
+`NODE_USE_ENV_PROXY=1`，并通过 `HTTPS_PROXY` / `HTTP_PROXY` 指向本地代理；
+Docker Compose 也会把这些可选变量传给后端。
+
 本地 Compose 仅把 nginx 绑定到 **127.0.0.1:8080**。后端和 ClickHouse 位于私有
 Compose 网络，`/api` 由 nginx 转发。后端以非 root 的 `node` 用户运行，
 SQLite、checkpoint 和事件日志保存在 `backend-data` 命名卷中。

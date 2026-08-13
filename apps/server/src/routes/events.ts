@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { listPolymarketEvents } from '../services/polymarket.js';
+import { listPolymarketEventsFeed } from '../services/polymarket.js';
 
 // Browse-page feed: Polymarket events grouped server-side. Each event keeps its
 // sub-markets together so multi-result events (matches, multi-candidate races,
@@ -11,9 +11,17 @@ export default async function eventsRoutes(app: FastifyInstance) {
       req.query as Record<string, string>;
     const limitNum = parseInt(limit, 10) || 30;
     const offsetNum = parseInt(offset, 10) || 0;
-    const events = await listPolymarketEvents(q, limitNum, offsetNum);
+    const feed = await listPolymarketEventsFeed(q, limitNum, offsetNum);
+    const events = feed.data;
     // Approximate: if the page came back full there is likely another page.
     const hasMore = events.length >= limitNum;
-    return { events, offset: offsetNum, limit: limitNum, hasMore };
+    return {
+      events,
+      offset: offsetNum,
+      limit: limitNum,
+      hasMore,
+      source: feed.source,
+      message: feed.message,
+    };
   });
 }
