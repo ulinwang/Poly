@@ -12,23 +12,29 @@ import type { ApiKey, ProviderInfo } from '../types';
 export default function Settings() {
   const { t } = useI18n();
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-600">Workspace</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-surface-900 dark:text-white">{t('settings.title')}</h1>
+    <div className="mx-auto max-w-6xl">
+      <div className="overflow-hidden rounded-[22px] border border-surface-200/90 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.06)] dark:border-white/8 dark:bg-surface-900">
+        <header className="border-b border-surface-200 px-6 py-5 dark:border-white/8">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-400">Workspace</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-surface-950 dark:text-white">{t('settings.title')}</h1>
+        </header>
+        <div className="grid min-h-[640px] md:grid-cols-[210px_minmax(0,1fr)]">
+          <aside className="border-b border-surface-200 bg-[#f7f8f8] p-3 dark:border-white/8 dark:bg-white/[0.025] md:border-b-0 md:border-r">
+            <div className="flex gap-1 overflow-x-auto md:flex-col">
+              <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label={t('settings.tab.api')} />
+              <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label={t('settings.tab.keys')} />
+              <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label={t('settings.tab.general')} />
+            </div>
+          </aside>
+          <main className="min-w-0 p-5 sm:p-7">
+            <Routes>
+              <Route path="api" element={<APISettings />} />
+              <Route path="keys" element={<KeysSettings />} />
+              <Route path="general" element={<GeneralSettings />} />
+            </Routes>
+          </main>
+        </div>
       </div>
-
-      <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
-        <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label={t('settings.tab.api')} />
-        <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label={t('settings.tab.keys')} />
-        <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label={t('settings.tab.general')} />
-      </div>
-
-      <Routes>
-        <Route path="api" element={<APISettings />} />
-        <Route path="keys" element={<KeysSettings />} />
-        <Route path="general" element={<GeneralSettings />} />
-      </Routes>
     </div>
   );
 }
@@ -38,10 +44,10 @@ function SettingsTab({ to, icon, label }: { to: string; icon: React.ReactNode; l
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+        `flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
           isActive
-            ? 'border-primary-500 text-primary-600'
-            : 'border-transparent text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
+            ? 'bg-surface-200/90 text-surface-950 dark:bg-white/10 dark:text-white'
+            : 'text-surface-500 hover:bg-surface-200/55 hover:text-surface-800 dark:hover:bg-white/5 dark:hover:text-surface-200'
         }`
       }
     >
@@ -182,10 +188,10 @@ function APISettings() {
 
   return (
     <div className="space-y-5">
-      <section className="overflow-hidden rounded-3xl border border-primary-100 bg-gradient-to-br from-primary-50 via-white to-cyan-50 p-6 dark:border-primary-900/60 dark:from-primary-950/50 dark:via-surface-900 dark:to-cyan-950/30">
+      <section className="border-b border-surface-200 pb-5 dark:border-white/8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-primary-700 dark:text-primary-300"><Activity className="h-4 w-4" /><span className="text-xs font-bold uppercase tracking-[0.14em]">{t('settings.api.liveDiscovery')}</span></div>
+            <div className="mb-2 flex items-center gap-2 text-primary-700 dark:text-primary-300"><Activity className="h-4 w-4" /><span className="text-[10px] font-bold uppercase tracking-[0.16em]">{t('settings.api.liveDiscovery')}</span></div>
             <h2 className="text-xl font-bold text-surface-900 dark:text-white">{t('settings.api.heading')}</h2>
             <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">{t('settings.api.liveDiscoveryHint')}</p>
           </div>
@@ -196,8 +202,8 @@ function APISettings() {
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-5">
-        <section className="card space-y-5 p-6 lg:col-span-3">
+      <div className="grid gap-5 xl:grid-cols-5">
+        <section className="rounded-2xl border border-surface-200 p-5 dark:border-white/8 xl:col-span-3">
           <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"><Server className="h-5 w-5" /></span><div><h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.api.connection')}</h3><p className="text-xs text-surface-400">{t('settings.api.subtitle')}</p></div></div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -223,7 +229,7 @@ function APISettings() {
           {(provider?.base_url || provider?.requires_base_url || apiSettings.base_url) && <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.baseUrl')}</label><input type="url" value={apiSettings.base_url || ''} onChange={(e) => updateApiSettings({ base_url: e.target.value })} placeholder={provider?.base_url || 'https://api.example.com/v1'} className="input" /></div>}
         </section>
 
-        <section className="card space-y-5 p-6 lg:col-span-2">
+        <section className="rounded-2xl border border-surface-200 p-5 dark:border-white/8 xl:col-span-2">
           <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300"><SlidersHorizontal className="h-5 w-5" /></span><h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.api.generation')}</h3></div>
           <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.temperature', { value: apiSettings.temperature })}</label><input type="range" min="0" max="2" step="0.1" value={apiSettings.temperature} onChange={(e) => updateApiSettings({ temperature: Number(e.target.value) })} className="w-full" /><div className="flex justify-between text-xs text-surface-400"><span>{t('settings.api.deterministic')}</span><span>{t('settings.api.creative')}</span></div></div>
           <div className="space-y-2"><label className="text-sm font-medium text-surface-700 dark:text-surface-300">{t('settings.api.maxTokens', { value: apiSettings.max_tokens })}</label><input type="range" min="256" max="32768" step="256" value={apiSettings.max_tokens} onChange={(e) => updateApiSettings({ max_tokens: Number(e.target.value) })} className="w-full" /></div>
@@ -234,7 +240,7 @@ function APISettings() {
         </section>
       </div>
 
-      <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+      <div className="sticky bottom-4 flex flex-col gap-3 rounded-2xl border border-surface-200 bg-white/95 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.08)] backdrop-blur sm:flex-row sm:items-center dark:border-white/10 dark:bg-surface-900/95">
         <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
           <Save className="w-4 h-4" />
           {saving ? t('settings.api.saving') : t('settings.api.save')}
@@ -316,25 +322,37 @@ function KeysSettings() {
   };
 
   return (
-    <div className="card p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
+    <div className="space-y-5">
+      <header className="border-b border-surface-200 pb-5 dark:border-white/8">
+        <div className="mb-2 flex items-center gap-2 text-primary-700 dark:text-primary-300">
+          <KeyRound className="h-4 w-4" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em]">{t('settings.keys.eyebrow')}</span>
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-surface-900 dark:text-white">
           {t('settings.keys.heading')}
         </h2>
-        <p className="text-sm text-surface-400 mt-1">
+        <p className="mt-1 max-w-2xl text-sm text-surface-500 dark:text-surface-400">
           {t('settings.keys.subtitle')}
         </p>
-      </div>
+      </header>
 
       {/* Stored keys */}
-      <div className="space-y-2">
+      <section className="rounded-2xl border border-surface-200 p-5 dark:border-white/8">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-300"><Key className="h-5 w-5" /></span>
+          <div>
+            <h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.keys.heading')}</h3>
+            <p className="text-xs text-surface-400">{t('settings.keys.configured', { count: keys.length })}</p>
+          </div>
+        </div>
+        <div className="space-y-2">
         {keys.length === 0 ? (
-          <p className="text-sm text-surface-400">{t('settings.keys.none')}</p>
+          <p className="rounded-xl bg-surface-50 px-4 py-8 text-center text-sm text-surface-400 dark:bg-white/[0.025]">{t('settings.keys.none')}</p>
         ) : (
           keys.map((k) => (
             <div
               key={k.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-surface-200 dark:border-surface-700 px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded-xl border border-surface-200 px-4 py-3 dark:border-white/8"
             >
               <div className="min-w-0">
                 <div className="text-sm font-medium text-surface-800 dark:text-surface-100 truncate">
@@ -356,14 +374,16 @@ function KeysSettings() {
             </div>
           ))
         )}
-      </div>
+        </div>
+      </section>
 
       {/* Add new key */}
-      <div className="space-y-3 pt-4 border-t border-surface-200 dark:border-surface-700">
-        <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
-          {t('settings.keys.add')}
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <section className="space-y-4 rounded-2xl border border-surface-200 p-5 dark:border-white/8">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300"><Plus className="h-5 w-5" /></span>
+          <h3 className="font-semibold text-surface-900 dark:text-white">{t('settings.keys.add')}</h3>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs text-surface-500 mb-1">{t('settings.keys.name')}</label>
             <input
@@ -432,7 +452,7 @@ function KeysSettings() {
           </button>
           {error && <span className="text-sm text-danger">{error}</span>}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -443,15 +463,19 @@ function GeneralSettings() {
   const toggleDarkMode = useSettingsStore((s) => s.toggleDarkMode);
 
   return (
-    <div className="card p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-surface-800 dark:text-surface-100">
+    <div className="space-y-5">
+      <header className="border-b border-surface-200 pb-5 dark:border-white/8">
+        <div className="mb-2 flex items-center gap-2 text-primary-700 dark:text-primary-300">
+          <Palette className="h-4 w-4" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em]">{t('settings.general.eyebrow')}</span>
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-surface-900 dark:text-white">
           {t('settings.general.heading')}
         </h2>
-      </div>
+      </header>
 
-      {/* Language */}
-      <div className="flex items-center justify-between py-3 border-b border-surface-200 dark:border-surface-700">
+      <section className="overflow-hidden rounded-2xl border border-surface-200 px-5 dark:border-white/8">
+      <div className="flex items-center justify-between gap-5 border-b border-surface-200 py-5 dark:border-white/8">
         <div>
           <div className="text-sm font-medium text-surface-700 dark:text-surface-300">
             {t('settings.general.language')}
@@ -484,8 +508,7 @@ function GeneralSettings() {
         </div>
       </div>
 
-      {/* Dark mode */}
-      <div className="flex items-center justify-between py-3 border-b border-surface-200 dark:border-surface-700">
+      <div className="flex items-center justify-between gap-5 py-5">
         <div>
           <div className="text-sm font-medium text-surface-700 dark:text-surface-300">
             {t('settings.general.darkMode')}
@@ -507,6 +530,7 @@ function GeneralSettings() {
           />
         </button>
       </div>
+      </section>
     </div>
   );
 }

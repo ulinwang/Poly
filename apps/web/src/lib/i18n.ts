@@ -224,7 +224,9 @@ const zh: Dict = {
   'settings.api.testOk': '连接成功！',
   'settings.api.testFailed': '连接失败：{msg}',
   'settings.keys.heading': 'API 密钥',
+  'settings.keys.eyebrow': '安全存储',
   'settings.keys.subtitle': '保存多个命名密钥，创建实验时可选择使用其中一个。密钥在服务器端加密存储，不会返回浏览器。',
+  'settings.keys.configured': '已配置 {count} 个',
   'settings.keys.none': '尚未保存任何密钥。',
   'settings.keys.delete': '删除',
   'settings.keys.add': '新增密钥',
@@ -241,6 +243,7 @@ const zh: Dict = {
   'settings.keys.saveFailed': '保存失败：{msg}',
   'settings.keys.deleteFailed': '删除失败：{msg}',
   'settings.general.heading': '通用设置',
+  'settings.general.eyebrow': '偏好设置',
   'settings.general.darkMode': '深色模式',
   'settings.general.darkModeHint': '在浅色与深色主题之间切换',
   'settings.general.language': '语言',
@@ -293,6 +296,7 @@ const zh: Dict = {
 
   // ── Observation tabs (Market / Forum / Social) ─────────────────────
   'tab.market': '市场',
+  'tab.trace': 'Agent 轨迹',
   'tab.forum': '论坛',
   'tab.social': '社交',
 
@@ -311,6 +315,24 @@ const zh: Dict = {
   'social.followers': '被关注 {count}',
   'social.following': '关注 {count}',
   'social.posts': '发帖 {count}',
+  'trace.agents': '智能体',
+  'trace.agentCount': '{count} 个 Agent',
+  'trace.decisionCount': '{count} 次决策',
+  'trace.timeline': '决策轨迹',
+  'trace.timelineHint': '按 Tick 查看推理与动作',
+  'trace.search': '搜索轨迹…',
+  'trace.details': '决策详情',
+  'trace.tick': 'Tick',
+  'trace.action': '动作',
+  'trace.size': '金额',
+  'trace.latency': '耗时',
+  'trace.summary': '推理摘要',
+  'trace.payload': '决策参数',
+  'trace.persona': '画像',
+  'trace.outcome': '标的',
+  'trace.price': '价格',
+  'trace.latestState': '最新状态',
+  'trace.noReasoning': '该决策没有记录推理内容。',
 };
 
 const en: Dict = {
@@ -524,7 +546,9 @@ const en: Dict = {
   'settings.api.testOk': 'Connection successful!',
   'settings.api.testFailed': 'Connection failed: {msg}',
   'settings.keys.heading': 'API Keys',
+  'settings.keys.eyebrow': 'Secure storage',
   'settings.keys.subtitle': 'Save multiple named keys and pick one when creating an experiment. Keys are encrypted at rest on the server and never returned to the browser.',
+  'settings.keys.configured': '{count} configured',
   'settings.keys.none': 'No keys saved yet.',
   'settings.keys.delete': 'Delete',
   'settings.keys.add': 'Add a key',
@@ -541,6 +565,7 @@ const en: Dict = {
   'settings.keys.saveFailed': 'Failed to save: {msg}',
   'settings.keys.deleteFailed': 'Failed to delete: {msg}',
   'settings.general.heading': 'General Settings',
+  'settings.general.eyebrow': 'Preferences',
   'settings.general.darkMode': 'Dark Mode',
   'settings.general.darkModeHint': 'Toggle between light and dark theme',
   'settings.general.language': 'Language',
@@ -593,6 +618,7 @@ const en: Dict = {
 
   // ── Observation tabs (Market / Forum / Social) ─────────────────────
   'tab.market': 'Market',
+  'tab.trace': 'Agent Trace',
   'tab.forum': 'Forum',
   'tab.social': 'Social',
 
@@ -611,6 +637,24 @@ const en: Dict = {
   'social.followers': '{count} followers',
   'social.following': 'following {count}',
   'social.posts': '{count} posts',
+  'trace.agents': 'Agents',
+  'trace.agentCount': '{count} agents',
+  'trace.decisionCount': '{count} decisions',
+  'trace.timeline': 'Decision trace',
+  'trace.timelineHint': 'Inspect reasoning and actions by tick',
+  'trace.search': 'Search trace…',
+  'trace.details': 'Decision details',
+  'trace.tick': 'Tick',
+  'trace.action': 'Action',
+  'trace.size': 'Size',
+  'trace.latency': 'Latency',
+  'trace.summary': 'Reasoning summary',
+  'trace.payload': 'Decision payload',
+  'trace.persona': 'Persona',
+  'trace.outcome': 'Outcome',
+  'trace.price': 'Price',
+  'trace.latestState': 'Latest state',
+  'trace.noReasoning': 'No reasoning was recorded for this decision.',
 };
 
 const DICTS: Record<Locale, Dict> = { zh, en };

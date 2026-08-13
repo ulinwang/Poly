@@ -41,8 +41,8 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
   }, [isMarketRoute]);
 
   return (
-    <header className="z-20 border-b border-white/70 bg-white/55 backdrop-blur-xl dark:border-white/5 dark:bg-[#081311]/55">
-      <div className="flex h-[76px] items-center gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="z-20 border-b border-surface-200/80 bg-white/90 backdrop-blur-xl dark:border-white/5 dark:bg-[#0b0f0e]/90">
+      <div className="flex h-[68px] items-center gap-4 px-4 sm:px-6 lg:px-7">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={onMenuClick}
@@ -52,8 +52,8 @@ export default function TopNav({ onMenuClick }: { onMenuClick?: () => void }) {
             <Menu className="w-5 h-5 text-surface-600 dark:text-surface-400" />
           </button>
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary-600 dark:text-primary-400">Workspace</p>
-            <h1 className="truncate text-lg font-bold tracking-tight text-surface-900 dark:text-white">{t(pageKey)}</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-surface-400">Workspace</p>
+            <h1 className="truncate text-[17px] font-bold tracking-tight text-surface-900 dark:text-white">{t(pageKey)}</h1>
           </div>
         </div>
 

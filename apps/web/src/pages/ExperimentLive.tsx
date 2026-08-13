@@ -3,7 +3,10 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Square, ArrowLeft, X, Pause, Play, SkipForward, RotateCcw } from 'lucide-react';
+import {
+  Square, ArrowLeft, X, Pause, Play, SkipForward, RotateCcw,
+  Activity, BrainCircuit, Clock3, Coins, ListTree, Search,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { useExperimentStore } from '../stores';
 import { useSSE, useFormatNumber, useReplayPlayer } from '../hooks';
@@ -15,7 +18,7 @@ import type {
 } from '../types';
 
 /** The three top-level observation tabs. */
-type ObsTab = 'market' | 'forum' | 'social';
+type ObsTab = 'trace' | 'market' | 'forum' | 'social';
 
 /** Deterministic HSL color block from an agent id, used as a tiny "avatar". */
 function agentColor(agentId: number): string {
@@ -29,7 +32,7 @@ export default function ExperimentLive() {
   const [experiment, setExperiment] = useState<Experiment | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
-  const [tab, setTab] = useState<ObsTab>('market');
+  const [tab, setTab] = useState<ObsTab>('trace');
 
   const metrics = useExperimentStore((s) => s.metrics);
   const decisions = useExperimentStore((s) => s.decisions);
@@ -253,6 +256,17 @@ export default function ExperimentLive() {
       {/* ── Top tab switcher: Market / Forum / Social ─────────────────── */}
       <ObsTabs tab={tab} onChange={setTab} />
 
+      {tab === 'trace' && (
+        <AgentTrace
+          decisions={decisions}
+          snapshots={agentSnapshots}
+          selectedAgent={selectedAgent}
+          onSelectAgent={setSelectedAgent}
+          formatNumber={formatNumber}
+          running={running}
+        />
+      )}
+
       {tab === 'market' && (
         <>
           {/* ── Top: horizontally scrollable agent strip ──────────────── */}
@@ -348,19 +362,20 @@ export default function ExperimentLive() {
 function ObsTabs({ tab, onChange }: { tab: ObsTab; onChange: (t: ObsTab) => void }) {
   const { t } = useI18n();
   const items: { key: ObsTab; label: string }[] = [
+    { key: 'trace', label: t('tab.trace') },
     { key: 'market', label: t('tab.market') },
     { key: 'forum', label: t('tab.forum') },
     { key: 'social', label: t('tab.social') },
   ];
   return (
-    <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
+    <div className="flex gap-5 border-b border-surface-200 px-1 dark:border-surface-700">
       {items.map((it) => {
         const active = tab === it.key;
         return (
           <button
             key={it.key}
             onClick={() => onChange(it.key)}
-            className={`px-4 py-2 -mb-px text-sm font-medium border-b-2 transition-colors ${
+            className={`-mb-px border-b-2 px-1 py-2.5 text-sm font-medium transition-colors ${
               active
                 ? 'border-primary-500 text-primary-600 dark:text-primary-300'
                 : 'border-transparent text-surface-500 hover:text-surface-700 dark:hover:text-surface-300'
@@ -372,6 +387,207 @@ function ObsTabs({ tab, onChange }: { tab: ObsTab; onChange: (t: ObsTab) => void
       })}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Agent trace — dense master/detail timeline for understanding one decision.
+// ─────────────────────────────────────────────────────────────────────────
+
+function AgentTrace({
+  decisions, snapshots, selectedAgent, onSelectAgent, formatNumber, running,
+}: {
+  decisions: AgentDecision[];
+  snapshots: Record<number, AgentSnapshot[]>;
+  selectedAgent: number | null;
+  onSelectAgent: (agentId: number | null) => void;
+  formatNumber: (n: number | null | undefined) => string;
+  running: boolean;
+}) {
+  const { t } = useI18n();
+  const [selectedDecisionId, setSelectedDecisionId] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+
+  const agents = useMemo(() => {
+    const ids = new Set<number>([
+      ...Object.keys(snapshots).map(Number),
+      ...decisions.map((decision) => decision.agent_id),
+    ]);
+    return [...ids].sort((a, b) => a - b).map((agentId) => {
+      const agentDecisions = decisions.filter((decision) => decision.agent_id === agentId);
+      const history = snapshots[agentId] ?? [];
+      const latest = history[history.length - 1];
+      return { agentId, decisions: agentDecisions, latest };
+    });
+  }, [decisions, snapshots]);
+
+  const activeAgent = selectedAgent ?? agents[0]?.agentId ?? null;
+  const visibleDecisions = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return decisions
+      .filter((decision) => activeAgent === null || decision.agent_id === activeAgent)
+      .filter((decision) => !needle || [
+        decision.order_type,
+        decision.persona_type,
+        decision.reasoning,
+        decision.outcome,
+      ].some((value) => value?.toLocaleLowerCase().includes(needle)))
+      .sort((a, b) => a.tick - b.tick);
+  }, [activeAgent, decisions, query]);
+
+  useEffect(() => {
+    if (!visibleDecisions.some((decision) => decision.id === selectedDecisionId)) {
+      setSelectedDecisionId(visibleDecisions[0]?.id ?? null);
+    }
+  }, [selectedDecisionId, visibleDecisions]);
+
+  const selected = visibleDecisions.find((decision) => decision.id === selectedDecisionId)
+    ?? visibleDecisions[0]
+    ?? null;
+  const latestSnapshot = activeAgent === null
+    ? null
+    : snapshots[activeAgent]?.[snapshots[activeAgent].length - 1] ?? null;
+
+  if (agents.length === 0) {
+    return (
+      <div className="rounded-2xl border border-surface-200 bg-white py-16 text-center text-sm text-surface-400 dark:border-white/8 dark:bg-surface-900">
+        {running ? t('live.agentsLive') : t('live.agentsIdle')}
+      </div>
+    );
+  }
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-surface-200 bg-white dark:border-white/8 dark:bg-surface-900">
+      <div className="grid min-h-[600px] lg:grid-cols-[210px_minmax(360px,1fr)_340px]">
+        <aside className="border-b border-surface-200 bg-[#fafafa] p-3 dark:border-white/8 dark:bg-white/[0.02] lg:border-b-0 lg:border-r">
+          <div className="px-2 pb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-surface-400">{t('trace.agents')}</p>
+            <p className="mt-1 text-sm font-semibold text-surface-900 dark:text-white">{t('trace.agentCount', { count: agents.length })}</p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+            {agents.map((agent) => {
+              const active = activeAgent === agent.agentId;
+              return (
+                <button
+                  type="button"
+                  key={agent.agentId}
+                  onClick={() => onSelectAgent(agent.agentId)}
+                  className={`min-w-44 rounded-xl border p-3 text-left transition lg:min-w-0 ${
+                    active
+                      ? 'border-surface-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/8'
+                      : 'border-transparent hover:bg-surface-100 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold text-white" style={{ background: agentColor(agent.agentId) }}>A{agent.agentId}</span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-surface-900 dark:text-white">Agent {agent.agentId}</p>
+                      <p className="truncate text-[10px] text-surface-400">{agent.latest?.persona ?? agent.decisions[0]?.persona_type ?? '—'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-surface-400">
+                    <span>{t('trace.decisionCount', { count: agent.decisions.length })}</span>
+                    <span className={agent.latest && agent.latest.pnl >= 0 ? 'text-success' : 'text-danger'}>
+                      {agent.latest ? `${agent.latest.pnl >= 0 ? '+' : ''}${agent.latest.pnl.toFixed(2)}` : '—'}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <div className="min-w-0 border-b border-surface-200 dark:border-white/8 lg:border-b-0 lg:border-r">
+          <header className="flex flex-col gap-3 border-b border-surface-200 px-4 py-3 dark:border-white/8 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-surface-900 dark:text-white">{t('trace.timeline')}</p>
+              <p className="text-[11px] text-surface-400">{t('trace.timelineHint')}</p>
+            </div>
+            <label className="relative sm:w-52">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-surface-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('trace.search')} className="h-9 w-full rounded-lg border border-surface-200 bg-surface-50 pl-8 pr-3 text-xs outline-none focus:border-primary-400 dark:border-white/10 dark:bg-white/5" />
+            </label>
+          </header>
+          <div className="max-h-[540px] overflow-y-auto px-3 py-2">
+            {visibleDecisions.length === 0 ? (
+              <div className="py-20 text-center text-sm text-surface-400">{t('live.noDecisions')}</div>
+            ) : visibleDecisions.map((decision, index) => {
+              const active = selected?.id === decision.id;
+              return (
+                <button
+                  type="button"
+                  key={decision.id}
+                  onClick={() => setSelectedDecisionId(decision.id)}
+                  className={`relative flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition ${active ? 'bg-surface-100 dark:bg-white/7' : 'hover:bg-surface-50 dark:hover:bg-white/[0.035]'}`}
+                >
+                  <div className="relative mt-0.5 flex w-7 shrink-0 justify-center">
+                    {index < visibleDecisions.length - 1 && <span className="absolute left-1/2 top-7 h-[calc(100%+12px)] w-px -translate-x-1/2 bg-surface-200 dark:bg-white/10" />}
+                    <span className={`grid h-7 w-7 place-items-center rounded-lg border text-[10px] font-bold ${decision.api_error ? 'border-danger/30 bg-danger/10 text-danger' : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'}`}>{decision.tick + 1}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-300">Agent</span>
+                      <span className="text-sm font-semibold text-surface-900 dark:text-white">{decision.order_type}</span>
+                      {decision.side && <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{decision.side} {decision.outcome}</span>}
+                      <span className="ml-auto text-[10px] tabular-nums text-surface-400">{decision.api_latency_ms ? `${decision.api_latency_ms} ms` : '—'}</span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-surface-500 dark:text-surface-400">{decision.api_error || decision.reasoning || t('trace.noReasoning')}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <aside className="min-w-0 bg-[#fcfcfc] dark:bg-white/[0.015]">
+          <header className="border-b border-surface-200 px-5 py-4 dark:border-white/8">
+            <div className="flex items-center gap-2 text-sm font-semibold text-surface-900 dark:text-white"><ListTree className="h-4 w-4 text-primary-600" />{t('trace.details')}</div>
+          </header>
+          {selected ? (
+            <div className="space-y-5 p-5">
+              <div className="grid grid-cols-2 gap-2">
+                <TraceStat icon={Clock3} label={t('trace.tick')} value={`T${selected.tick + 1}`} />
+                <TraceStat icon={Activity} label={t('trace.action')} value={selected.order_type} />
+                <TraceStat icon={Coins} label={t('trace.size')} value={selected.size_usd > 0 ? `$${formatNumber(selected.size_usd)}` : '—'} />
+                <TraceStat icon={BrainCircuit} label={t('trace.latency')} value={selected.api_latency_ms ? `${selected.api_latency_ms} ms` : '—'} />
+              </div>
+              <TraceSection title={t('trace.summary')}>
+                <p className="whitespace-pre-wrap text-xs leading-5 text-surface-600 dark:text-surface-300">{selected.api_error || selected.reasoning || t('trace.noReasoning')}</p>
+              </TraceSection>
+              <TraceSection title={t('trace.payload')}>
+                <dl className="space-y-2 text-xs">
+                  <TraceRow label={t('trace.persona')} value={selected.persona_type || '—'} />
+                  <TraceRow label={t('trace.outcome')} value={selected.outcome || '—'} />
+                  <TraceRow label={t('trace.price')} value={selected.price > 0 ? selected.price.toFixed(3) : '—'} />
+                  <TraceRow label={t('trace.size')} value={selected.size_usd > 0 ? `$${formatNumber(selected.size_usd)}` : '—'} />
+                </dl>
+              </TraceSection>
+              {latestSnapshot && (
+                <TraceSection title={t('trace.latestState')}>
+                  <dl className="space-y-2 text-xs">
+                    <TraceRow label={t('live.stat.cash')} value={`$${formatNumber(latestSnapshot.cash)}`} />
+                    <TraceRow label={t('live.stat.beliefYes')} value={latestSnapshot.belief_yes == null ? '—' : latestSnapshot.belief_yes.toFixed(3)} />
+                    <TraceRow label={t('live.stat.pnl')} value={`${latestSnapshot.pnl >= 0 ? '+' : ''}${latestSnapshot.pnl.toFixed(2)}`} />
+                  </dl>
+                </TraceSection>
+              )}
+            </div>
+          ) : <div className="py-20 text-center text-sm text-surface-400">{t('live.noDecisions')}</div>}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function TraceStat({ icon: Icon, label, value }: { icon: typeof Activity; label: string; value: string }) {
+  return <div className="rounded-xl border border-surface-200 bg-white p-3 dark:border-white/8 dark:bg-white/[0.03]"><Icon className="h-3.5 w-3.5 text-surface-400" /><p className="mt-2 text-[10px] text-surface-400">{label}</p><p className="mt-0.5 truncate text-xs font-semibold text-surface-900 dark:text-white">{value}</p></div>;
+}
+
+function TraceSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section><h4 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-surface-400">{title}</h4><div className="rounded-xl border border-surface-200 bg-white p-3 dark:border-white/8 dark:bg-white/[0.03]">{children}</div></section>;
+}
+
+function TraceRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-start justify-between gap-4"><dt className="text-surface-400">{label}</dt><dd className="text-right font-medium text-surface-700 dark:text-surface-200">{value}</dd></div>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -7,11 +7,7 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[#f4f7f6] text-surface-900 dark:bg-[#081311] dark:text-surface-50">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -left-24 -top-40 h-96 w-96 rounded-full bg-primary-300/15 blur-3xl dark:bg-primary-700/10" />
-        <div className="absolute -right-32 top-1/3 h-80 w-80 rounded-full bg-cyan-200/20 blur-3xl dark:bg-cyan-800/10" />
-      </div>
+    <div className="relative flex h-screen overflow-hidden bg-[#f3f4f4] text-surface-900 dark:bg-[#0b0f0e] dark:text-surface-50">
 
       {/* Persistent sidebar — desktop */}
       <div className="relative z-20 hidden lg:block">
@@ -33,10 +29,10 @@ export default function MainLayout() {
           transform transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
-          <Sidebar onNavigate={() => setSidebarOpen(false)} />
+          <Sidebar forceExpanded onNavigate={() => setSidebarOpen(false)} />
         </div>
 
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-7 lg:py-6">
           <div className="animate-fade-in-up">
             <Outlet />
           </div>
