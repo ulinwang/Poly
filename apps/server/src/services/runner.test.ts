@@ -47,9 +47,16 @@ describe('spawnRun', () => {
     const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
     spawnRun(handle, vi.fn());
 
-    expect(mockSpawn).toHaveBeenCalledWith(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
-      cwd: config.REPO_ROOT,
-    });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      config.PYTHON_BIN,
+      ['-m', 'runner.runner_cli'],
+      expect.objectContaining({
+        cwd: config.REPO_ROOT,
+        env: expect.objectContaining({
+          PYTHONPATH: expect.stringContaining(`${config.REPO_ROOT}/sim`),
+        }),
+      }),
+    );
   });
 
   it('writes config JSON to stdin', () => {
@@ -156,6 +163,24 @@ describe('spawnRun', () => {
     expect(handle.finished).toBe(true);
   });
 
+  it('preserves a structured runner error instead of replacing it on exit', () => {
+    const onEvent = vi.fn();
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, onEvent);
+
+    mockChild.stdout.emit(
+      'data',
+      '{"kind":"error","data":{"message":"Simulation dependency missing: litellm"}}\n',
+    );
+    mockChild.emit('exit', 1);
+
+    const errorCalls = onEvent.mock.calls.filter(([kind]) => kind === 'error');
+    expect(errorCalls).toEqual([
+      ['error', { message: 'Simulation dependency missing: litellm' }],
+    ]);
+    expect(onEvent).toHaveBeenCalledWith('__end__', {});
+  });
+
   it('logs lifecycle metadata without logging runner stderr contents', () => {
     const logger = {
       info: vi.fn(),
@@ -244,6 +269,30 @@ describe('spawnRun', () => {
     expect(cfg.request_timeout_seconds).toBe(45);
     expect(cfg.max_retries).toBe(5);
     expect(cfg.max_tokens).toBe(4096);
+  });
+
+  it('passes the live market context to the Python runner', () => {
+    const handle = createRunHandle('r1', 'slug1', 4, 10, 'archetype');
+    spawnRun(handle, vi.fn(), {
+      marketContext: {
+        condition_id: 'condition-1',
+        question: 'Will it happen?',
+        end_date_iso: null,
+        yes_token_id: 'yes-1',
+        no_token_id: 'no-1',
+        tick_size: 0.01,
+        taker_fee_bps: 0,
+        volume: 123,
+        winning_idx: -1,
+        yes_price: 0.62,
+      },
+    });
+
+    const cfg = JSON.parse(mockChild.stdin.write.mock.calls[0][0] as string);
+    expect(cfg.market_context).toMatchObject({
+      condition_id: 'condition-1',
+      yes_price: 0.62,
+    });
   });
 
   it('marks handle paused and records checkpoint on a paused event', () => {

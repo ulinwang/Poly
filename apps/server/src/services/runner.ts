@@ -131,6 +131,19 @@ export interface SpawnOptions {
     max_retries?: number;
     max_tokens?: number;
   };
+  marketContext?: {
+    condition_id: string;
+    question: string;
+    description?: string;
+    end_date_iso: string | null;
+    yes_token_id: string;
+    no_token_id: string;
+    tick_size: number;
+    taker_fee_bps: number;
+    volume: number;
+    winning_idx: number;
+    yes_price: number | null;
+  };
   /** When set, resume from this checkpoint instead of starting fresh. */
   resumeCheckpoint?: string;
   /** Where the Python side writes its checkpoint when paused. */
@@ -155,18 +168,26 @@ export function spawnRun(
   const opts: SpawnOptions =
     options &&
     ('apiSettings' in options ||
+      'marketContext' in options ||
       'resumeCheckpoint' in options ||
       'checkpointOut' in options ||
       'logger' in options)
       ? (options as SpawnOptions)
       : { apiSettings: options as SpawnOptions['apiSettings'] };
-  const { apiSettings, resumeCheckpoint, checkpointOut, logger } = opts;
+  const { apiSettings, marketContext, resumeCheckpoint, checkpointOut, logger } = opts;
   handle.logger = logger ?? null;
   handle.eventLog.setLogger(handle.logger);
   handle.failed = false;
 
-  const child = spawn(config.PYTHON_BIN, ['sim/runner/runner_cli.py'], {
+  const pythonPath = [
+    path.join(config.REPO_ROOT, 'sim'),
+    path.join(config.REPO_ROOT, 'research'),
+    config.REPO_ROOT,
+    process.env.PYTHONPATH,
+  ].filter(Boolean).join(path.delimiter);
+  const child = spawn(config.PYTHON_BIN, ['-m', 'runner.runner_cli'], {
     cwd: config.REPO_ROOT,
+    env: { ...process.env, PYTHONPATH: pythonPath },
   });
   logger?.info(
     {
@@ -194,6 +215,7 @@ export function spawnRun(
   };
   if (checkpointOut) payload.checkpoint_out = checkpointOut;
   if (resumeCheckpoint) payload.resume_checkpoint = resumeCheckpoint;
+  if (marketContext) payload.market_context = marketContext;
   if (apiSettings?.api_key) payload.api_key = apiSettings.api_key;
   if (apiSettings?.base_url) payload.base_url = apiSettings.base_url;
   if (apiSettings?.model) payload.model = apiSettings.model;
@@ -207,6 +229,7 @@ export function spawnRun(
   child.stdin.end();
 
   let buffer = '';
+  let runnerReportedError = false;
 
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', (chunk: string) => {
@@ -223,6 +246,7 @@ export function spawnRun(
           handle.checkpointPath = (event.data.checkpoint as string) ?? handle.checkpointPath;
         }
         if (event.kind === 'error') {
+          runnerReportedError = true;
           handle.failed = true;
           logger?.error(
             { runId: handle.runId },
@@ -311,7 +335,12 @@ export function spawnRun(
           { runId: handle.runId, exitCode: code, signal },
           'experiment runner exited unsuccessfully',
         );
-        onEvent('error', { message: `process exited with code ${code}` });
+        // Prefer the structured error already emitted by runner_cli. This
+        // generic fallback is only needed when Python fails before it can
+        // write an event (for example, an invalid interpreter path).
+        if (!runnerReportedError) {
+          onEvent('error', { message: `process exited with code ${code}` });
+        }
       }
       if (handle.cancel) {
         onEvent('cancelled', {});

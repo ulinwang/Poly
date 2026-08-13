@@ -22,10 +22,10 @@ import sys
 import threading
 from pathlib import Path
 
-try:
-    from .runner_stream import resume_stream, run_stream
-except ImportError:  # Direct execution: python sim/runner/runner_cli.py
-    from runner_stream import resume_stream, run_stream
+
+def _emit(kind: str, data: dict) -> None:
+    """Write one runner event before or after the simulation is imported."""
+    print(json.dumps({"kind": kind, "data": data}), flush=True)
 
 
 def main() -> None:
@@ -43,6 +43,29 @@ def main() -> None:
     # SIGUSR1 requests a clean checkpoint-and-exit at the next tick boundary.
     if hasattr(signal, "SIGUSR1"):
         signal.signal(signal.SIGUSR1, _on_sigusr1)
+
+    # Import lazily so missing runtime dependencies can be reported through the
+    # same structured event stream as simulation failures. The web UI can then
+    # show an actionable message instead of only "process exited with code 1".
+    try:
+        from .runner_stream import resume_stream, run_stream
+    except ModuleNotFoundError as exc:
+        package = exc.name or "unknown package"
+        _emit(
+            "error",
+            {
+                "message": (
+                    f"Simulation dependency missing: {package}. "
+                    "Run `uv sync --frozen` from the project root."
+                )
+            },
+        )
+        _emit("__end__", {})
+        sys.exit(1)
+    except ImportError as exc:
+        _emit("error", {"message": f"Simulation runner failed to import: {exc}"})
+        _emit("__end__", {})
+        sys.exit(1)
 
     # 1. Read config from stdin
     try:
@@ -80,8 +103,7 @@ def main() -> None:
 
     # 2. Stream events as JSON Lines
     def on_event(kind: str, data: dict) -> None:
-        line = json.dumps({"kind": kind, "data": data})
-        print(line, flush=True)
+        _emit(kind, data)
 
     # 3. Run (or resume) the simulation
     try:
@@ -113,6 +135,7 @@ def main() -> None:
                 pause=pause_event,
                 checkpoint_out=checkpoint_out,
                 data_dir=Path(config["data_dir"]),
+                market_context=config.get("market_context"),
             )
             # Pass through optional LLM overrides from frontend settings
             for key in (

@@ -29,6 +29,7 @@ import fs from 'fs';
 import readline from 'readline';
 import { config } from '../config.js';
 import { sseFrame, writeSseChunk } from '../services/sse.js';
+import { getPolymarketMarket } from '../services/polymarket.js';
 
 import type { RunHandle, SpawnOptions } from '../services/runner.js';
 
@@ -571,6 +572,7 @@ export default async function experimentsRoutes(
 
       const runId = crypto.randomBytes(12).toString('hex').slice(0, 12);
       const slug = body.slug.trim();
+      const market = await getPolymarketMarket(slug);
       const handle = createRunHandle(
         runId,
         slug,
@@ -598,6 +600,19 @@ export default async function experimentsRoutes(
 
       spawnExperiment(handle, makeOnEvent(runId, handle), {
         apiSettings,
+        marketContext: market ? {
+          condition_id: market.condition_id,
+          question: market.question,
+          description: market.description,
+          end_date_iso: market.end_date_iso,
+          yes_token_id: market.yes_token_id,
+          no_token_id: market.no_token_id,
+          tick_size: market.tick_size,
+          taker_fee_bps: market.taker_fee_bps,
+          volume: market.volume,
+          winning_idx: market.is_live ? -1 : 0,
+          yes_price: market.yes_price ?? null,
+        } : undefined,
         checkpointOut: checkpointPathFor(runId),
         logger: app.log,
       });

@@ -75,12 +75,61 @@ EventCallback = Callable[[str, dict], None]
 _LLM_SEMAPHORE = threading.Semaphore(4)
 
 
-def _ensure_priors_json(slug: str, data_dir: Path) -> dict:
+def _fallback_priors(slug: str, meta: dict, yes_price: Optional[float]) -> dict:
+    """Create deterministic local priors from a live Gamma snapshot."""
+    anchor = float(yes_price) if yes_price is not None else 0.5
+    anchor = max(0.01, min(0.99, anchor))
+    now = int(time.time())
+    tick_size = float(meta.get("tick_size") or 0.01)
+    return {
+        "schema_version": "v7-priors-1",
+        "slug": slug,
+        "condition_id": meta["condition_id"],
+        "yes_token_id": meta.get("yes_token_id", ""),
+        "no_token_id": meta.get("no_token_id", ""),
+        "winning_idx": meta.get("winning_idx", -1),
+        "end_date_iso": meta.get("end_date_iso"),
+        "market_open_ts": now,
+        "market_open_iso": dt.datetime.utcfromtimestamp(now).isoformat(),
+        "tick_size": tick_size,
+        "taker_fee_bps": float(meta.get("taker_fee_bps") or 0.0),
+        "n_ticks": 12,
+        "signal_mu": anchor,
+        "signal_mu_meta": {
+            "source": "gamma_live_quote_fallback",
+            "n_obs": 1 if yes_price is not None else 0,
+            "horizon_hours": 0,
+        },
+        "bootstrap": {
+            "anchor_yes": anchor,
+            "spread": max(0.01, tick_size * 2),
+            "depth_per_level": 100.0,
+            "depth_levels": 3,
+            "source": "gamma_live_quote_fallback",
+        },
+        "_eps": 1e-9,
+        "_price_floor": 0.01,
+        "_price_cap": 0.99,
+        "derived_at_iso": dt.datetime.utcnow().isoformat(),
+    }
+
+
+def _ensure_priors_json(
+    slug: str,
+    data_dir: Path,
+    market_meta: Optional[dict] = None,
+    yes_price: Optional[float] = None,
+) -> dict:
     """Return priors dict; create `data/priors_<slug>.json` if absent."""
     path = data_dir / f"priors_{slug}.json"
     if path.exists():
         return json.loads(path.read_text())
-    priors = derive_priors(slug)
+    try:
+        priors = derive_priors(slug)
+    except (Exception, SystemExit):
+        if market_meta is None:
+            raise
+        priors = _fallback_priors(slug, market_meta, yes_price)
     data_dir.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(priors, indent=2, default=str))
     log.info("derived priors for live market %s -> %s", slug, path)
@@ -216,6 +265,7 @@ def _run_stream_impl(
     agent_loop_observer: AgentLoopObserver | None = None,
     agent_scheduler: AgentScheduler | None = None,
     interaction_budget: InteractionBudget = DEFAULT_INTERACTION_BUDGET,
+    market_context: Optional[dict] = None,
 ) -> None:
     """Execute one simulation, streaming events through `on_event`.
 
@@ -242,7 +292,20 @@ def _run_stream_impl(
     })
 
     # 1. Resolve market (live or resolved).
-    meta = get_market_meta(slug)
+    try:
+        meta = get_market_meta(slug)
+    except Exception as exc:  # noqa: BLE001
+        if not market_context:
+            on_event("error", {
+                "where": "get_market_meta",
+                "message": f"Market data unavailable: {exc}",
+            })
+            return
+        meta = {
+            **market_context,
+            "slug": slug,
+            "winning_idx": int(market_context.get("winning_idx", -1)),
+        }
     if meta is None:
         on_event("error", {
             "where": "get_market_meta",
@@ -261,7 +324,12 @@ def _run_stream_impl(
 
     # 2. Derive priors (or load cached).
     try:
-        priors = _ensure_priors_json(slug, data_dir)
+        priors = _ensure_priors_json(
+            slug,
+            data_dir,
+            market_meta=meta if market_context else None,
+            yes_price=(market_context or {}).get("yes_price"),
+        )
     except Exception as exc:        # noqa: BLE001
         on_event("error", {"where": "derive_priors", "message": str(exc)})
         return
@@ -491,6 +559,7 @@ def run_stream(
     max_retries: int = 3,
     max_tokens: Optional[int] = None,
     agent_loop_observer: AgentLoopObserver | None = None,
+    market_context: Optional[dict] = None,
 ) -> None:
     """Run a simulation with optional, fail-open observability."""
     session_id = f"poly:{uuid.uuid4()}"
@@ -530,6 +599,7 @@ def run_stream(
             request_timeout_seconds=request_timeout_seconds,
             max_retries=max_retries,
             max_tokens=max_tokens,
+            market_context=market_context,
             agent_loop_observer=_observed_agent_loop_observer(
                 agent_loop_observer, telemetry,
             ),
