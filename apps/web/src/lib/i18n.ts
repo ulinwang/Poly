@@ -265,9 +265,11 @@ const zh: Dict = {
 
   // ── Agent tab ──────────────────────────────────────────────────────
   'agent.title': 'Agent',
-  'agent.subtitle': '查看智能体使用的 Prompt 模板与工具列表（来自 Python 真实定义）。',
+  'agent.subtitle': '查看智能体当前架构、运行配置、Prompt 模板与工具定义。',
   'agent.tab.prompts': 'Prompt 模板',
   'agent.tab.tools': '工具列表',
+  'agent.tab.architecture': '当前架构',
+  'agent.tab.configuration': '对应配置',
   'agent.loadFailed': '加载 Agent 信息失败：{msg}',
   'agent.empty': '暂无可显示的 Agent 信息。',
   'agent.tools.count': '{count} 个工具',
@@ -601,9 +603,11 @@ const en: Dict = {
 
   // ── Agent tab ──────────────────────────────────────────────────────
   'agent.title': 'Agent',
-  'agent.subtitle': 'Inspect the prompt templates and tool list the agents use (sourced from the real Python definitions).',
+  'agent.subtitle': 'Inspect the current agent architecture, runtime configuration, prompts, and tool definitions.',
   'agent.tab.prompts': 'Prompt templates',
   'agent.tab.tools': 'Tools',
+  'agent.tab.architecture': 'Architecture',
+  'agent.tab.configuration': 'Configuration',
   'agent.loadFailed': 'Failed to load agent info: {msg}',
   'agent.empty': 'No agent info to display.',
   'agent.tools.count': '{count} tools',

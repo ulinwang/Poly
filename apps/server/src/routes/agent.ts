@@ -5,6 +5,8 @@ import { config } from '../config.js';
 interface AgentInfo {
   tools: unknown[];
   prompt_templates: Record<string, unknown>;
+  architecture?: Record<string, unknown>;
+  configuration?: unknown[];
 }
 
 const CACHE_TTL_MS = 30_000;
@@ -42,6 +44,8 @@ function runIntrospect(): Promise<AgentInfo> {
         resolve({
           tools: Array.isArray(parsed.tools) ? parsed.tools : [],
           prompt_templates: parsed.prompt_templates ?? {},
+          architecture: parsed.architecture ?? {},
+          configuration: Array.isArray(parsed.configuration) ? parsed.configuration : [],
         });
       } catch (e) {
         reject(new Error(`failed to parse introspect.py output: ${(e as Error).message}`));
@@ -64,7 +68,7 @@ export default async function agentRoutes(app: FastifyInstance) {
       return value;
     } catch (err) {
       reply.status(500);
-      return { message: (err as Error).message, tools: [], prompt_templates: {} };
+      return { message: (err as Error).message, tools: [], prompt_templates: {}, architecture: {}, configuration: [] };
     }
   });
 }

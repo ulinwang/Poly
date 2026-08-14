@@ -315,9 +315,37 @@ export interface AgentPromptTemplate {
   template: string;
 }
 
+export interface AgentArchitectureStage {
+  id: string;
+  title: string;
+  description: string;
+  source: string;
+}
+
+export interface AgentArchitecture {
+  name: string;
+  version: string;
+  description: string;
+  stages: AgentArchitectureStage[];
+}
+
+export interface AgentConfigItem {
+  key: string;
+  value: string | number | boolean;
+  description: string;
+}
+
+export interface AgentConfigGroup {
+  group: string;
+  source: string;
+  items: AgentConfigItem[];
+}
+
 export interface AgentInfo {
   tools: AgentTool[];
   prompt_templates: Record<string, AgentPromptTemplate>;
+  architecture?: AgentArchitecture;
+  configuration?: AgentConfigGroup[];
   /** Present only when the introspection spawn failed. */
   message?: string;
 }

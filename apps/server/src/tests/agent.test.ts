@@ -15,6 +15,10 @@ describe('agent + analysis routes', () => {
     expect(Array.isArray(body.tools)).toBe(true);
     expect(body.tools.length).toBeGreaterThan(0);
     expect(typeof body.prompt_templates).toBe('object');
+    expect(Array.isArray(body.architecture?.stages)).toBe(true);
+    expect(body.architecture.stages.length).toBeGreaterThan(0);
+    expect(Array.isArray(body.configuration)).toBe(true);
+    expect(body.configuration.length).toBeGreaterThan(0);
   });
 
   it('GET /api/v1/analysis/:slug returns 200 with an available flag', async () => {

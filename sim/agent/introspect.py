@@ -9,7 +9,9 @@ prints one JSON object to stdout:
 
     {
       "tools": [...],              # TOOL_SCHEMAS (name / description / parameters)
-      "prompt_templates": {...}    # the system / user prompt templates + a sample
+      "prompt_templates": {...},   # the system / user prompt templates + a sample
+      "architecture": {...},       # current decision-loop stages
+      "configuration": [...]       # safe runtime defaults and protocol limits
     }
 
 The tool list is read straight from ``agent.decision.tool_schemas.TOOL_SCHEMAS``
@@ -203,6 +205,96 @@ def dump() -> dict:
                 "template": _sample_render(),
             },
         },
+        "architecture": {
+            "name": "Two-stage tool-calling agent loop",
+            "version": "v14",
+            "description": (
+                "Each agent observes the market and its private state, resolves "
+                "versioned prompts, updates its belief, then enters a bounded "
+                "tool loop before the environment validates and executes the action."
+            ),
+            "stages": [
+                {
+                    "id": "observe",
+                    "title": "Observe state",
+                    "description": "Read the live CLOB snapshot, portfolio, memory and social context.",
+                    "source": "sim/agent/decision/types.py",
+                },
+                {
+                    "id": "prompt",
+                    "title": "Resolve prompts",
+                    "description": "Combine persona, market rules and per-tick state through the versioned prompt registry.",
+                    "source": "sim/agent/prompt/builder.py",
+                },
+                {
+                    "id": "belief",
+                    "title": "Belief stage",
+                    "description": "Force update_belief before any trading action in the standard two-stage flow.",
+                    "source": "sim/agent/decision/runtime.py",
+                },
+                {
+                    "id": "tools",
+                    "title": "Bounded tool loop",
+                    "description": "Allow information and forum reads plus social actions within deterministic per-tick budgets.",
+                    "source": "sim/agent/decision/runtime.py",
+                },
+                {
+                    "id": "trade",
+                    "title": "Trade decision",
+                    "description": "Converge to one terminal CLOB action or HOLD using the selected trade tools.",
+                    "source": "sim/agent/decision/tool_schemas.py",
+                },
+                {
+                    "id": "execute",
+                    "title": "Validate and execute",
+                    "description": "Parse the tool call, enforce market constraints, execute it and emit trace/evaluation events.",
+                    "source": "sim/environment/env.py",
+                },
+            ],
+        },
+        "configuration": [
+            {
+                "group": "Decision protocol",
+                "source": "sim/agent/decision/runtime.py",
+                "items": [
+                    {"key": "decision_mode", "value": "two_stage_tool_calling", "description": "Belief update followed by a terminal trade stage."},
+                    {"key": "belief_update", "value": "required", "description": "update_belief is forced before trade tools."},
+                    {"key": "failure_fallback", "value": "HOLD", "description": "Unrecoverable model or parse failures degrade to HOLD."},
+                    {"key": "prompt_language", "value": "en", "description": "Default stage-prompt language; callers may override it."},
+                ],
+            },
+            {
+                "group": "Interaction budget",
+                "source": "sim/agent/multi_agent/protocol.py",
+                "items": [
+                    {"key": "protocol_version", "value": "1", "description": "Replayable multi-agent interaction record version."},
+                    {"key": "max_forum_reads", "value": 2, "description": "Maximum forum reads per agent per tick."},
+                    {"key": "max_social_actions", "value": 2, "description": "Maximum post/comment/follow actions per agent per tick."},
+                    {"key": "decision_scheduler", "value": "sequential", "description": "Agent decisions preserve observer insertion order by default."},
+                    {"key": "matching_order", "value": "environment_seeded_shuffle", "description": "CLOB matching order is shuffled deterministically from the environment seed."},
+                ],
+            },
+            {
+                "group": "Model call defaults",
+                "source": "sim/runner/runner_stream.py",
+                "items": [
+                    {"key": "temperature", "value": 0.0, "description": "Deterministic runner default unless an experiment overrides it."},
+                    {"key": "request_timeout_seconds", "value": 120, "description": "Default timeout for one model request."},
+                    {"key": "max_attempts", "value": 3, "description": "Total attempts for transient provider failures."},
+                    {"key": "tool_schema", "value": "OpenAI function tools", "description": "Provider-independent schema consumed through the LLM adapter."},
+                ],
+            },
+            {
+                "group": "Prompt registry",
+                "source": "sim/agent/prompt/registry.py",
+                "items": [
+                    {"key": "clob_system", "value": "poly/clob-system", "description": "Persona and market contract prompt."},
+                    {"key": "user_state", "value": "poly/user-state", "description": "Per-tick market and portfolio prompt."},
+                    {"key": "belief_stage", "value": "poly/belief-stage", "description": "Belief update stage instructions."},
+                    {"key": "trade_stage", "value": "poly/trade-stage", "description": "Tool-loop and terminal action instructions."},
+                ],
+            },
+        ],
     }
     json.dump(payload, fp=sys.stdout, ensure_ascii=False, indent=2)
     print()

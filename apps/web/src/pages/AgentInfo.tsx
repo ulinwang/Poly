@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Bot, FileText, Wrench, X } from 'lucide-react';
+import { ArrowRight, Bot, FileText, Settings2, Workflow, Wrench, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
-import type { AgentInfo as AgentInfoData, AgentTool, AgentPromptTemplate } from '../types';
+import type {
+  AgentArchitecture, AgentConfigGroup, AgentInfo as AgentInfoData,
+  AgentPromptTemplate, AgentTool,
+} from '../types';
 
-type Tab = 'prompts' | 'tools';
+type Tab = 'architecture' | 'configuration' | 'prompts' | 'tools';
 
 export default function AgentInfo() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<Tab>('prompts');
+  const [tab, setTab] = useState<Tab>('architecture');
   const [data, setData] = useState<AgentInfoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +51,11 @@ export default function AgentInfo() {
       </div>
 
       {/* Top tab switcher */}
-      <div className="flex gap-1 border-b border-surface-200 dark:border-surface-700">
+      <div className="flex gap-1 overflow-x-auto border-b border-surface-200 dark:border-surface-700">
+        <TabButton active={tab === 'architecture'} onClick={() => setTab('architecture')}
+          icon={<Workflow className="w-4 h-4" />} label={t('agent.tab.architecture')} />
+        <TabButton active={tab === 'configuration'} onClick={() => setTab('configuration')}
+          icon={<Settings2 className="w-4 h-4" />} label={t('agent.tab.configuration')} />
         <TabButton active={tab === 'prompts'} onClick={() => setTab('prompts')}
           icon={<FileText className="w-4 h-4" />} label={t('agent.tab.prompts')} />
         <TabButton active={tab === 'tools'} onClick={() => setTab('tools')}
@@ -67,6 +74,10 @@ export default function AgentInfo() {
 
       {!loading && !error && (
         <>
+          {tab === 'architecture' && <ArchitectureTab architecture={data?.architecture} />}
+
+          {tab === 'configuration' && <ConfigurationTab groups={data?.configuration ?? []} />}
+
           {tab === 'tools' && (
             <div className="space-y-4">
               <p className="text-sm text-surface-400">{t('agent.tools.count', { count: tools.length })}</p>
@@ -109,6 +120,75 @@ export default function AgentInfo() {
           <PromptDetail tpl={selectedPrompt} />
         </DetailModal>
       )}
+    </div>
+  );
+}
+
+function ArchitectureTab({ architecture }: { architecture?: AgentArchitecture }) {
+  const { t } = useI18n();
+  if (!architecture || architecture.stages.length === 0) {
+    return <div className="card p-6 text-sm text-surface-400">{t('agent.empty')}</div>;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-surface-200 bg-white p-5 dark:border-white/8 dark:bg-surface-900">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-surface-900 dark:text-white">{architecture.name}</h2>
+          <span className="rounded-md bg-surface-100 px-2 py-1 text-[10px] font-semibold text-surface-500 dark:bg-white/5">{architecture.version}</span>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-surface-500 dark:text-surface-400">{architecture.description}</p>
+      </div>
+
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-max items-stretch">
+          {architecture.stages.map((stage, index) => (
+            <div key={stage.id} className="flex items-center">
+              <article className="flex w-56 self-stretch flex-col rounded-2xl border border-surface-200 bg-white p-4 dark:border-white/8 dark:bg-surface-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary-50 text-xs font-bold text-primary-700 dark:bg-primary-950 dark:text-primary-300">{index + 1}</span>
+                  <code className="text-[10px] text-surface-400">{stage.id}</code>
+                </div>
+                <h3 className="mt-4 text-sm font-semibold text-surface-900 dark:text-white">{stage.title}</h3>
+                <p className="mt-2 flex-1 text-xs leading-5 text-surface-500 dark:text-surface-400">{stage.description}</p>
+                <code className="mt-4 break-all text-[10px] text-surface-400">{stage.source}</code>
+              </article>
+              {index < architecture.stages.length - 1 && <ArrowRight className="mx-2 h-4 w-4 shrink-0 text-surface-300" />}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfigurationTab({ groups }: { groups: AgentConfigGroup[] }) {
+  const { t } = useI18n();
+  if (groups.length === 0) {
+    return <div className="card p-6 text-sm text-surface-400">{t('agent.empty')}</div>;
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {groups.map((group) => (
+        <section key={group.group} className="overflow-hidden rounded-2xl border border-surface-200 bg-white dark:border-white/8 dark:bg-surface-900">
+          <header className="border-b border-surface-200 px-5 py-4 dark:border-white/8">
+            <h2 className="text-sm font-semibold text-surface-900 dark:text-white">{group.group}</h2>
+            <code className="mt-1 block break-all text-[10px] text-surface-400">{group.source}</code>
+          </header>
+          <dl className="divide-y divide-surface-100 dark:divide-white/5">
+            {group.items.map((item) => (
+              <div key={item.key} className="px-5 py-3.5">
+                <div className="flex items-start justify-between gap-4">
+                  <dt><code className="text-xs font-medium text-surface-700 dark:text-surface-200">{item.key}</code></dt>
+                  <dd className="max-w-[55%] rounded-md bg-surface-100 px-2 py-1 text-right text-[10px] font-semibold text-surface-600 dark:bg-white/5 dark:text-surface-300">{String(item.value)}</dd>
+                </div>
+                <p className="mt-1.5 text-xs leading-5 text-surface-400">{item.description}</p>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
     </div>
   );
 }
