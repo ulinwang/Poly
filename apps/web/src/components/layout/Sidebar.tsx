@@ -48,22 +48,24 @@ export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarPr
         transition-[width] duration-200 dark:border-white/5 dark:bg-[#101514]`}
     >
       <div className={`flex h-[68px] items-center px-4 ${isCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
-        <a href="#/markets" className="flex min-w-0 items-center gap-3" onClick={onNavigate}>
-          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-surface-950 text-white shadow-sm dark:bg-white dark:text-surface-950">
-            <Orbit className="h-[19px] w-[19px]" />
-          </span>
-          {!isCollapsed && (
+        {!isCollapsed && (
+          <a href="#/markets" className="flex min-w-0 items-center gap-3" onClick={onNavigate}>
+            <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-xl bg-surface-950 text-white shadow-sm dark:bg-white dark:text-surface-950">
+              <Orbit className="h-[19px] w-[19px]" />
+            </span>
             <span className="min-w-0">
               <span className="block text-[17px] font-extrabold tracking-[-0.03em] text-surface-900 dark:text-white">{t('app.name')}</span>
               <span className="block truncate text-[9px] font-semibold uppercase tracking-[0.18em] text-surface-400">Agent market lab</span>
             </span>
-          )}
-        </a>
-        {!isCollapsed && (
-          <button onClick={onNavigate ?? toggleSidebar} className="grid h-8 w-8 place-items-center rounded-lg text-surface-400 hover:bg-surface-200/70 hover:text-surface-700 dark:hover:bg-white/5" title={t('nav.collapseSidebar')}>
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
+          </a>
         )}
+        <button
+          onClick={isCollapsed ? toggleSidebar : (onNavigate ?? toggleSidebar)}
+          className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-surface-400 hover:bg-surface-200/70 hover:text-surface-700 dark:hover:bg-white/5"
+          title={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+        >
+          {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </button>
       </div>
 
       {/* Nav */}
@@ -145,15 +147,6 @@ export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarPr
           {!isCollapsed && <span>{darkMode ? t('theme.light') : t('theme.dark')}</span>}
         </button>
         </div>
-        {isCollapsed && !forceExpanded && (
-        <button
-          onClick={toggleSidebar}
-          title={t('nav.expandSidebar')}
-          className="hidden w-full items-center justify-center rounded-lg p-2 text-surface-500 transition-all hover:bg-surface-200/60 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-white/5 lg:flex"
-        >
-          <PanelLeftOpen className="h-5 w-5" />
-        </button>
-        )}
       </div>
     </aside>
   );
