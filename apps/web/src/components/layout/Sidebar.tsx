@@ -25,11 +25,14 @@ const NAV: NavEntry[] = [
 interface SidebarProps {
   /** called after navigating — used to close the mobile drawer */
   onNavigate?: () => void;
+  /** opens settings without leaving the current workspace page */
+  onOpenSettings?: () => void;
+  settingsOpen?: boolean;
   /** mobile drawers should always render the full navigation */
   forceExpanded?: boolean;
 }
 
-export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarProps) {
+export default function Sidebar({ onNavigate, onOpenSettings, settingsOpen = false, forceExpanded = false }: SidebarProps) {
   const location = useLocation();
   const collapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
@@ -60,7 +63,7 @@ export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarPr
           </a>
         )}
         <button
-          onClick={isCollapsed ? toggleSidebar : (onNavigate ?? toggleSidebar)}
+          onClick={forceExpanded ? onNavigate : toggleSidebar}
           className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-surface-400 hover:bg-surface-200/70 hover:text-surface-700 dark:hover:bg-white/5"
           title={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         >
@@ -85,11 +88,10 @@ export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarPr
               className={`group relative flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}
                 min-h-10 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                 active
-                  ? 'bg-surface-200/80 text-surface-950 dark:bg-white/10 dark:text-white'
+                  ? 'bg-white text-surface-950 shadow-[0_5px_16px_rgba(15,23,42,0.08)] ring-1 ring-surface-200/70 dark:bg-white/10 dark:text-white dark:ring-white/10'
                   : 'text-surface-500 hover:bg-surface-200/55 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white'
               }`}
             >
-              {active && !isCollapsed && <span className="absolute left-0 h-5 w-0.5 rounded-full bg-primary-600" />}
               <span className="relative flex-shrink-0">
                 <Icon className="w-5 h-5" />
                 {showBadge && (
@@ -115,20 +117,19 @@ export default function Sidebar({ onNavigate, forceExpanded = false }: SidebarPr
 
       {/* Bottom: language switcher + dark mode toggle */}
       <div className="space-y-1 border-t border-surface-200/70 px-3 py-3 dark:border-white/5">
-        <a
-          href="#/settings/api"
-          onClick={onNavigate}
+        <button
+          type="button"
+          onClick={() => { onNavigate?.(); onOpenSettings?.(); }}
           title={isCollapsed ? t('nav.settings') : undefined}
-          className={`relative flex min-h-10 items-center rounded-lg px-3 py-2 text-sm font-medium transition-all ${isCollapsed ? 'justify-center' : 'gap-3'} ${
-            location.pathname.startsWith('/settings')
-              ? 'bg-surface-200/80 text-surface-950 dark:bg-white/10 dark:text-white'
+          className={`relative flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-all ${isCollapsed ? 'justify-center' : 'gap-3'} ${
+            settingsOpen || location.pathname.startsWith('/settings')
+              ? 'bg-white text-surface-950 shadow-[0_5px_16px_rgba(15,23,42,0.08)] ring-1 ring-surface-200/70 dark:bg-white/10 dark:text-white dark:ring-white/10'
               : 'text-surface-500 hover:bg-surface-200/55 hover:text-surface-900 dark:text-surface-400 dark:hover:bg-white/5 dark:hover:text-white'
           }`}
         >
-          {location.pathname.startsWith('/settings') && !isCollapsed && <span className="absolute left-0 h-5 w-0.5 rounded-full bg-primary-600" />}
           <Settings className="h-5 w-5" />
           {!isCollapsed && <span>{t('nav.settings')}</span>}
-        </a>
+        </button>
         <div className={`flex ${isCollapsed ? 'flex-col' : ''} gap-1`}>
         <button
           onClick={() => setLocale(locale === 'zh' ? 'en' : 'zh')}

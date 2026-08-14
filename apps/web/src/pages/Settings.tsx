@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom';
 import {
   Activity, CheckCircle2, Key, KeyRound, Palette, Plus, RefreshCw,
-  Save, Server, SlidersHorizontal, TestTube, Trash2,
+  Save, Server, SlidersHorizontal, TestTube, Trash2, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores';
@@ -9,33 +9,98 @@ import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import type { ApiKey, ProviderInfo } from '../types';
 
-export default function Settings() {
+type SettingsSection = 'api' | 'keys' | 'general';
+
+interface SettingsProps {
+  modal?: boolean;
+  onClose?: () => void;
+}
+
+export default function Settings({ modal = false, onClose }: SettingsProps) {
   const { t } = useI18n();
-  return (
-    <div className="mx-auto max-w-6xl">
-      <div className="overflow-hidden rounded-[22px] border border-surface-200/90 bg-white shadow-[0_12px_36px_rgba(15,23,42,0.06)] dark:border-white/8 dark:bg-surface-900">
-        <header className="border-b border-surface-200 px-6 py-5 dark:border-white/8">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-400">Workspace</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-surface-950 dark:text-white">{t('settings.title')}</h1>
+  const [section, setSection] = useState<SettingsSection>('api');
+
+  useEffect(() => {
+    if (!modal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modal, onClose]);
+
+  const shell = (
+    <div className={`flex overflow-hidden rounded-[22px] border border-surface-200/90 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-white/8 dark:bg-surface-900 ${modal ? 'h-[min(760px,calc(100vh-48px))] flex-col' : 'flex-col'}`}>
+        <header className="flex items-center justify-between border-b border-surface-200 px-6 py-5 dark:border-white/8">
+          <div>
+            {!modal && <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-surface-400">Workspace</p>}
+            <h1 className={`${modal ? 'text-xl' : 'mt-1 text-2xl'} font-bold tracking-tight text-surface-950 dark:text-white`}>{t('settings.title')}</h1>
+          </div>
+          {modal && (
+            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl text-surface-400 transition hover:bg-surface-100 hover:text-surface-900 dark:hover:bg-white/5 dark:hover:text-white" aria-label={t('settings.close')}>
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </header>
-        <div className="grid min-h-[640px] md:grid-cols-[210px_minmax(0,1fr)]">
+        <div className={`grid min-h-0 flex-1 md:grid-cols-[210px_minmax(0,1fr)] ${modal ? '' : 'min-h-[640px]'}`}>
           <aside className="border-b border-surface-200 bg-[#f7f8f8] p-3 dark:border-white/8 dark:bg-white/[0.025] md:border-b-0 md:border-r">
             <div className="flex gap-1 overflow-x-auto md:flex-col">
-              <SettingsTab to="/settings/api" icon={<Key className="w-4 h-4" />} label={t('settings.tab.api')} />
-              <SettingsTab to="/settings/keys" icon={<KeyRound className="w-4 h-4" />} label={t('settings.tab.keys')} />
-              <SettingsTab to="/settings/general" icon={<Palette className="w-4 h-4" />} label={t('settings.tab.general')} />
+              {modal ? (
+                <>
+                  <ModalSettingsTab active={section === 'api'} onClick={() => setSection('api')} icon={<Key className="h-4 w-4" />} label={t('settings.tab.api')} />
+                  <ModalSettingsTab active={section === 'keys'} onClick={() => setSection('keys')} icon={<KeyRound className="h-4 w-4" />} label={t('settings.tab.keys')} />
+                  <ModalSettingsTab active={section === 'general'} onClick={() => setSection('general')} icon={<Palette className="h-4 w-4" />} label={t('settings.tab.general')} />
+                </>
+              ) : (
+                <>
+                  <SettingsTab to="/settings/api" icon={<Key className="h-4 w-4" />} label={t('settings.tab.api')} />
+                  <SettingsTab to="/settings/keys" icon={<KeyRound className="h-4 w-4" />} label={t('settings.tab.keys')} />
+                  <SettingsTab to="/settings/general" icon={<Palette className="h-4 w-4" />} label={t('settings.tab.general')} />
+                </>
+              )}
             </div>
           </aside>
-          <main className="min-w-0 p-5 sm:p-7">
-            <Routes>
-              <Route path="api" element={<APISettings />} />
-              <Route path="keys" element={<KeysSettings />} />
-              <Route path="general" element={<GeneralSettings />} />
-            </Routes>
-          </main>
+          <section className="min-w-0 overflow-y-auto p-5 sm:p-7">
+            {modal ? (
+              section === 'api' ? <APISettings /> : section === 'keys' ? <KeysSettings /> : <GeneralSettings />
+            ) : (
+              <Routes>
+                <Route path="api" element={<APISettings />} />
+                <Route path="keys" element={<KeysSettings />} />
+                <Route path="general" element={<GeneralSettings />} />
+              </Routes>
+            )}
+          </section>
         </div>
       </div>
+  );
+
+  if (modal) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-surface-950/35 p-4 backdrop-blur-[3px] sm:p-6"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}
+      >
+        <div role="dialog" aria-modal="true" aria-label={t('settings.title')} className="w-full max-w-6xl">
+          {shell}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      {shell}
     </div>
+  );
+}
+
+function ModalSettingsTab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active ? 'bg-white text-surface-950 shadow-sm ring-1 ring-surface-200/70 dark:bg-white/10 dark:text-white dark:ring-white/10' : 'text-surface-500 hover:bg-surface-200/55 hover:text-surface-800 dark:hover:bg-white/5 dark:hover:text-surface-200'}`}>
+      {icon}
+      {label}
+    </button>
   );
 }
 

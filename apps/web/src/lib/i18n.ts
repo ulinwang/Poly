@@ -182,6 +182,7 @@ const zh: Dict = {
 
   // ── Settings ───────────────────────────────────────────────────────
   'settings.title': '设置',
+  'settings.close': '关闭设置',
   'settings.tab.api': 'API',
   'settings.tab.keys': 'API 密钥',
   'settings.tab.general': '通用',
@@ -504,6 +505,7 @@ const en: Dict = {
 
   // ── Settings ───────────────────────────────────────────────────────
   'settings.title': 'Settings',
+  'settings.close': 'Close settings',
   'settings.tab.api': 'API',
   'settings.tab.keys': 'API Keys',
   'settings.tab.general': 'General',

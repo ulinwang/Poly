@@ -2,16 +2,27 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import TopNav from './TopNav';
 import Sidebar from './Sidebar';
+import Settings from '../../pages/Settings';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const closeNavigation = () => {
+    setSidebarOpen(false);
+    setSettingsOpen(false);
+  };
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-[#f3f4f4] text-surface-900 dark:bg-[#0b0f0e] dark:text-surface-50">
 
       {/* Persistent sidebar — desktop */}
       <div className="relative z-20 hidden lg:block">
-        <Sidebar />
+        <Sidebar
+          settingsOpen={settingsOpen}
+          onNavigate={() => setSettingsOpen(false)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
       </div>
 
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
@@ -29,7 +40,12 @@ export default function MainLayout() {
           transform transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
-          <Sidebar forceExpanded onNavigate={() => setSidebarOpen(false)} />
+          <Sidebar
+            forceExpanded
+            settingsOpen={settingsOpen}
+            onNavigate={closeNavigation}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
         </div>
 
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-7 lg:py-6">
@@ -39,6 +55,7 @@ export default function MainLayout() {
         </main>
       </div>
       </div>
+      {settingsOpen && <Settings modal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

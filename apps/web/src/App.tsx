@@ -4,6 +4,7 @@ import MainLayout from './components/layout/MainLayout';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthGate from './components/AuthGate';
 import MarketBrowser from './pages/MarketBrowser';
+import Settings from './pages/Settings';
 import { useSettingsStore } from './stores';
 
 const MarketDetail = lazy(() => import('./pages/MarketDetail'));
@@ -11,7 +12,6 @@ const ExperimentManager = lazy(() => import('./pages/ExperimentManager'));
 const ExperimentLive = lazy(() => import('./pages/ExperimentLive'));
 const AgentInfo = lazy(() => import('./pages/AgentInfo'));
 const DataAnalysis = lazy(() => import('./pages/DataAnalysis'));
-const Settings = lazy(() => import('./pages/Settings'));
 
 function DarkModeInit() {
   useEffect(() => {
