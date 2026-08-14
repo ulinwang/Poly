@@ -122,7 +122,7 @@ function MarketGrid({ onSelect }: { onSelect: (slug: string) => void }) {
   }, [experiments, questions, statusFilter, searchQuery]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="mx-auto max-w-[1440px] space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -227,14 +227,14 @@ function VirtualExperimentGrid({
   const virtualizer = useVirtualizer({
     count: rows,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 140,
+    estimateSize: () => 176,
     overscan: 3,
   });
 
   return (
     <div
       ref={parentRef}
-      className="h-[calc(100vh-280px)] overflow-y-auto scrollbar-hide"
+      className="h-[calc(100vh-250px)] overflow-y-auto pr-1 scrollbar-hide"
     >
       <div
         style={{
@@ -251,18 +251,18 @@ function VirtualExperimentGrid({
               key={virtualRow.key}
               data-index={virtualRow.index}
               ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
+              className="absolute left-0 top-0 w-full pb-5"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {rowGroups.map((g) => (
                   <button
                     key={g.slug}
                     onClick={() => onSelect(g.slug)}
-                    className="card card-hover p-4 text-left flex flex-col gap-3"
+                    className="card card-hover flex min-h-[150px] flex-col gap-3 p-5 text-left"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-surface-800 dark:text-surface-100 line-clamp-2">
+                      <span className="line-clamp-2 text-base font-semibold leading-6 text-surface-800 dark:text-surface-100">
                         {g.question || g.slug}
                       </span>
                       <span className="badge text-[10px] bg-surface-100 dark:bg-surface-800 text-surface-500 flex-shrink-0">
@@ -272,7 +272,7 @@ function VirtualExperimentGrid({
                     {g.question && (
                       <div className="text-xs text-surface-400 truncate -mt-1">{g.slug}</div>
                     )}
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="mt-auto flex flex-wrap gap-2 pt-1">
                       {STATUS_ORDER.filter((s) => g.statusCounts[s]).map((s) => (
                         <span
                           key={s}
