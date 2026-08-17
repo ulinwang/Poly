@@ -33,8 +33,9 @@ RUN cd apps/server && npm prune --production
 # -----------------------------------------------------------------------------
 FROM node:24-alpine AS python-builder
 
-# Minimal set for uv + any Python packages that still need compilation on musl.
-RUN apk add --no-cache curl python3 python3-dev gcc g++ musl-dev
+# Minimal set for uv + any Python packages that still need compilation on musl
+# (e.g. ckzg builds via setuptools' legacy backend, which invokes make).
+RUN apk add --no-cache curl python3 python3-dev gcc g++ make musl-dev
 
 WORKDIR /app
 

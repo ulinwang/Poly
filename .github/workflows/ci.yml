@@ -64,6 +64,22 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      # The agent/analysis routes spawn the Python sim core
+      # (.venv/bin/python3), so the test suite needs the locked Python env.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install locked Python dependencies
+        run: uv sync --frozen
+
       - name: Install dependencies
         run: npm ci
 
@@ -71,6 +87,10 @@ jobs:
         run: npm run lint --workspace apps/server
 
       - name: Test server
+        env:
+          # Skip litellm's remote model-cost-map fetch, which otherwise adds
+          # several seconds (or a network-timeout stall) to every Python spawn.
+          LITELLM_LOCAL_MODEL_COST_MAP: "true"
         run: npm run test:server
 
       - name: Build server
