@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Poly</title>
+    <script>
+      // Apply the persisted dark-mode preference before first paint so the
+      // initial render doesn't flash white (mirrors the settings store's
+      // `poly.darkMode` localStorage key: '1' = dark, '0'/missing = light).
+      try {
+        if (localStorage.getItem('poly.darkMode') === '1') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch {
+        // localStorage unavailable (private mode, disabled storage) — stay light.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

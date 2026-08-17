@@ -4,7 +4,6 @@ import {
   Globe, Droplets, Vote, Search, Tag, RefreshCw, Loader2, Layers, Sparkles, X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useShallow } from 'zustand/react/shallow';
 import { api } from '../lib/api';
 import { useMarketStore } from '../stores';
 import { useI18n } from '../lib/i18n';
@@ -42,7 +41,7 @@ export default function MarketBrowser() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [feedStatus, setFeedStatus] = useState<'live' | 'stale' | 'unavailable'>('live');
   const [loadError, setLoadError] = useState<string | null>(null);
-  const events = useMarketStore(useShallow((s) => s.events));
+  const events = useMarketStore((s) => s.events);
   const setEvents = useMarketStore((s) => s.setEvents);
   const appendEvents = useMarketStore((s) => s.appendEvents);
   const category = useMarketStore((s) => s.category);

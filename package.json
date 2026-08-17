@@ -12,6 +12,8 @@
     "dev:server": "npm run dev --workspace apps/server",
     "build:web": "npm run build --workspace apps/web",
     "build:server": "npm run build --workspace apps/server",
-    "test:server": "npm run test --workspace apps/server"
+    "test:web": "npm run test --workspace apps/web",
+    "test:server": "npm run test --workspace apps/server",
+    "lint:web": "npm run lint --workspace apps/web"
   }
 }

@@ -2,22 +2,16 @@
 
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { useDebounce } from './index';
+import { useDebounce, useFormatNumber } from './index';
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-// Inline the pure formatter logic (no React hook dependency)
-function fmt(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—';
-  if (!Number.isFinite(n)) return '—';
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'k';
-  return n.toFixed(0);
-}
+describe('useFormatNumber', () => {
+  const { result } = renderHook(() => useFormatNumber());
+  const fmt = result.current;
 
-describe('formatNumber', () => {
   it('formats null/undefined', () => {
     expect(fmt(null)).toBe('—');
     expect(fmt(undefined)).toBe('—');

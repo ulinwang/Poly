@@ -128,48 +128,50 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
   setExperiments: (experiments) => set({ experiments }),
   setActiveId: (activeId) => set({ activeId }),
   addEvent: (event) => set((s) => ({ events: [...s.events, event] })),
-  addDecision: (decision) => set((s) => {
-    const next = [...s.decisions, decision];
-    if (next.length > 400) next.shift();
-    return { decisions: next };
-  }),
-  addTickLog: (entry) => set((s) => {
-    const next = [...s.tickLog, entry];
-    if (next.length > 300) next.shift();
-    return { tickLog: next };
-  }),
+  addDecision: (decision) => set((s) => ({
+    decisions: s.decisions.length >= 400
+      ? [...s.decisions.slice(s.decisions.length - 400 + 1), decision]
+      : [...s.decisions, decision],
+  })),
+  addTickLog: (entry) => set((s) => ({
+    tickLog: s.tickLog.length >= 300
+      ? [...s.tickLog.slice(s.tickLog.length - 300 + 1), entry]
+      : [...s.tickLog, entry],
+  })),
   setMetrics: (metrics) => set((s) => ({ metrics: { ...s.metrics, ...metrics } })),
-  addTickMetrics: (m) => set((s) => {
-    const next = [...s.tickMetrics, m];
-    if (next.length > 1000) next.shift();
-    return { tickMetrics: next };
-  }),
+  addTickMetrics: (m) => set((s) => ({
+    tickMetrics: s.tickMetrics.length >= 1000
+      ? [...s.tickMetrics.slice(s.tickMetrics.length - 1000 + 1), m]
+      : [...s.tickMetrics, m],
+  })),
   addAgentSnapshots: (snapshots) => set((s) => {
     if (snapshots.length === 0) return {};
     const byAgent = { ...s.agentSnapshots };
     for (const snap of snapshots) {
       const prev = byAgent[snap.agent_id];
-      const hist = prev ? [...prev, snap] : [snap];
-      if (hist.length > 1000) hist.shift();
-      byAgent[snap.agent_id] = hist;
+      byAgent[snap.agent_id] = !prev
+        ? [snap]
+        : prev.length >= 1000
+          ? [...prev.slice(prev.length - 1000 + 1), snap]
+          : [...prev, snap];
     }
     return { agentSnapshots: byAgent };
   }),
-  addForumPost: (post) => set((s) => {
-    const next = [...s.forumPosts, post];
-    if (next.length > 2000) next.shift();
-    return { forumPosts: next };
-  }),
-  addForumComment: (comment) => set((s) => {
-    const next = [...s.forumComments, comment];
-    if (next.length > 4000) next.shift();
-    return { forumComments: next };
-  }),
-  addFollow: (edge) => set((s) => {
-    const next = [...s.follows, edge];
-    if (next.length > 4000) next.shift();
-    return { follows: next };
-  }),
+  addForumPost: (post) => set((s) => ({
+    forumPosts: s.forumPosts.length >= 2000
+      ? [...s.forumPosts.slice(s.forumPosts.length - 2000 + 1), post]
+      : [...s.forumPosts, post],
+  })),
+  addForumComment: (comment) => set((s) => ({
+    forumComments: s.forumComments.length >= 4000
+      ? [...s.forumComments.slice(s.forumComments.length - 4000 + 1), comment]
+      : [...s.forumComments, comment],
+  })),
+  addFollow: (edge) => set((s) => ({
+    follows: s.follows.length >= 4000
+      ? [...s.follows.slice(s.follows.length - 4000 + 1), edge]
+      : [...s.follows, edge],
+  })),
   setRunning: (running) => set({ running }),
   setPaused: (paused) => set({ paused }),
   setError: (error) => set({ error }),
