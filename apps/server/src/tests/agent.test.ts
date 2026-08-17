@@ -19,7 +19,9 @@ describe('agent + analysis routes', () => {
     expect(body.architecture.stages.length).toBeGreaterThan(0);
     expect(Array.isArray(body.configuration)).toBe(true);
     expect(body.configuration.length).toBeGreaterThan(0);
-  });
+    // Spawns a Python subprocess (imports litellm et al.) — needs a generous
+    // timeout on cold environments.
+  }, 20000);
 
   it('GET /api/v1/analysis/:slug returns 200 with an available flag', async () => {
     const app = await buildServer();
@@ -33,5 +35,5 @@ describe('agent + analysis routes', () => {
     if (!body.available) {
       expect(typeof body.message).toBe('string');
     }
-  });
+  }, 20000);
 });

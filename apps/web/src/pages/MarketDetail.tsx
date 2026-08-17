@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
   Play, Users, Clock, ArrowLeft, ExternalLink, FlaskConical,
@@ -48,9 +48,12 @@ function formatDate(iso: string | null) {
 
 export default function MarketDetail() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { slug } = useParams<{ slug: string }>();
   const [market, setMarket] = useState<MarketDetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   // Sibling sub-markets when this market belongs to a multi-market event.
   const [siblings, setSiblings] = useState<Market[]>([]);
@@ -89,6 +92,7 @@ export default function MarketDetail() {
     if (!effectiveSlug) return;
     selectMarket(effectiveSlug);
     setLoading(true);
+    setLoadError(null);
     api.getMarket(effectiveSlug)
       .then((res) => {
         setMarket(res.market);
@@ -101,7 +105,11 @@ export default function MarketDetail() {
             .catch((err) => console.error('Failed to load event outcomes:', err));
         }
       })
-      .catch((err) => console.error('Failed to load market:', err))
+      .catch((err) => {
+        console.error('Failed to load market:', err);
+        setMarket(null);
+        setLoadError((err as Error).message);
+      })
       .finally(() => setLoading(false));
     api.listExperiments({ slug: effectiveSlug, limit: 50 })
       .then((res) => setExperiments(res.experiments))
@@ -126,6 +134,7 @@ export default function MarketDetail() {
   const handleStart = async () => {
     if (!effectiveSlug) return;
     setStarting(true);
+    setStartError(null);
     try {
       const res = await api.createExperiment({
         slug: effectiveSlug,
@@ -138,10 +147,10 @@ export default function MarketDetail() {
         ...(apiKeyId ? { api_key_id: Number(apiKeyId) } : {}),
       });
       setActiveId(res.run_id);
-      window.location.hash = `#/experiments/${res.run_id}`;
+      navigate(`/experiments/${res.run_id}`);
     } catch (err) {
       console.error('Failed to start experiment:', err);
-      alert(t('detail.startFailed', { msg: (err as Error).message }));
+      setStartError(t('detail.startFailed', { msg: (err as Error).message }));
     } finally {
       setStarting(false);
     }
@@ -155,7 +164,11 @@ export default function MarketDetail() {
     );
   }
   if (!market) {
-    return <div className="text-center py-20 text-surface-400">{t('detail.notFound')}</div>;
+    return (
+      <div className="text-center py-20 text-surface-400">
+        {loadError ?? t('detail.notFound')}
+      </div>
+    );
   }
 
   const polymarketUrl = market.event_slug
@@ -531,6 +544,9 @@ export default function MarketDetail() {
           </button>
           {!market.is_live && (
             <span className="text-sm text-warning">{t('detail.resolvedNoSim')}</span>
+          )}
+          {startError && (
+            <span className="text-sm text-danger">{startError}</span>
           )}
           <span className="text-xs text-surface-400 ml-auto">
             LLM: {apiSettings.provider} / {apiSettings.model}

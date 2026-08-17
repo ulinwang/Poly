@@ -33,8 +33,9 @@ RUN cd apps/server && npm prune --production
 # -----------------------------------------------------------------------------
 FROM node:24-alpine AS python-builder
 
-# Minimal set for uv + any Python packages that still need compilation on musl.
-RUN apk add --no-cache curl python3 python3-dev gcc g++ musl-dev
+# Minimal set for uv + any Python packages that still need compilation on musl
+# (e.g. ckzg builds via setuptools' legacy backend, which invokes make).
+RUN apk add --no-cache curl python3 python3-dev gcc g++ make musl-dev
 
 WORKDIR /app
 
@@ -42,8 +43,13 @@ WORKDIR /app
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
+# Pin the interpreter to the project's .python-version (3.11) instead of
+# whatever Alpine's python3 happens to be — uv installs a managed CPython
+# here and the venv links against it, so the runtime stage must copy it too.
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+
 # Copy Python project manifest and lockfile.
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock .python-version ./
 
 # Copy the multi-root Python packages referenced by pyproject.toml.
 COPY sim ./sim
@@ -60,9 +66,6 @@ RUN uv sync --frozen --no-dev
 # -----------------------------------------------------------------------------
 FROM node:24-alpine AS runtime
 
-# The simulation core needs a Python interpreter at runtime.
-RUN apk add --no-cache python3
-
 WORKDIR /app
 
 # Node server artifacts (built in stage 1).
@@ -72,7 +75,10 @@ COPY --from=node-builder /app/apps/web/dist ./apps/web/dist
 COPY --from=node-builder /app/node_modules ./node_modules
 COPY --from=node-builder /app/package.json ./package.json
 
-# Python simulation core artifacts (built in stage 2).
+# Python simulation core artifacts (built in stage 2). The venv links against
+# uv's managed CPython 3.11 (see UV_PYTHON_INSTALL_DIR above), which serves as
+# the runtime interpreter — no system python3 needed.
+COPY --from=python-builder /opt/python /opt/python
 COPY --from=python-builder /app/.venv ./.venv
 COPY --from=python-builder /app/sim ./sim
 COPY --from=python-builder /app/research ./research

@@ -1,8 +1,9 @@
 import { useParams } from 'react-router-dom';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Square, ArrowLeft, X, Pause, Play, SkipForward, RotateCcw,
   Activity, BrainCircuit, Clock3, Coins, ListTree, Search,
@@ -628,6 +629,17 @@ function ForumTab({
     [posts],
   );
 
+  // Virtualized post list (up to 2000 posts): only the visible cards are
+  // rendered. Post cards have variable height, so rows self-measure via
+  // `measureElement` (same pattern as ExperimentManager).
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const virtualizer = useVirtualizer({
+    count: ordered.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 200,
+    overscan: 5,
+  });
+
   if (ordered.length === 0) {
     return (
       <div className="card p-4">
@@ -637,12 +649,31 @@ function ForumTab({
   }
 
   return (
-    <div className="space-y-3 max-w-2xl">
-      {ordered.map((post) => {
-        const postComments = commentsByPost.get(post.post_id) ?? [];
-        const followed = followedTargets.has(post.author_id);
-        return (
-          <div key={post.post_id} className="card p-4">
+    <div
+      ref={parentRef}
+      className="max-h-[calc(100vh-240px)] overflow-y-auto max-w-2xl"
+    >
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const post = ordered[virtualRow.index];
+          if (!post) return null;
+          const postComments = commentsByPost.get(post.post_id) ?? [];
+          const followed = followedTargets.has(post.author_id);
+          return (
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
+              className="absolute left-0 top-0 w-full pb-3"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <div className="card p-4">
             {/* Author header */}
             <div className="flex items-center gap-2">
               <span
@@ -698,9 +729,11 @@ function ForumTab({
                 </div>
               ))}
             </div>
-          </div>
-        );
-      })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -711,6 +744,10 @@ function ForumTab({
 // (agent_id → target_id, arrow points at the followed agent). Nodes are laid
 // out on a circle; node size scales with in-degree (follower count).
 // ─────────────────────────────────────────────────────────────────────────
+
+// SVG canvas size for the circular layout (also used as the viewBox).
+const GRAPH_W = 720;
+const GRAPH_H = 520;
 
 function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge[] }) {
   const { t } = useI18n();
@@ -741,10 +778,49 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
     }
 
     const nodeIds = [...ids].sort((a, b) => a - b);
-    return { nodeIds, edges, inDeg, outDeg, postCount };
+
+    // Circular layout — computed here (deps: posts/follows) so hover state
+    // changes don't recompute node positions.
+    const cx = GRAPH_W / 2;
+    const cy = GRAPH_H / 2;
+    const radius = Math.min(GRAPH_W, GRAPH_H) / 2 - 70;
+    const n = nodeIds.length;
+    const pos = new Map<number, { x: number; y: number }>();
+    nodeIds.forEach((id, i) => {
+      // Single node sits in the center; otherwise spread around the circle.
+      if (n === 1) {
+        pos.set(id, { x: cx, y: cy });
+      } else {
+        const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+        pos.set(id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+      }
+    });
+
+    const maxIn = Math.max(1, ...nodeIds.map((id) => inDeg.get(id) ?? 0));
+
+    // Undirected adjacency (a follow in either direction makes two nodes
+    // neighbors), so hover highlighting is O(1) per node instead of scanning
+    // every edge for every node on each render.
+    const adjacency = new Map<number, Set<number>>();
+    for (const e of edges) {
+      let from = adjacency.get(e.agent_id);
+      if (!from) adjacency.set(e.agent_id, (from = new Set()));
+      from.add(e.target_id);
+      let to = adjacency.get(e.target_id);
+      if (!to) adjacency.set(e.target_id, (to = new Set()));
+      to.add(e.agent_id);
+    }
+
+    return { nodeIds, edges, inDeg, outDeg, postCount, pos, maxIn, adjacency };
   }, [posts, follows]);
 
   const [hovered, setHovered] = useState<number | null>(null);
+
+  // Neighbors of the hovered node; recomputed only when hover or graph changes.
+  const hoveredNeighbors = useMemo(
+    () => (hovered === null ? null : graph.adjacency.get(hovered) ?? null),
+    [hovered, graph],
+  );
 
   if (graph.nodeIds.length === 0) {
     return (
@@ -754,27 +830,7 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
     );
   }
 
-  // Circular layout.
-  const W = 720;
-  const H = 520;
-  const cx = W / 2;
-  const cy = H / 2;
-  const radius = Math.min(W, H) / 2 - 70;
-  const n = graph.nodeIds.length;
-
-  const pos = new Map<number, { x: number; y: number }>();
-  graph.nodeIds.forEach((id, i) => {
-    // Single node sits in the center; otherwise spread around the circle.
-    if (n === 1) {
-      pos.set(id, { x: cx, y: cy });
-    } else {
-      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-      pos.set(id, { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-    }
-  });
-
-  const maxIn = Math.max(1, ...graph.nodeIds.map((id) => graph.inDeg.get(id) ?? 0));
-  const nodeRadius = (id: number) => 12 + ((graph.inDeg.get(id) ?? 0) / maxIn) * 14;
+  const nodeRadius = (id: number) => 12 + ((graph.inDeg.get(id) ?? 0) / graph.maxIn) * 14;
 
   // Whether an edge touches the hovered node (for highlighting).
   const edgeActive = (e: FollowEdge) =>
@@ -782,11 +838,7 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
   const nodeActive = (id: number) => {
     if (hovered === null) return true;
     if (id === hovered) return true;
-    return graph.edges.some(
-      (e) =>
-        (e.agent_id === hovered && e.target_id === id) ||
-        (e.target_id === hovered && e.agent_id === id),
-    );
+    return hoveredNeighbors?.has(id) ?? false;
   };
 
   return (
@@ -804,7 +856,7 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
       <div className="w-full overflow-x-auto">
         <svg
           width="100%"
-          viewBox={`0 0 ${W} ${H}`}
+          viewBox={`0 0 ${GRAPH_W} ${GRAPH_H}`}
           className="min-w-[480px]"
           role="img"
           aria-label={t('social.title')}
@@ -836,8 +888,8 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
 
           {/* Edges: shorten the segment so the arrowhead lands at the node rim. */}
           {graph.edges.map((e) => {
-            const a = pos.get(e.agent_id)!;
-            const b = pos.get(e.target_id)!;
+            const a = graph.pos.get(e.agent_id)!;
+            const b = graph.pos.get(e.target_id)!;
             const dx = b.x - a.x;
             const dy = b.y - a.y;
             const len = Math.hypot(dx, dy) || 1;
@@ -867,7 +919,7 @@ function SocialTab({ posts, follows }: { posts: ForumPost[]; follows: FollowEdge
 
           {/* Nodes */}
           {graph.nodeIds.map((id) => {
-            const p = pos.get(id)!;
+            const p = graph.pos.get(id)!;
             const r = nodeRadius(id);
             const active = nodeActive(id);
             return (
